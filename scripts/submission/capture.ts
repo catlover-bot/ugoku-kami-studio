@@ -15,6 +15,7 @@ import { PROTOTYPE_SOURCE_SVG } from '../prepare-prototype.js';
 import { args, codeSha, folders, json, mergePublicManifest, sha256 } from './common.js';
 
 type Run = ReturnType<typeof publicRun>;
+type Sync = { wallBefore: number; wallAfter: number };
 type Scene = { name: string; start: number; actionEnd: number; end: number; targetSeconds: number };
 const options = args(process.argv.slice(2), ['--out', '--mode', '--env', '--port', '--origin', '--source-sha']);
 const mode = options['--mode'];
@@ -36,6 +37,7 @@ const clockStart = performance.now();
 const page = await context.newPage();
 page.setDefaultTimeout(20_000);
 const scenes: Scene[] = [];
+const synchronization: Sync[] = [];
 let latestRun: Run | undefined;
 let runPosts = 0;
 let aiStartedAt = 0;
@@ -52,6 +54,13 @@ page.on('response', response => {
 });
 const now = () => (performance.now() - clockStart) / 1000;
 const hold = (seconds: number) => page.waitForTimeout(seconds * 1000);
+async function synchronizationMarker() {
+  // This separate, private calibration page is outside every public scene. It
+  // never changes the product DOM and contains no invented model response.
+  await page.goto('data:text/html,<style>html{background:%23ff00ff}</style>'); await hold(.4);
+  const wallBefore = now(); await page.goto('data:text/html,<style>html{background:%2300ffff}</style>'); const wallAfter = now();
+  synchronization.push({ wallBefore, wallAfter }); await hold(.4);
+}
 async function scene(name: string, targetSeconds: number, action: () => Promise<void>) {
   const start = now(); await action();
   const actionEnd = now(); const elapsed = actionEnd - start;
@@ -75,7 +84,7 @@ let success = false;
 try {
   const png = await sharp(Buffer.from(PROTOTYPE_SOURCE_SVG)).png().toBuffer();
   const inputPath = resolve(recordingDir, 'fish.png'); await writeFile(inputPath, png);
-  await page.goto(origin); await expect(page.locator('.home-library')).toBeVisible();
+  await synchronizationMarker(); await page.goto(origin); await expect(page.locator('.home-library')).toBeVisible();
   await scene('intro', 10, async () => { await hold(2); await page.getByRole('button', { name: '自分の絵ではじめる', exact: true }).hover(); });
   await scene('selection', 30, async () => {
     const chooser = page.waitForEvent('filechooser'); await page.getByRole('button', { name: '自分の絵ではじめる', exact: true }).click(); await (await chooser).setFiles(inputPath);
@@ -104,7 +113,8 @@ try {
   assert.deepEqual(base.input.selection, { x: 350, y: 170, width: 300, height: 210 }); assert.equal(validateDesign(base).filter(check => check.status === 'fail').length, 0);
   await stage(1); await page.getByRole('button', { name: '動かす部分を選び直す', exact: true }).click(); await screenshot('01-input.png', base); await page.getByRole('button', { name: '選択の編集を終える', exact: true }).click(); await stage(2);
   if (mode === 'manual-rehearsal') {
-    await json(resolve(recordingDir, 'rehearsal.json'), { status: 'MANUAL_REHEARSAL_ONLY', codeSha: codeSha(), base: stamp(base), runPosts, scenes, requestFailures, imageSha256: sha256(png) });
+    await synchronizationMarker();
+    await json(resolve(recordingDir, 'rehearsal.json'), { status: 'MANUAL_REHEARSAL_ONLY', codeSha: codeSha(), synchronization, base: stamp(base), runPosts, scenes, requestFailures, imageSha256: sha256(png) });
     assert.equal(runPosts, 0); success = true;
   } else {
     await page.getByRole('button', { name: '設定', exact: true }).click(); const dialog = page.getByRole('dialog', { name: '設定', exact: true }); await dialog.getByLabel('AIアクセスコード').fill(config.accessSecret); await dialog.getByRole('button', { name: '閉じる', exact: true }).click();
@@ -130,10 +140,10 @@ try {
     await scene('save', 10, async () => { await page.getByRole('button', { name: 'ガイドを閉じる', exact: true }).click(); await page.getByRole('button', { name: '保存・再開', exact: true }).click(); await page.getByRole('button', { name: 'このブラウザに保存', exact: true }).click(); await hold(2); await page.getByRole('button', { name: '閉じる', exact: true }).click(); await page.getByRole('button', { name: '作品一覧', exact: true }).click(); await hold(2); await page.getByRole('button', { name: '前の作品を続ける', exact: true }).click(); });
     await scene('manual-failure', 18, async () => { await stage(2); await number('動く距離（mm）', 70); await expect(page.locator('.validation-details')).toContainText('要修正'); await page.locator('.validation-details').scrollIntoViewIfNeeded(); await hold(8); await page.getByRole('button', { name: '元に戻す', exact: true }).click(); await expect(page.locator('main')).toHaveAttribute('data-design-hash', adopted.designHash); await page.evaluate(() => window.scrollTo(0, 0)); });
     await scene('limitations', 10, async () => { await stage(3); await page.locator('.physical-section > summary').click(); await page.locator('.physical-section').scrollIntoViewIfNeeded(); await hold(4); });
-    assert.equal(runPosts, 1); assert.deepEqual(requestFailures, []);
+    assert.equal(runPosts, 1); assert.deepEqual(requestFailures, []); await synchronizationMarker();
     const files = ['kit.pdf', 'pattern.pdf', 'instructions.pdf', 'pattern.svg', 'adopted.ugoku.json'];
     const kit: Record<string, unknown> = {}; for (const file of files) kit[file] = { sha256: sha256(await readFile(resolve(recordingDir, file))), ...stamp(adopted) };
-    const result = { status: 'REAL_LOCAL_AI_CAPTURED', codeSha: options['--source-sha'] ?? codeSha(), toolingCodeSha: codeSha(), captureScriptSha256: sha256(await readFile(new URL(import.meta.url))), viewport: { width: 1600, height: 900 }, imageSha256: sha256(png), rawVideo: await page.video()!.path(), scenes, ai: { actualWaitSeconds: aiFinishedAt - aiStartedAt, started: aiStartedAt, finished: aiFinishedAt, runId: run.id, mode: run.mode, model: run.model, modelCalls: run.modelCalls, toolCalls: run.toolCalls, modelUsage: run.modelUsage, runPosts }, base: stamp(base), adopted: stamp(adopted), images, kit, checks: validateDesign(adopted), physicalValidation: 'unverified', requestFailures };
+    const result = { status: 'REAL_LOCAL_AI_CAPTURED', codeSha: options['--source-sha'] ?? codeSha(), toolingCodeSha: codeSha(), captureScriptSha256: sha256(await readFile(new URL(import.meta.url))), synchronization, viewport: { width: 1600, height: 900 }, imageSha256: sha256(png), rawVideo: await page.video()!.path(), scenes, ai: { actualWaitSeconds: aiFinishedAt - aiStartedAt, started: aiStartedAt, finished: aiFinishedAt, runId: run.id, mode: run.mode, model: run.model, modelCalls: run.modelCalls, toolCalls: run.toolCalls, modelUsage: run.modelUsage, runPosts }, base: stamp(base), adopted: stamp(adopted), images, kit, checks: validateDesign(adopted), physicalValidation: 'unverified', requestFailures };
     await json(resolve(recordingDir, 'capture.json'), result);
     for (const name of Object.keys(images)) await writeFile(resolve(paths.publicDir, 'images', name), await readFile(resolve(recordingDir, name)));
     await mergePublicManifest(paths.publicDir, { capture: { ...result, rawVideo: undefined, scenes: undefined, checks: undefined, requestFailures: undefined }, physicalKit: { location: 'Private handoff, separate from public screenshots', ...stamp(adopted), files: kit } });
@@ -144,6 +154,6 @@ try {
   throw error;
 } finally {
   await Promise.allSettled([...responseTasks]); await context.close(); await browser.close(); await app?.close();
-  await json(resolve(recordingDir, 'recording-status.json'), { success, mode, sourceSha: options['--source-sha'] ?? codeSha(), toolingSha: codeSha(), captureScriptSha256: sha256(await readFile(new URL(import.meta.url))), scenes, runId: latestRun?.id, serverStatus: latestRun?.status, runPosts, pageErrors: requestFailures, video: relative(paths.privateDir, await page.video()!.path()), finishedAt: new Date().toISOString() });
+  await json(resolve(recordingDir, 'recording-status.json'), { success, mode, sourceSha: options['--source-sha'] ?? codeSha(), toolingSha: codeSha(), captureScriptSha256: sha256(await readFile(new URL(import.meta.url))), synchronization, scenes, runId: latestRun?.id, serverStatus: latestRun?.status, runPosts, pageErrors: requestFailures, video: relative(paths.privateDir, await page.video()!.path()), finishedAt: new Date().toISOString() });
   console.log(JSON.stringify({ success, mode, recordingDir, runPosts }));
 }
