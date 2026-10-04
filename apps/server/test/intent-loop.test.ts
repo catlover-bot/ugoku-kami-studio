@@ -69,15 +69,17 @@ describe('author intent through the actual server, core tools, approval and outp
     expect(approved.input.travelMm).toBe(25); expect(approved.input.maxSheets).toBe(2);
   });
 
-  it('accepts an explicitly requested unlocked paper budget only after proposal approval', async () => {
+  it('requires concrete author confirmation before relaxing the paper cap', async () => {
     const provider = sequence([invoke('propose_design_patch'), resultText]);
-    const s = await setup(provider), run = await s.start('動く距離を25mmにしたい。厚紙はA4で3枚まで');
-    expect(run.status).toBe('awaiting_approval');
-    expect(run.proposal!.protectedConditions.join(' ')).toContain('3枚以内');
-    expect(run.proposal!.document.input.maxSheets).toBe(3);
+    const s = await setup(provider);
+    const result = await s.app.inject({ method: 'POST', url: `${s.url}/runs`, headers: s.headers, payload: {
+      requestId: 'paper-confirmation-required', prompt: '動く距離を25mmにしたい。厚紙はA4で3枚まで',
+      baseRevision: s.document.revision, baseHash: s.document.designHash,
+    } });
+    expect(result.statusCode).toBe(422);
+    expect(provider.generate).not.toHaveBeenCalled();
+    expect(s.session.document).toEqual(s.document);
     expect(s.session.document.input.maxSheets).toBe(2);
-    const approved = s.app.runs.approve(s.session, run.proposal!.id, { requestId: run.requestId, baseRevision: run.baseRevision, baseHash: run.baseHash }).document;
-    expect(approved.input.maxSheets).toBe(3); expect(approved.input.locks).toContain('maxSheets');
   });
   it('keeps author-approved v2 artwork repair through the tool loop and rejects model repair edits', async () => {
     const original = applyArtworkRepair(createDesign(SAMPLE_INPUT), { mode: 'solid', color: '#e6cfaa' });
