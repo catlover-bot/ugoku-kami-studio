@@ -31,13 +31,15 @@ const browser = await chromium.launch();
 let playback: unknown;
 try {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } }); await page.goto(`http://127.0.0.1:${address.port}`);
-  playback = await page.evaluate(async () => {
-    const video = document.querySelector('video')!;
-    let callbackFrames = 0; const samples: { time: number; mediaTime: number }[] = []; let nextSample = 0;
+  // A plain browser expression avoids tsx injecting its Node-only __name helper
+  // into the recursive frame callback serialized by Playwright.
+  playback = await page.evaluate(`(async () => {
+    const video = document.querySelector('video');
+    let callbackFrames = 0; const samples = []; let nextSample = 0;
     video.requestVideoFrameCallback(function frame(time, metadata) { callbackFrames++; if (metadata.mediaTime >= nextSample) { samples.push({ time, mediaTime: metadata.mediaTime }); nextSample += 10; } if (!video.ended) video.requestVideoFrameCallback(frame); });
     const started = performance.now(); const result = new Promise((accept, reject) => { video.onended = () => accept({ ended: video.ended, duration: video.duration, currentTime: video.currentTime, elapsedMs: performance.now() - started, playbackRate: video.playbackRate, callbackFrames, quality: { totalVideoFrames: video.getVideoPlaybackQuality().totalVideoFrames, droppedVideoFrames: video.getVideoPlaybackQuality().droppedVideoFrames, corruptedVideoFrames: video.getVideoPlaybackQuality().corruptedVideoFrames }, samples }); video.onerror = () => reject(new Error(video.error?.message)); });
     await video.play(); return result;
-  });
+  })()`);
 } finally { await browser.close(); await new Promise<void>(accept => server.close(() => accept())); }
 await json(resolve(dir, 'technical-review.json'), { sha256: sha256(bytes), metadata, completeDecode: 'passed-no-errors', playback, visualSampling: { intervalSeconds: 1, contactSheets: 9, visualReview: 'pending-human-inspection', notClaimed: 'All video frames visually inspected at full resolution' } });
 console.log(JSON.stringify({ decode: 'passed', realTimePlayback: playback, contactSheets: dir }));
