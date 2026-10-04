@@ -156,7 +156,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
   }
   async function start(correction?: RunCorrection) {
     if (busyRef.current || !selectionReady || draftRef.current || pollContext.current) return;
-    if (!connection.enabled) {setMessage('AIは未接続です。手動支援で希望を試し、保存・印刷まで進められます。'); return;}
+    if (!connection.enabled) {setMessage(connection.unreachable ? 'サーバーに接続できません。現在の作品は残っています。手動での編集と出力は続けられます。' : 'AIは未接続です。寸法から案をつくり、保存・印刷まで進められます。'); return;}
     if (!access.trim()) {setMessage('設定でAIアクセスコードを入力してから、案をつくってください。'); onOpenSettings?.(); return;}
     if (correction) {
       // The server replaces a live proposal atomically with its bound correction.

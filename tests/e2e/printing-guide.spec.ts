@@ -9,7 +9,7 @@ import { PDFArray, PDFDocument, PDFName, PDFRawStream, type PDFPage } from 'pdf-
 import { createDesign, getAssemblySteps, SAMPLE_INPUT, type DesignDocument } from '@ugoku/core';
 import { INSTRUCTION_PAGE_COUNT, ORIGINAL_SAMPLE_SVG } from '@ugoku/export';
 import type { Project } from '../../apps/web/src/project';
-import { saveProject, savedProject, savedWorkspace, stage, startSample } from './helpers';
+import { manual, splitPrint, saveProject, savedProject, savedWorkspace, stage, startSample } from './helpers';
 
 const outputRoot = 'artifacts/goal005/printing-guide';
 const sha256 = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
@@ -40,6 +40,7 @@ async function manifest(path: string, page: Page, document: DesignDocument, evid
   }, null, 2) + '\n');
 }
 async function downloadPdf(page: Page, mode: Mode, document: DesignDocument, path: string) {
+  if (mode !== 'all') await splitPrint(page);
   const pending = page.waitForEvent('download');
   await page.getByRole('button', { name: downloads[mode], exact: true }).click();
   const download = await pending;
@@ -222,12 +223,12 @@ test('P1 own artwork reaches a protected manual proposal and split print without
   const protectedBase = await saveProject(page) as Project;
   expect(protectedBase.document.input.locks).toEqual(expect.arrayContaining(['widthMm', 'heightMm']));
   expect(protectedBase.document.input.selection).toEqual({ x: 300, y: 150, width: 160, height: 120 });
-  await page.getByRole('button', { name: '手動支援', exact: true }).click();
+  await manual(page);
   await page.getByLabel('どう動かしたいですか？', { exact: true }).fill('もう少し大きく動かしたい。絵の大きさは変えず、紙も増やさない');
-  await page.getByRole('button', { name: '手動支援で候補をつくる', exact: true }).click();
+  await page.getByRole('button', { name: '寸法から案をつくる', exact: true }).click();
   const candidate = page.locator('.intent-panel .design-comparison'); await expect(candidate).toBeVisible();
   await expect(page.locator('main')).toHaveAttribute('data-design-hash', protectedBase.document.designHash);
-  const previews = candidate.locator('svg.artwork-svg');
+  const previews = page.locator('.candidate-workbench svg.artwork-svg');
   expect(await previews.nth(0).getAttribute('viewBox')).toBe(await previews.nth(1).getAttribute('viewBox'));
   await page.screenshot({ path: resolve(dir, 'candidate.png'), scale: 'css' });
   await candidate.getByRole('button', { name: 'この案にする', exact: true }).click();

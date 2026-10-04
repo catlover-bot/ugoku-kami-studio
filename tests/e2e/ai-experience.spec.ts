@@ -1,20 +1,20 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { applyDesignPatch, parseDesignDocument, type DesignDocument } from '@ugoku/core';
-import { ai, manual, savedWorkspace, stage, startSample } from './helpers';
+import { ai, manual, openRequest, savedWorkspace, stage, startSample } from './helpers';
 
 // These HTTP fixtures exercise the real product UI, shared request state and
 // IndexedDB autosave. They never create an SDK client or use a paid API.
 const ACCESS = 'synthetic-ai-experience-access';
-const AI_PROMPT = 'どんな動きにしたいですか？';
+const AI_PROMPT = 'どう動かしたいですか？';
 const MANUAL_PROMPT = 'どう動かしたいですか？';
-const requestButton = (page: Page) => page.locator('.ai-panel').getByRole('button', { name: '変更案をつくる', exact: true });
+const requestButton = (page: Page) => page.getByRole('button', { name: 'AIで案をつくる', exact: true });
 const acceptButton = (page: Page) => page.locator('.ai-panel').getByRole('button', { name: 'この案にする', exact: true });
 
 async function openPanel(page: Page) {
   await page.goto('/');
   await startSample(page);
   await stage(page, 2);
-  await page.getByRole('button', { name: 'Gemini', exact: true }).click();
+  await openRequest(page);
 }
 
 class SharedRequestFixture {
@@ -73,9 +73,9 @@ class SharedRequestFixture {
 async function openFixture(page: Page, fixture: SharedRequestFixture) {
   await fixture.attach(page);
   await openPanel(page);
-  await expect(page.getByText('模擬接続（テスト）', { exact: true })).toBeVisible();
+  await expect(page.locator('.connection')).toHaveText('模擬AI（テスト）');
   await ai(page);
-  await page.getByLabel('AIアクセスコード').fill(ACCESS);
+  await page.getByLabel('AIアクセスコード').fill(ACCESS); await page.getByRole('dialog', {name: '設定', exact: true}).getByRole('button', {name: '閉じる', exact: true}).click();
   await page.getByLabel(AI_PROMPT).fill('動く距離を15mmにしたい');
 }
 
@@ -88,13 +88,15 @@ test.describe('Goal005 AI experience — offline HTTP fixtures', () => {
   test('unconnected guidance is user-facing and trusted conditions remain visible without opening settings', async ({ page }, info) => {
     await page.route('**/api/status', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ai: { enabled: false, mode: 'manual', reason: 'AI_ENABLED=false; GEMINI_API_KEY is absent; deploy the server' } }) }));
     await openPanel(page);
-    await expect(page.getByText('AI未接続', { exact: true })).toBeVisible();
-    await expect(page.locator('.ai-settings')).not.toHaveAttribute('open', '');
+    await expect(page.locator('.connection')).toHaveText('手動で編集中');
+    await expect(page.getByRole('dialog',{name:'設定',exact:true})).toBeHidden();
     const panel = page.locator('.ai-panel');
-    await expect(panel.getByRole('heading', { name: '今回守る条件' })).toBeVisible();
+    await expect(page.getByRole('checkbox',{name:'絵の大きさを保つ',exact:true})).toBeVisible();
     await page.getByLabel(AI_PROMPT).fill('もう少し大きく動かしたい');
-    await expect(panel.locator('.ai-request-conditions')).toContainText('型紙はA4で2枚まで');
-    await expect(panel.getByRole('button', { name: '手動支援を使う', exact: true })).toBeVisible();
+    await expect(page.getByLabel('紙の上限（枚）',{exact:true})).toHaveValue('2');
+    await openRequest(page);
+    await requestButton(page).click();
+    await expect(panel.getByRole('button', { name: '手動の調整に戻る', exact: true })).toBeVisible();
     expect(await panel.innerText()).not.toMatch(/AI_ENABLED|GEMINI_API_KEY|deploy/);
     if (info.project.name === 'mobile') await page.setViewportSize({ width: 320, height: 800 });
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
@@ -103,14 +105,13 @@ test.describe('Goal005 AI experience — offline HTTP fixtures', () => {
   test('access code and model details are secondary and configured status does not claim a tested live connection', async ({ page }) => {
     await page.route('**/api/status', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ai: { enabled: true, mode: 'gemini', model: 'gemini-model-for-local-ui-fixture' } }) }));
     await openPanel(page);
-    await expect(page.getByText('Gemini設定済み', { exact: true })).toBeVisible();
+    await expect(page.locator('.connection')).toHaveText('Gemini（設定済み）');
     await expect(page.getByLabel('AIアクセスコード')).toBeHidden();
-    await expect(page.locator('.ai-panel').getByText('gemini-model-for-local-ui-fixture', { exact: false })).toBeHidden();
-    await page.locator('.ai-settings > summary').click();
+    await expect(page.locator('.ai-settings').getByText('gemini-model-for-local-ui-fixture', { exact: false })).toBeHidden();
+    await page.getByRole('button',{name:'設定',exact:true}).click();
     await expect(page.getByLabel('AIアクセスコード')).toHaveAttribute('type', 'password');
-    await expect(page.locator('.ai-settings')).toContainText('設定済みの表示だけでは、接続の成功は確認できません');
-    await page.getByLabel('AIアクセスコード').fill(ACCESS);
-    await page.locator('.ai-settings > summary').click();
+    await expect(page.locator('.ai-settings')).toContainText('設定済みの表示だけでは、接続成功を確認していません');
+    await page.getByLabel('AIアクセスコード').fill(ACCESS); await page.getByRole('dialog', {name: '設定', exact: true}).getByRole('button', {name: '閉じる', exact: true}).click();
     await expect(page.getByLabel('AIアクセスコード')).toBeHidden();
     await expect(requestButton(page)).toBeVisible();
   });
@@ -123,13 +124,15 @@ test.describe('Goal005 AI experience — offline HTTP fixtures', () => {
       return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Unexpected request in presentation fixture' }) });
     });
     await openPanel(page);
-    await expect(page.getByText('模擬接続（テスト）', { exact: true })).toBeVisible();
+    await expect(page.locator('.connection')).toHaveText('模擬AI（テスト）');
+    await openRequest(page);
     await requestButton(page).click();
-    await expect(page.locator('.ai-panel').getByRole('status')).toContainText('アクセスコードを入力');
+    await expect(page.getByRole('dialog',{name:'設定',exact:true})).toBeVisible();
+    await expect(page.locator('.ai-panel').getByRole('status',{includeHidden:true})).toContainText('アクセスコードを入力');
     expect(calls).toBe(0);
-    await page.locator('.ai-settings > summary').click();
-    await expect(page.locator('.ai-settings')).toContainText('実Geminiには送信しません');
-    await page.getByLabel('AIアクセスコード').fill(ACCESS);
+
+    await expect(page.locator('.ai-settings')).toContainText('実モデルへの送信はありません');
+    await page.getByLabel('AIアクセスコード').fill(ACCESS); await page.getByRole('dialog', {name: '設定', exact: true}).getByRole('button', {name: '閉じる', exact: true}).click();
     const distance = page.getByRole('textbox', { name: '動く距離（mm）', exact: true });
     await distance.fill('');
     await expect(requestButton(page)).toBeDisabled();
@@ -153,6 +156,7 @@ test.describe('Goal005 AI experience — offline HTTP fixtures', () => {
     const fixture = new SharedRequestFixture();
     await openFixture(page, fixture);
     const originalHash = await page.locator('main').getAttribute('data-design-hash');
+    await openRequest(page);
     await requestButton(page).click();
     await expect(acceptButton(page)).toBeVisible();
     await editManualRequest(page, '動く距離を18mmにしたい');
@@ -161,9 +165,10 @@ test.describe('Goal005 AI experience — offline HTTP fixtures', () => {
     await expect(page.getByLabel(AI_PROMPT)).toHaveValue('動く距離を18mmにしたい');
     await expect.poll(() => fixture.cancels).toBe(1);
     expect(fixture.starts).toBe(1);
+    await openRequest(page);
     await requestButton(page).click();
     await expect(acceptButton(page)).toBeVisible();
-    await page.locator('.ai-panel > .request-editor > summary').click();
+    await openRequest(page);
     await page.getByLabel(AI_PROMPT).fill('動く距離を16mmにしたい');
     await manual(page);
     await expect(page.getByLabel(MANUAL_PROMPT)).toHaveValue('動く距離を16mmにしたい');
@@ -179,6 +184,7 @@ test.describe('Goal005 AI experience — offline HTTP fixtures', () => {
     const fixture = new SharedRequestFixture(); fixture.holdRun = true;
     await openFixture(page, fixture);
     const originalHash = await page.locator('main').getAttribute('data-design-hash');
+    await openRequest(page);
     await requestButton(page).click();
     await expect.poll(() => !!fixture.heldRun).toBe(true);
     await editManualRequest(page, '動く距離を18mmにしたい');
@@ -186,6 +192,7 @@ test.describe('Goal005 AI experience — offline HTTP fixtures', () => {
     await expect.poll(() => fixture.cancels).toBe(1);
     await ai(page);
     await expect(acceptButton(page)).toHaveCount(0);
+    await page.getByRole('button',{name:'設定',exact:true}).click();
     await page.locator('.ai-evidence > summary').click();
     await expect(page.locator('.ai-evidence')).toContainText('依頼・設計が変わったため無効');
     await expect(page.locator('main')).toHaveAttribute('data-design-hash', originalHash!);
@@ -196,6 +203,7 @@ test.describe('Goal005 AI experience — offline HTTP fixtures', () => {
     const fixture = new SharedRequestFixture(); fixture.holdApproval = true;
     await openFixture(page, fixture);
     const originalHash = await page.locator('main').getAttribute('data-design-hash');
+    await openRequest(page);
     await requestButton(page).click();
     await acceptButton(page).click();
     await expect.poll(() => !!fixture.heldApproval).toBe(true);
@@ -207,6 +215,7 @@ test.describe('Goal005 AI experience — offline HTTP fixtures', () => {
     await expect(page.locator('main')).toHaveAttribute('data-design-hash', originalHash!);
     await expect(requestButton(page)).toBeEnabled();
     fixture.holdApproval = false;
+    await openRequest(page);
     await requestButton(page).click();
     await expect.poll(() => fixture.sessions).toBe(2);
     await acceptButton(page).click();

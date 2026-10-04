@@ -2,7 +2,7 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import { applyDesignPatch, parseDesignDocument, type DesignDocument } from '@ugoku/core';
-import { startSample, ai, physical, saveProject, stage } from './helpers';
+import { openRequest, startSample, ai, physical, saveProject, stage } from './helpers';
 
 // Every AI response in this file is a labelled HTTP fixture. No live provider is contacted.
 class OfflineAi {
@@ -44,16 +44,18 @@ class OfflineAi {
 }
 async function openAi(page: Page, fixture: OfflineAi) {
   await fixture.attach(page); await page.goto('/'); await startSample(page); await page.locator('.artwork-stage .artwork-svg').waitFor(); await ai(page);
-  await expect(page.getByText('模擬接続（テスト）', {exact: true})).toBeVisible();
-  await page.getByLabel('AIアクセスコード').fill('private-fixture-access-code');
-  await page.getByLabel('どんな動きにしたいですか？').fill('動く距離を15mmにしたい');
+  await expect(page.locator('.connection')).toHaveText('模擬AI（テスト）');
+  await page.getByLabel('AIアクセスコード').fill('private-fixture-access-code'); await page.getByRole('dialog', {name: '設定', exact: true}).getByRole('button', {name: '閉じる', exact: true}).click();
+  await page.getByLabel('どう動かしたいですか？').fill('動く距離を15mmにしたい');
 }
 async function recordDownload(page: Page) {
+  await page.getByRole('button',{name:'設定',exact:true}).click();
   const section = page.locator('.ai-evidence');
   if (!(await section.evaluate(element => (element as HTMLDetailsElement).open))) await section.locator('summary').click();
   const pending = page.waitForEvent('download'); await page.getByRole('button', {name: 'AI実行記録を書き出す', exact: true}).click();
   const download = await pending, text = await readFile((await download.path())!, 'utf8');
   expect(text).not.toContain('private-fixture-session-token'); expect(text).not.toContain('private-fixture-access-code'); expect(text).not.toContain('data:image/');
+  await page.getByRole('dialog',{name:'設定',exact:true}).getByRole('button',{name:'閉じる',exact:true}).click();
   return JSON.parse(text);
 }
 const mainHash = (page: Page) => page.locator('main').getAttribute('data-design-hash');
@@ -61,13 +63,13 @@ const mainHash = (page: Page) => page.locator('main').getAttribute('data-design-
 test('G4 edited request invalidates a late proposal and retains honest stale evidence', async ({page}) => {
   const fixture = new OfflineAi(); fixture.mode = 'held'; await openAi(page, fixture);
   const before = await mainHash(page);
-  await page.getByRole('button', {name: '変更案をつくる', exact: true}).click();
+  await page.getByRole('button', {name: 'AIで案をつくる', exact: true}).click();
   await expect.poll(() => !!fixture.held).toBe(true);
-  await page.getByLabel('どんな動きにしたいですか？').fill('回転させたい');
+  await page.getByLabel('どう動かしたいですか？').fill('回転させたい');
   await fixture.held!.fulfill({contentType: 'application/json', body: JSON.stringify({run: fixture.current})});
-  await expect(page.locator('.ai-evidence')).toBeVisible();
+  await expect(page.locator('.ai-evidence')).toHaveCount(1);
   await expect(page.locator('.ai-panel').getByRole('button', {name: 'この案にする', exact: true})).toHaveCount(0);
-  await page.getByRole('button', {name: '変更案をつくる', exact: true}).click();
+  await page.getByRole('button', {name: 'AIで案をつくる', exact: true}).click();
   await expect(page.locator('.ai-panel').getByRole('status')).toContainText('その動きは未対応');
   expect(fixture.starts).toBe(2); expect(await mainHash(page)).toBe(before);
   const exported = await recordDownload(page);
@@ -79,7 +81,7 @@ test('G4 edited request invalidates a late proposal and retains honest stale evi
 test('G4 interrupted polling resumes the same run and exports its adopted version', async ({page}) => {
   const fixture = new OfflineAi(); fixture.mode = 'poll-failure'; await openAi(page, fixture);
   const before = await mainHash(page);
-  await page.getByRole('button', {name: '変更案をつくる', exact: true}).click();
+  await page.getByRole('button', {name: 'AIで案をつくる', exact: true}).click();
   await expect(page.getByRole('button', {name: '状況を確認する', exact: true})).toBeVisible();
   expect(await mainHash(page)).toBe(before); expect(fixture.starts).toBe(1);
   await page.getByRole('button', {name: '状況を確認する', exact: true}).click();
@@ -97,11 +99,11 @@ test('G4 interrupted polling resumes the same run and exports its adopted versio
 
 test('G4 rejection, failure and cancellation retain separate evidence without charging claims', async ({page}) => {
   const fixture = new OfflineAi(); await openAi(page, fixture); const before = await mainHash(page);
-  await page.getByRole('button', {name: '変更案をつくる', exact: true}).click();
+  await page.getByRole('button', {name: 'AIで案をつくる', exact: true}).click();
   await page.locator('.ai-panel').getByRole('button', {name: 'この案を使わない', exact: true}).click();
-  fixture.mode = 'failure'; await page.getByRole('button', {name: '変更案をつくる', exact: true}).click();
-  await expect(page.getByRole('button', {name: '再試行する', exact: true})).toBeVisible();
-  fixture.mode = 'running'; await page.getByRole('button', {name: '再試行する', exact: true}).click();
+  fixture.mode = 'failure'; await openRequest(page); await page.getByRole('button', {name: 'AIで案をつくる', exact: true}).click();
+  await expect(page.getByRole('button', {name: 'AIを再試行する', exact: true})).toBeVisible();
+  fixture.mode = 'running'; await page.getByRole('button', {name: 'AIを再試行する', exact: true}).click();
   await expect.poll(() => fixture.starts).toBe(3);
   await page.getByRole('button', {name: '中断する', exact: true}).click();
   const exported = await recordDownload(page);

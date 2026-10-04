@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib';
 import { parseDesignDocument, getAssemblySteps, getFabricationChecks } from '@ugoku/core';
-import { startSample, ai, manual, pdfButton, physical, precision, saveProject, selectionNumbers, stage } from './helpers';
+import { distanceIdeas, startSample, ai, manual, pdfButton, physical, precision, saveProject, selectionNumbers, stage } from './helpers';
 
 const root = 'artifacts/goal005/regression';
 async function saved(page: Page) {
@@ -12,7 +12,7 @@ async function saved(page: Page) {
 async function ask(page: Page, text: string) {
   await manual(page);
   await page.getByLabel('どう動かしたいですか？', { exact: true }).fill(text);
-  await page.getByRole('button', { name: '手動支援で候補をつくる', exact: true }).click();
+  await page.getByRole('button', { name: '寸法から案をつくる', exact: true }).click();
 }
 async function pdf(page: Page, path: string) {
   await stage(page, 3);
@@ -49,12 +49,14 @@ test('S1/S4 sample: intuitive distance, protected proposal, rejection and a curr
   const workbench = page.locator('#workbench');
   await expect(workbench.locator('[data-part="B1-slot"]')).toBeVisible();
   await expect(workbench.locator('[data-part="T1"]')).toBeVisible();
+  await distanceIdeas(page);
   await page.getByRole('button', { name: 'もう少し大きく', exact: true }).click();
   await expect(page.locator('.intent-panel').getByRole('button', { name: 'この案にする', exact: true })).toBeVisible();
   await expect(page.locator('.intent-panel .change-table')).toContainText('20mm');
   await expect(page.locator('.intent-panel .change-table')).toContainText('25mm');
   await page.locator('.intent-panel').getByRole('button', { name: 'この案を使わない', exact: true }).click();
   expect((await saved(page)).document).toEqual(before.document);
+  await distanceIdeas(page);
   await page.getByRole('button', { name: 'もう少し大きく', exact: true }).click();
   await page.locator('.intent-panel').screenshot({ path: `${stem}-candidate.png` });
   await page.locator('.intent-panel').getByRole('button', { name: 'この案にする', exact: true }).click();
@@ -112,7 +114,7 @@ test('S2/S3/S6/S8 own portrait art: upward motion, original scale, instructions 
   await page.getByRole('button', { name: '裏のしくみ', exact: true }).click();
   await page.locator('#workbench').screenshot({ path: `${stem}-back.png` });
   await stage(page, 3);
-  await page.getByText('材料と組み立て手順', { exact: true }).click();
+  await page.getByText('組み立て手順の一覧', { exact: true }).click();
   await expect(page.locator('.assembly-illustration')).toHaveCount(6);
   await expect(page.locator('.assembly-steps')).toContainText(`${current.input.travelMm} mm`);
   await page.locator('.assembly-details').screenshot({ path: `${stem}-instructions.png` });
@@ -185,11 +187,11 @@ test('S6 export pending then edit discards stale PDF; S7 manual recovery stays a
   await expect(page.locator('.manual-result')).toContainText('直線運動');
   await page.getByRole('button', { name: '直線運動の代案を選ぶ', exact: true }).click();
   await page.getByLabel('どう動かしたいですか？', { exact: true }).fill('動く距離を15mm。絵の大きさは保つ');
-  await page.getByRole('button', { name: '手動支援で候補をつくる', exact: true }).click();
+  await page.getByRole('button', { name: '寸法から案をつくる', exact: true }).click();
   await page.locator('.intent-panel').getByRole('button', { name: 'この案にする', exact: true }).click();
   expect((await saved(page)).document.input.travelMm).toBe(15);
   await ai(page);
-  await expect(page.getByText('AI未接続', { exact: true })).toBeVisible();
+  await expect(page.locator('.connection')).toHaveText('手動で編集中');
 });
 
 test('S8 physical draft keeps its measured revision, and design undo cannot delete recorded evidence', async ({ page }) => {

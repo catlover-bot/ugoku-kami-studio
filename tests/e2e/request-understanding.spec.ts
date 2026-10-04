@@ -3,7 +3,7 @@ import { createDesign, getKitSummary, applyDesignPatch } from '@ugoku/core';
 import { createPrototypeProject } from '../../scripts/prepare-prototype.js';
 import { importProject, downloadKit } from '../../scripts/live-browser.js';
 import { writeFile } from 'node:fs/promises';
-import { manual, stage, saveProject } from './helpers';
+import { manual, stage, saveProject, interpretation, editCurrentSettings } from './helpers';
 
 async function openTwenty(page: Page, file: string, origin: string) {
   const prototype = await createPrototypeProject();
@@ -15,11 +15,12 @@ async function openTwenty(page: Page, file: string, origin: string) {
   return project;
 }
 async function ask(page: Page, text: string) {
-  const editor = page.locator('.intent-panel .request-editor');
+  const editor = page.locator('.motion-request .request-editor');
   if (!await editor.evaluate(node => (node as HTMLDetailsElement).open)) await editor.locator(':scope > summary').click();
   await page.getByLabel('どう動かしたいですか？', {exact: true}).fill(text);
-  await page.getByRole('button', {name: '手動支援で候補をつくる', exact: true}).click();
+  await page.getByRole('button', {name: '寸法から案をつくる', exact: true}).click();
   await expect(page.locator('.manual-result')).toBeVisible();
+  await interpretation(page);
 }
 
 test('R1: relative and absolute distance differ; interpretation correction recalculates before adoption and PDF', async ({page, baseURL}, info) => {
@@ -79,13 +80,14 @@ test('Manual interpretation is bound to the request and revision; undo does not 
   await ask(page, 'いまより5mm長く動かして');
   await expect(page.locator('.comparison-after figcaption')).toContainText('25mm');
   const distance = page.getByLabel('動く距離（mm）', {exact: true});
+  await editCurrentSettings(page);
   await distance.fill('18'); await distance.press('Enter');
   await expect(page.locator('.intent-panel .request-interpretation')).toHaveCount(0);
   await page.getByRole('button', {name: '元に戻す', exact: true}).click();
   await expect(page.locator('main')).toHaveAttribute('data-design-hash', base.document.designHash);
   await expect(page.locator('main')).toHaveAttribute('data-design-revision', String(base.document.revision + 2));
   await expect(page.locator('.intent-panel').getByRole('button', {name: 'この案にする', exact: true})).toHaveCount(0);
-  await expect(page.locator('.intent-panel')).toContainText('つくり直してください');
+  await expect(page.locator('.intent-panel')).toContainText('現在の設定へ戻りました');
   const saved = await saveProject(page);
   expect(saved.document.input.selection).toEqual(base.document.input.selection);
   expect(saved.records).toEqual([]);
@@ -127,9 +129,9 @@ test('Injected AI: a bound interpretation correction replaces the actual server 
     const bodies: Record<string, unknown>[] = [], runs: AiRun[] = [];
     page.on('request', request => {if(request.method()==='POST' && /\/runs$/.test(new URL(request.url()).pathname)) bodies.push(request.postDataJSON());});
     page.on('response', response => {if(/\/runs(?:\/[^/]+)?$/.test(new URL(response.url()).pathname)) void response.json().then(value => {if(value.run) runs.push(value.run);}).catch(() => undefined);});
-    await ai(page);await page.getByLabel('AIアクセスコード').fill(accessCode);
-    await page.getByLabel('どんな動きにしたいですか？',{exact:true}).fill('  あと5mm動かして  ');
-    await page.getByRole('button',{name:'変更案をつくる',exact:true}).click();
+    await ai(page);await page.getByLabel('AIアクセスコード').fill(accessCode); await page.getByRole('dialog', {name: '設定', exact: true}).getByRole('button', {name: '閉じる', exact: true}).click();
+    await page.getByLabel('どう動かしたいですか？',{exact:true}).fill('  あと5mm動かして  ');
+    await page.getByRole('button',{name:'AIで案をつくる',exact:true}).click();
     const interpreted=page.locator('.ai-panel .request-interpretation');
     await expect(interpreted).toBeVisible();
     await expect.poll(()=>runs.at(-1)?.status).toBe('clarification_required');
@@ -139,7 +141,7 @@ test('Injected AI: a bound interpretation correction replaces the actual server 
     await interpreted.getByLabel('距離の受け取り方',{exact:true}).selectOption('absolute');
     await interpreted.getByLabel('解釈する距離（mm）',{exact:true}).fill('5');
     await interpreted.getByRole('button',{name:'この解釈で検査し直す',exact:true}).click();
-    await expect(page.locator('.ai-panel .proposal .comparison-after figcaption')).toContainText('5mm');
+    await expect(page.locator('.candidate-workbench .comparison-after figcaption')).toContainText('5mm');
     expect(bodies).toHaveLength(2);
     const first=runs.find(run=>run.status==='clarification_required')!;
     expect(bodies[1]).toMatchObject({prompt:'  あと5mm動かして  ',baseRevision:base.document.revision,baseHash:base.document.designHash,correction:{runId:first.id,requestId:first.requestId,changes:{binding:first.requestInterpretation!.binding,distance:{kind:'absolute',value:5,unit:'mm'}}}});
@@ -167,10 +169,10 @@ test('Injected AI: cancelling a delayed interpretation keeps design, selection a
   try {
     const origin=await app.listen({host:'127.0.0.1',port:0});
     const base=await openTwenty(page,info.outputPath('input.ugoku.json'),origin);
-    await ai(page);await page.getByLabel('AIアクセスコード').fill(accessCode);
-    await page.getByLabel('どんな動きにしたいですか？',{exact:true}).fill('首のストロークをひと伸び分足したい');
+    await ai(page);await page.getByLabel('AIアクセスコード').fill(accessCode); await page.getByRole('dialog', {name: '設定', exact: true}).getByRole('button', {name: '閉じる', exact: true}).click();
+    await page.getByLabel('どう動かしたいですか？',{exact:true}).fill('首のストロークをひと伸び分足したい');
     const sent=page.waitForResponse(response=>response.request().method()==='POST' && /\/runs$/.test(new URL(response.url()).pathname));
-    await page.getByRole('button',{name:'変更案をつくる',exact:true}).click();await sent;
+    await page.getByRole('button',{name:'AIで案をつくる',exact:true}).click();await sent;
     await page.getByRole('button',{name:'中断する',exact:true}).click();
     await expect(page.locator('.ai-panel').getByRole('status')).toContainText('中断');
     const distance=page.getByLabel('動く距離（mm）',{exact:true});await distance.fill('');

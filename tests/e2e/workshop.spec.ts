@@ -78,13 +78,13 @@ test('条件違反・未対応・AI未接続でも編集できる', async ({ pag
   await page.getByLabel('動く距離（mm）', { exact: true }).fill('20'); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter');
   await expect(pdfButton(page)).toBeEnabled();
   await ai(page);
-  await expect(page.getByText('AI未接続', { exact: true })).toBeVisible();
-  await page.getByLabel('どんな動きにしたいですか？').fill('カメを回転させたい');
-  await page.getByRole('button', { name: '変更案をつくる', exact: true }).click();
+  await expect(page.locator('.connection')).toHaveText('手動で編集中');
+  await page.getByLabel('どう動かしたいですか？').fill('カメを回転させたい');
+  await page.getByRole('button', { name: 'AIで案をつくる', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: /AIは未接続/ })).toBeVisible();
-  await page.getByRole('button', { name: '手動支援を使う', exact: true }).click();
+  await page.getByRole('button', { name: '手動の調整に戻る', exact: true }).click();
   await expect(page.getByLabel('どう動かしたいですか？', { exact: true })).toHaveValue('カメを回転させたい');
-  await page.getByRole('button', { name: '手動支援で候補をつくる', exact: true }).click();
+  await page.getByRole('button', { name: '寸法から案をつくる', exact: true }).click();
   await expect(page.locator('.manual-result')).toContainText('この動きには対応していません');
   await page.getByRole('button', { name: '直線運動の代案を選ぶ', exact: true }).click();
   await expect(page.getByLabel('どう動かしたいですか？', { exact: true })).toHaveValue(/まっすぐ/);
@@ -98,6 +98,7 @@ test('通信失敗で作業を失わず、不正な画像を拒否する', async
   await expect(page.locator('main')).toHaveAttribute('data-design-hash', beforeReload.document.designHash);
   await precision(page);
   await ai(page);
+  await page.getByRole('button',{name:'AIで案をつくる',exact:true}).click();
   await expect(page.getByText(/サーバーに接続できません/)).toBeVisible();
   await page.getByLabel('動く距離（mm）', { exact: true }).fill('17'); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter');
   await stage(page, 1);
@@ -214,9 +215,10 @@ test('サンプルの再読込中に編集しても、到着した旧応答が�
   let requested = false;
   await page.route('**/turtle.svg', async route => { requested = true; await held; await route.continue(); });
   const originalId = await page.locator('main').getAttribute('data-design-id');
-  await stage(page, 1);
+  await page.getByRole('button',{name:'作品一覧',exact:true}).click();
   await page.getByRole('button', { name: 'サンプルで試す', exact: true }).click();
   await expect.poll(() => requested).toBe(true);
+  await page.getByRole('button',{name:'前の作品を続ける',exact:true}).click();
   await precision(page);
   await page.getByLabel('動く距離（mm）', { exact: true }).fill('18'); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter');
   release();

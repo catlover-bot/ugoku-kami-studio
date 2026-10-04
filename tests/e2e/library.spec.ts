@@ -85,7 +85,7 @@ async function screenshot(page: Page, info: TestInfo, name: string) {
 test('P4 Home keeps samples ephemeral, supports own artwork and three works, and duplicates/deletes only the named work', async ({ page }, info) => {
   test.setTimeout(60_000);
   await page.goto('/');
-  await expect(page.getByRole('button', { name: '前の作品を続ける', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '前の作品を続ける', exact: true })).toHaveCount(0);
   await sample(page); const untouched = await stamp(page);
   await stage(page, 2); await page.getByLabel('表示倍率', { exact: true }).selectOption('1.5');
   // Allow one complete 600 ms debounce interval: merely exploring a sample must not create an entry.

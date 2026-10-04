@@ -126,6 +126,7 @@ test('own artwork survives native save and reload, then downloads matching split
   await stage(page, 3);
   const drawings: Record<string, string[]> = {}, downloadEvidence = [];
   for (const mode of ['all', 'pattern', 'instructions'] as const) {
+    if (mode !== 'all') { const options = page.locator('.split-options'); if (!await options.evaluate(element => (element as HTMLDetailsElement).open)) await options.locator(':scope > summary').click(); }
     const pending = page.waitForEvent('download');
     await page.getByRole('button', { name: pdfLabels[mode], exact: true }).click();
     const download = await pending, path = info.outputPath(`${mode}.pdf`);

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { PDFDocument } from 'pdf-lib';
-import { startSample, failIndexedDbWrites, closeDialog, manual, openSave, precision, saveProject, stage } from './helpers';
+import { distanceIdeas, startSample, failIndexedDbWrites, closeDialog, manual, openSave, precision, saveProject, stage } from './helpers';
 
 const sizes = [[1440, 900], [1280, 800], [1024, 768], [390, 844], [360, 800], [320, 800]] as const;
 const identity = (page: Page) => page.locator('main').evaluate(element => ({ revision: element.getAttribute('data-design-revision'), hash: element.getAttribute('data-design-hash') }));
@@ -22,7 +22,7 @@ test('U1/U8 stages reflow and principal targets remain usable at the six specifi
     for (const step of [1, 2, 3] as const) {
       await stage(page, step);
       await expect(page.locator('.workflow [aria-current="step"]')).toContainText(['絵を選ぶ', '動きをつける', '印刷して作る'][step - 1]!);
-      const label = ['自分の絵ではじめる', 'もう少し大きく', 'PDFをダウンロード'][step - 1]!;
+      const label = ['画像を選び直す', '印刷する内容を確認する', 'PDFをダウンロード'][step - 1]!;
       const control = page.getByRole('button', { name: label, exact: true });
       await expect(control).toBeVisible();
       const bounds = await control.boundingBox();
@@ -121,20 +121,22 @@ test('U8 input boundaries and keyboard focus have visible contrast against the p
 test('U4 same-scale synchronized comparison keeps the current document until explicit adoption', async ({ page }) => {
   await page.goto('/'); await startSample(page); await manual(page);
   const before = await saveProject(page);
+  await distanceIdeas(page);
   await page.getByRole('button', { name: 'もう少し大きく', exact: true }).click();
   const comparison = page.locator('.intent-panel .design-comparison');
-  const previews = comparison.locator('.comparison-previews svg');
+  const previewArea = page.locator('.candidate-workbench');
+  const previews = previewArea.locator('.comparison-previews svg');
   await expect(previews).toHaveCount(2);
   expect(await previews.nth(0).getAttribute('viewBox')).toBe(await previews.nth(1).getAttribute('viewBox'));
   for (const phase of ['0', '0.5', '1']) {
-    await comparison.getByLabel('候補の比較位置', { exact: true }).fill(phase);
+    await previewArea.getByLabel('候補の比較位置', { exact: true }).fill(phase);
     await expect(previews.nth(0)).toHaveAttribute('data-phase', phase);
     await expect(previews.nth(1)).toHaveAttribute('data-phase', phase);
   }
-  if (await comparison.getByRole('button', { name: 'いまの作品', exact: true }).isVisible()) {
-    await comparison.getByRole('button', { name: 'いまの作品', exact: true }).click();
+  if (await previewArea.getByRole('button', { name: 'いまの作品', exact: true }).isVisible()) {
+    await previewArea.getByRole('button', { name: 'いまの作品', exact: true }).click();
     const first = await previews.nth(0).boundingBox();
-    await comparison.getByRole('button', { name: '候補の作品', exact: true }).click();
+    await previewArea.getByRole('button', { name: '候補の作品', exact: true }).click();
     const second = await previews.nth(1).boundingBox();
     expect(second!.width).toBeCloseTo(first!.width, 1);
     expect(second!.height).toBeCloseTo(first!.height, 1);
@@ -153,6 +155,7 @@ test('U4 same-scale synchronized comparison keeps the current document until exp
   await manual(page);
   await comparison.getByRole('button', { name: 'この案を使わない', exact: true }).click();
   expect((await saveProject(page)).document).toEqual(before.document);
+  await distanceIdeas(page);
   await page.getByRole('button', { name: 'もう少し大きく', exact: true }).click();
   await comparison.getByRole('button', { name: 'この案にする', exact: true }).click();
   const adopted = await saveProject(page);
@@ -195,12 +198,13 @@ test('U5/U6 text undo and cancelling replacement after a failed save preserve un
   const prompt = page.getByLabel('どう動かしたいですか？', { exact: true });
   await prompt.fill(''); await prompt.pressSequentially('undo'); await prompt.press('Control+z');
   expect(await identity(page)).toEqual(edited);
-  await stage(page, 1);
+  await page.getByRole('button', {name: '作品一覧', exact: true}).click();
   await page.getByRole('button', { name: 'サンプルで試す', exact: true }).click();
   const confirmation = page.getByRole('dialog', { name: '未保存の変更', exact: true });
   await expect(confirmation).toBeVisible();
   await confirmation.getByRole('button', { name: '編集を続ける', exact: true }).click();
   expect(await identity(page)).toEqual(edited);
+  await page.locator('.home-library').getByRole('button', {name:'前の作品を続ける',exact:true}).click();
   await precision(page);
   await expect(page.getByLabel('動く距離（mm）', { exact: true })).toHaveValue('18');
 });
