@@ -25,7 +25,8 @@
     "smoke:live": "tsx scripts/smoke-live.ts",
     "deploy:plan": "node scripts/deploy.mjs",
     "prototype": "tsx scripts/prepare-prototype.ts",
-    "prototype:capture": "tsx scripts/capture-prototype.ts"
+    "prototype:capture": "tsx scripts/capture-prototype.ts",
+    "test:storage": "playwright test --config playwright.storage.config.ts"
   },
   "dependencies": {
     "@fastify/static": "10.1.5",

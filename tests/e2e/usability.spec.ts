@@ -1,17 +1,24 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { PDFDocument } from 'pdf-lib';
-import { closeDialog, manual, openSave, precision, saveProject, stage } from './helpers';
+import { startSample, failIndexedDbWrites, closeDialog, manual, openSave, precision, saveProject, stage } from './helpers';
 
 const sizes = [[1440, 900], [1280, 800], [1024, 768], [390, 844], [360, 800], [320, 800]] as const;
 const identity = (page: Page) => page.locator('main').evaluate(element => ({ revision: element.getAttribute('data-design-revision'), hash: element.getAttribute('data-design-hash') }));
 
 test('U1/U8 stages reflow and principal targets remain usable at the six specified CSS widths', async ({ page }, info) => {
   test.setTimeout(90_000);
-  await page.goto('/');
+  await page.goto('/'); await startSample(page);
   const measurements = [];
   for (const [width, height] of sizes) {
     await page.setViewportSize({ width, height });
+    await page.getByRole('button', { name: '作品一覧', exact: true }).click();
+    const homePrimary = page.locator('.home-library').getByRole('button', { name: '自分の絵ではじめる', exact: true });
+    const homeBounds = await homePrimary.boundingBox();
+    expect(homeBounds!.width).toBeGreaterThanOrEqual(44); expect(homeBounds!.height).toBeGreaterThanOrEqual(44);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    measurements.push({ width, height, step: 'home', control: '自分の絵ではじめる', bounds: homeBounds });
+    await page.locator('.home-library').getByRole('button', { name: '前の作品を続ける', exact: true }).click();
     for (const step of [1, 2, 3] as const) {
       await stage(page, step);
       await expect(page.locator('.workflow [aria-current="step"]')).toContainText(['絵を選ぶ', '動きをつける', '印刷して作る'][step - 1]!);
@@ -26,15 +33,15 @@ test('U1/U8 stages reflow and principal targets remain usable at the six specifi
       measurements.push({ width, height, step, control: label, bounds, overflow });
     }
   }
-  await mkdir('artifacts/goal004/usability', { recursive: true });
-  await writeFile(`artifacts/goal004/usability/${info.project.name}-layout.json`, JSON.stringify({ kind: 'Chromium viewport emulation, not real mobile hardware', measurements }, null, 2));
+  await mkdir('artifacts/goal005/usability', { recursive: true });
+  await writeFile(`artifacts/goal005/usability/${info.project.name}-layout.json`, JSON.stringify({ kind: 'Chromium viewport emulation, not real mobile hardware', measurements }, null, 2));
 });
 
 test('U8 200% equivalent reflow preserves controls and focused fields are not covered', async ({ page }, info) => {
   // A 1280px desktop at 200% has approximately 640 CSS px of layout width.
   // This deliberately records equivalent reflow, not actual browser chrome zoom.
   await page.setViewportSize({ width: 640, height: 400 });
-  await page.goto('/'); await precision(page);
+  await page.goto('/'); await startSample(page); await precision(page);
   for (const step of [1, 2, 3] as const) {
     await stage(page, step);
     await expect(page.locator('.workflow')).toBeVisible();
@@ -63,12 +70,12 @@ test('U8 200% equivalent reflow preserves controls and focused fields are not co
   await expect(page.getByRole('dialog', { name: '保存と再開', exact: true })).toBeVisible();
   await closeDialog(page);
   await expect(page.getByRole('button', { name: '保存・再開', exact: true })).toBeFocused();
-  await mkdir('artifacts/goal004/usability', { recursive: true });
-  await writeFile(`artifacts/goal004/usability/${info.project.name}-focus.json`, JSON.stringify({ kind: '640x400 CSS viewport: 1280x800 at 200% equivalent reflow; no real OS keyboard or browser zoom', focused }, null, 2));
+  await mkdir('artifacts/goal005/usability', { recursive: true });
+  await writeFile(`artifacts/goal005/usability/${info.project.name}-focus.json`, JSON.stringify({ kind: '640x400 CSS viewport: 1280x800 at 200% equivalent reflow; no real OS keyboard or browser zoom', focused }, null, 2));
 });
 
 test('U8 sampled text and controls meet contrast targets using their actual computed colors', async ({ page }, info) => {
-  await page.goto('/'); await precision(page);
+  await page.goto('/'); await startSample(page); await precision(page);
   const measurements = await page.evaluate(() => {
     type Color = [number, number, number, number];
     const color = (value: string): Color => { const numbers = value.match(/[\d.]+/g)?.map(Number) ?? []; return [numbers[0] ?? 0, numbers[1] ?? 0, numbers[2] ?? 0, numbers[3] ?? 1]; };
@@ -86,12 +93,12 @@ test('U8 sampled text and controls meet contrast targets using their actual comp
   });
   expect(measurements.length).toBeGreaterThan(10);
   expect(measurements.filter(item => item.ratio < item.minimum)).toEqual([]);
-  await mkdir('artifacts/goal004/usability', { recursive: true });
-  await writeFile(`artifacts/goal004/usability/${info.project.name}-contrast.json`, JSON.stringify({ kind: 'computed HTML text samples; not a complete WCAG conformance audit', measurements }, null, 2));
+  await mkdir('artifacts/goal005/usability', { recursive: true });
+  await writeFile(`artifacts/goal005/usability/${info.project.name}-contrast.json`, JSON.stringify({ kind: 'computed HTML text samples; not a complete WCAG conformance audit', measurements }, null, 2));
 });
 
 test('U8 input boundaries and keyboard focus have visible contrast against the panel', async ({ page }) => {
-  await page.goto('/'); await precision(page);
+  await page.goto('/'); await startSample(page); await precision(page);
   const field = page.getByLabel('動く距離（mm）', { exact: true });
   await field.focus(); await page.keyboard.press('Tab'); await page.keyboard.press('Shift+Tab');
   const measured = await field.evaluate(element => {
@@ -112,7 +119,7 @@ test('U8 input boundaries and keyboard focus have visible contrast against the p
 });
 
 test('U4 same-scale synchronized comparison keeps the current document until explicit adoption', async ({ page }) => {
-  await page.goto('/'); await manual(page);
+  await page.goto('/'); await startSample(page); await manual(page);
   const before = await saveProject(page);
   await page.getByRole('button', { name: 'もう少し大きく', exact: true }).click();
   const comparison = page.locator('.intent-panel .design-comparison');
@@ -158,7 +165,7 @@ test('U4 same-scale synchronized comparison keeps the current document until exp
 
 test('U5/U8 reduced motion and view-only controls preserve the design identity', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto('/'); await stage(page, 2);
+  await page.goto('/'); await startSample(page); await stage(page, 2);
   const original = await identity(page);
   expect(original.hash).toMatch(/^[a-f0-9]{64}$/);
   await expect(page.locator('.distance-output')).toHaveAttribute('aria-live', 'off');
@@ -176,10 +183,12 @@ test('U5/U8 reduced motion and view-only controls preserve the design identity',
   expect(await identity(page)).toEqual(original);
 });
 
-test('U5/U6 text undo and cancelling replacement preserve unsaved work', async ({ page }) => {
-  await page.goto('/'); await precision(page);
+test('U5/U6 text undo and cancelling replacement after a failed save preserve unsaved work', async ({ page }) => {
+  await page.goto('/'); await startSample(page); await precision(page);
   await page.getByLabel('動く距離（mm）', { exact: true }).fill('18'); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter');
   const edited = await identity(page);
+  // Successful autosave no longer needs confirmation; force a real write failure.
+  await failIndexedDbWrites(page);
   await manual(page);
   const prompt = page.getByLabel('どう動かしたいですか？', { exact: true });
   await prompt.fill(''); await prompt.pressSequentially('undo'); await prompt.press('Control+z');

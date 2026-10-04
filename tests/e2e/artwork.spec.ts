@@ -4,7 +4,7 @@ import { PDFDocument } from 'pdf-lib';
 import sharp from 'sharp';
 import { applyArtworkRepair, createDesign, createImageInput, getArtworkComposition } from '@ugoku/core';
 import { createHash } from 'node:crypto';
-import { closeDialog, openSave, saveProject, stage } from './helpers';
+import { startSample, closeDialog, openSave, saveProject, stage } from './helpers';
 
 async function fixture(kind: 'white' | 'transparent' | 'pattern') {
   const pattern = '<path d="M0 0H700V500H0Z" fill="#cfdfc8"/><path d="M0 80H700M0 180H700M0 280H700M0 380H700" stroke="#6b9189" stroke-width="34"/>';
@@ -32,7 +32,7 @@ async function sourceScreenPoint(page: Page, x: number, y: number) {
 }
 
 test('U2/U5/U7 author-chosen background is a versioned printable change; legacy image and records stay intact', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/'); await startSample(page);
   const { art, background } = await fixture('pattern');
   const legacy = projectFrom(art);
   await importProject(page, legacy);
@@ -83,7 +83,8 @@ test('U2/U5/U7 author-chosen background is a versioned printable change; legacy 
   const pdf = await PDFDocument.load(await readFile((await file.path())!));
   expect(pdf.getSubject()).toContain(repaired.document.designHash);
   expect(pdf.getPageCount()).toBe(repaired.document.layout.sheets + 4);
-  await page.reload(); await openSave(page); await page.getByRole('button', { name: '保存した作品を開く', exact: true }).click(); await closeDialog(page);
+  await page.reload(); await expect(page.locator('main')).toHaveAttribute('data-design-hash', repaired.document.designHash);
+  await expect(page.locator('main')).toHaveAttribute('data-design-revision', String(repaired.document.revision));
   expect((await saveProject(page)).document).toEqual(repaired.document);
   const invalid = { ...repaired, backgroundImageDataUrl: legacy.imageDataUrl };
   await importProject(page, invalid);
@@ -92,7 +93,7 @@ test('U2/U5/U7 author-chosen background is a versioned printable change; legacy 
 });
 
 test('U2 transparent pixels have printable white paper at both endpoints; solid repair needs explicit adoption', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/'); await startSample(page);
   const { art } = await fixture('transparent'); const legacy = projectFrom(art);
   await importProject(page, legacy); await stage(page, 2);
   for (const phase of ['はじめ', 'おわり']) {
@@ -115,7 +116,7 @@ test('U2 transparent pixels have printable white paper at both endpoints; solid 
 });
 
 test('U3 mouse, two-tap and keyboard use source pixels through zoom; pointer cancellation and viewing do not commit', async ({ page }) => {
-  await page.goto('/'); await stage(page, 1);
+  await page.goto('/'); await startSample(page); await stage(page, 1);
   await page.getByRole('button', { name: '動かす部分を選び直す', exact: true }).click();
   const before = await saveProject(page);
   await page.getByLabel('表示倍率', { exact: true }).selectOption('1.5');

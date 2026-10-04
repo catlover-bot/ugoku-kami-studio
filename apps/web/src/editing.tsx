@@ -45,7 +45,7 @@ export function useNumericDrafts(document: DesignDocument, apply: (patch: Design
     }
     update(next); return true;
   }
-  return { drafts, ref, change, commit, discard, restore: (values: Partial<Record<NumericKey, string>>) => update(Object.fromEntries(Object.entries(values).map(([key, text]) => [key, { text, base: designStamp(current.current.document) }]))), hasDrafts: Object.keys(drafts).length > 0 };
+  return { drafts, ref, change, commit, discard, restore: (values: Partial<Record<NumericKey, string>>, base = designStamp(current.current.document)) => update(Object.fromEntries(Object.entries(values).map(([key, text]) => [key, { text, base }]))), hasDrafts: Object.keys(drafts).length > 0 };
 }
 
 export type NumericController = ReturnType<typeof useNumericDrafts>;

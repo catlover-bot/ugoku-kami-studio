@@ -7,10 +7,24 @@ import { generatePdfOffThread } from './pdf';
 import AiPanel from './AiPanel';
 import IntentPanel from './IntentPanel';
 import { designChanges } from './DesignComparison';
-import { DraftNumberInput, TransactionRange, useNumericDrafts } from './editing';
-import { STORAGE_KEY, MAX_RECORD_PHOTOS, assertProjectByteLength, photoViewLabels, verifyDataImage, decodeImage, downloadFile, imageContentId, parseProject, readRaster, serializeProject, type PhysicalRecord, type Project } from './project';
+import HomeLibrary from './HomeLibrary';
+import { useProjectLibrary } from './useProjectLibrary';
+import { type WorkspaceDraft, type StoredEntry } from './projectRepository';
+import { parseWorkspaceFile, serializeWorkspaceBackup } from './workspaceBackup';
+import { DraftNumberInput, TransactionRange, useNumericDrafts, type NumericDraftMap } from './editing';
+import { MAX_RECORD_PHOTOS, assertProjectByteLength, photoViewLabels, verifyDataImage, decodeImage, downloadFile, imageContentId, readRaster, serializeProject, type PhysicalRecord, type Project } from './project';
 
 const initialDocument = createDesign(SAMPLE_INPUT, { designId: 'turtle-sample', revision: 1 });
+const defaultDraft = (project: Project): WorkspaceDraft => ({ stage: 1, zoom: 1, view: 'front', selection: project.document.input.selection, selectionReady: true });
+function normalizeWorkspace(project: Project, draft = defaultDraft(project)): WorkspaceDraft {
+  const selection = draft.selectionReady === false ? draft.selection : draft.selection ?? project.document.input.selection;
+  return { stage: draft.stage, zoom: draft.zoom, view: draft.view, selection, selectionReady: !!selection, editing: draft.editing ?? !selection, selectionMode: draft.selectionMode ?? 'drag', helper: draft.helper ?? 'manual', numericDrafts: draft.numericDrafts ?? {}, numericBase: (Object.keys(draft.numericDrafts ?? {}).length ? draft.numericBase : undefined) ?? { designId: project.document.designId, revision: project.document.revision, designHash: project.document.designHash }, ...(draft.recordDraft && hasRecordData(draft.recordDraft) ? { recordDraft: draft.recordDraft } : {}) };
+}
+function draftBase(drafts: NumericDraftMap, doc: DesignDocument) {
+  const parts = Object.values(drafts)[0]?.base.split(':');
+  return parts?.length === 3 ? { designId: parts[0]!, revision: Number(parts[1]), designHash: parts[2]! } : { designId: doc.designId, revision: doc.revision, designHash: doc.designHash };
+}
+const ACTIVE_WORKSPACE = 'ugoku-kami.active-workspace';
 const directionLabels = { right: '右へ', left: '左へ', up: '上へ', down: '下へ' };
 const directionArrows = { right: '→', left: '←', up: '↑', down: '↓' };
 const lockLabels: { key: LockKey; label: string }[] = [{ key: 'travelMm', label: '動く距離' }, { key: 'direction', label: '方向' }, { key: 'widthMm', label: '作品の幅' }, { key: 'heightMm', label: '作品の高さ' }, { key: 'maxSheets', label: '紙の上限' }, { key: 'selection', label: '選択領域' }, { key: 'paperThicknessMm', label: '紙の厚さ' }, { key: 'clearanceMm', label: 'すき間' }];
@@ -54,7 +68,12 @@ export default function App() {
   const [error, setErrorState] = useState('');
   const [errorScope, setErrorScope] = useState<'global' | 'image' | 'print'>('global');
   function setError(value: string, scope: 'global' | 'image' | 'print' = 'global') {setErrorState(value); setErrorScope(scope);}
-  const [hasSaved, setHasSaved] = useState(false);
+  const [home, setHome] = useState(true);
+  const [autoSave, setAutoSave] = useState(false);
+  const [opened, setOpened] = useState(false);
+  const bootstrapped = useRef(false), discardSwitch = useRef(false);
+  const [recoveryIssues, setRecoveryIssues] = useState<string[]>([]);
+  const [loadIssues, setLoadIssues] = useState<Record<string, string>>({});
   const [record, setRecord] = useState<PhysicalRecord>(() => blankRecord(initialDocument));
   const [printPage, setPrintPage] = useState(1);
   const [printUrl, setPrintUrl] = useState('');
@@ -67,7 +86,6 @@ export default function App() {
   const [aiCandidate, setAiCandidate] = useState(false);
   const [repairCandidate, setRepairCandidate] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const [saveLabel, setSaveLabel] = useState('まだ保存していません');
   const saveDialog = useRef<HTMLDialogElement>(null), replaceDialog = useRef<HTMLDialogElement>(null);
   const queuedAction = useRef<(() => void) | null>(null);
   const inputDialog = useRef<HTMLDialogElement>(null), queuedInputButton = useRef<HTMLButtonElement | null>(null);
@@ -102,7 +120,27 @@ export default function App() {
       return null;
     } catch (issue) { return friendlyError(issue); }
   });
-  const hasUnsaved = dirty || recordStarted || numbers.hasDrafts;
+  const workspaceDraft = useMemo<WorkspaceDraft>(() => normalizeWorkspace(project, {
+    stage: stage as 1 | 2 | 3, zoom: zoom as 1 | 1.5 | 2, view, selection, selectionReady: !!selection, editing, selectionMode, helper,
+    numericDrafts: Object.fromEntries(Object.entries(numbers.drafts).map(([key, value]) => [key, value!.text])),
+    numericBase: draftBase(numbers.drafts, doc),
+    ...(recordStarted ? { recordDraft: record } : {}),
+  }), [project, stage, zoom, view, selection, editing, selectionMode, helper, numbers.drafts, doc.designId, doc.revision, doc.designHash, recordStarted, record]);
+  const workspaceDraftRef = useRef(workspaceDraft); workspaceDraftRef.current = workspaceDraft;
+  const library = useProjectLibrary({ project, draft: workspaceDraft, enabled: autoSave || dirty || numbers.hasDrafts || recordStarted });
+  const hasUnsaved = ['pending', 'saving', 'failed', 'conflict'].includes(library.status);
+  const saveLabel = ({ idle: 'まだ保存していません', pending: '未保存の変更があります · 保存を待っています', saving: '保存中…', saved: 'このブラウザに保存済み', failed: '保存失敗 · 未保存の変更があります', conflict: '別のタブと競合 · 未保存の変更があります' })[library.status];
+  const hasSaved = library.entries.some(entry => entry.status === 'ready');
+  useEffect(() => {
+    if (library.activeId && library.status === 'saved') { try { sessionStorage.setItem(ACTIVE_WORKSPACE, library.activeId); } catch { /* The workspace itself is already saved in IndexedDB. */ } }
+  }, [library.activeId, library.status]);
+  useEffect(() => {
+    if (library.initializing || bootstrapped.current) return;
+    bootstrapped.current = true;
+    let id: string | null = null; try { id = sessionStorage.getItem(ACTIVE_WORKSPACE); } catch { /* Resume remains available from the library. */ }
+    const ticket = pending.current;
+    if (id) void library.repository.load(id).then(entry => { if (entry && ticket === pending.current) restoreEntry(entry); }).catch(issue => { if (ticket === pending.current) { setLoadIssues(previous => ({ ...previous, [id!]: friendlyError(issue) })); setError(friendlyError(issue)); } });
+  }, [library.initializing]);
   useEffect(() => {
     if (error && !saveDialog.current?.open && !replaceDialog.current?.open) errorBanner.current?.scrollIntoView({ block: 'nearest' });
   }, [error]);
@@ -122,7 +160,6 @@ export default function App() {
       const bindInitialImage = (existing: Project): Project => existing.imageDataUrl || existing.document.input.image.id !== SAMPLE_INPUT.image.id ? existing : ({ ...existing, imageDataUrl, document: createDesign({ ...existing.document.input, image: { ...existing.document.input.image, id: imageContentId(imageDataUrl) } }, { designId: existing.document.designId, revision: existing.document.revision + (existing.document.revision > 1 ? 1 : 0) }) });
       if (current) { setProject(bindInitialImage); setHistory(previous => previous.map(bindInitialImage)); }
     }).catch(() => { if (current) setError('サンプル画像を読み込めませんでした。画像を選んで開始できます。'); });
-    try { setHasSaved(!!localStorage.getItem(STORAGE_KEY)); } catch { setMessage('このブラウザでは保存領域が使えません。プロジェクトファイルへ書き出せます。'); }
     return () => { current = false; };
   }, []);
   useEffect(() => {
@@ -147,7 +184,7 @@ export default function App() {
     if (current.document.designId !== next.document.designId) numbers.discard();
     const records = current.document.designId === next.document.designId ? [...new Map([...next.records, ...current.records].map(record => [record.id, record])).values()] : next.records;
     if (current.document.designId === next.document.designId && current.records !== next.records) serializeProject({ ...next, records });
-    pending.current++; setHistory(list => current.document.designId === next.document.designId ? [...list.slice(-19), { ...current, selectionState: selectionRef.current }] : []); setFuture([]); setProject({ ...next, records }); projectRef.current = { ...next, records }; setDirty(true); setSaveLabel('保存後に変更があります');
+    pending.current++; setHistory(list => current.document.designId === next.document.designId ? [...list.slice(-19), { ...current, selectionState: selectionRef.current }] : []); setFuture([]); setProject({ ...next, records }); projectRef.current = { ...next, records }; setDirty(true);
     setSelection(next.document.input.selection); setCompare(false); setPlaying(false); setPosition(0); setPrintPage(1); setBusy(null); setError(''); setMessage(text);
   }, []);
   function patch(changes: DesignPatch) {
@@ -171,7 +208,7 @@ export default function App() {
     if (redo) { setFuture(list => list.slice(0, -1)); setHistory(list => [...list, current]); }
     else { setHistory(list => list.slice(0, -1)); setFuture(list => [...list, current]); }
     const restored: Project = { imageDataUrl: last.imageDataUrl, ...(last.backgroundImageDataUrl ? { backgroundImageDataUrl: last.backgroundImageDataUrl } : {}), records: project.records, document: createDesign(last.document.input, { designId: doc.designId, revision: Math.max(doc.revision, last.document.revision) + 1 }) };
-    setProject(restored); projectRef.current = restored; setDirty(true); setSaveLabel('保存後に変更があります'); setSelection(last.selectionState === undefined ? restored.document.input.selection : last.selectionState); setCompare(false); setPlaying(false); setPosition(0); setTravelPreview(null); setError(''); setMessage(redo ? '取り消した編集をやり直しました。設計版は新しくなっています。' : '前の内容に戻しました。設計版は新しくなっています。');
+    setProject(restored); projectRef.current = restored; setDirty(true); setSelection(last.selectionState === undefined ? restored.document.input.selection : last.selectionState); setCompare(false); setPlaying(false); setPosition(0); setTravelPreview(null); setError(''); setMessage(redo ? '取り消した編集をやり直しました。設計版は新しくなっています。' : '前の内容に戻しました。設計版は新しくなっています。');
   }
   function guardInputAction(event: MouseEvent<HTMLDivElement>) {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-design-action]');
@@ -205,7 +242,8 @@ export default function App() {
       const image = await decodeImage('/turtle.svg'); const canvas = document.createElement('canvas'); canvas.width = 800; canvas.height = 550; canvas.getContext('2d')!.drawImage(image, 0, 0);
       if (ticket !== pending.current) return;
       const imageDataUrl = canvas.toDataURL('image/png');
-      commit({ document: createDesign({ ...SAMPLE_INPUT, image: { ...SAMPLE_INPUT.image, id: imageContentId(imageDataUrl) } }, { designId: crypto.randomUUID(), revision: 1 }), imageDataUrl, records: [] }, 'カメのサンプルを開きました。首の部分が選ばれています。'); setEditing(false); setView('front'); setStage(2); setZoom(1); setRecord(blankRecord(projectRef.current.document));
+      const next = { document: createDesign({ ...SAMPLE_INPUT, image: { ...SAMPLE_INPUT.image, id: imageContentId(imageDataUrl) } }, { designId: crypto.randomUUID(), revision: 1 }), imageDataUrl, records: [] };
+      await beginWorkspace(next, defaultDraft(next), false); setMessage('カメのサンプルを開きました。首の部分が選ばれています。編集すると自動保存が始まります。');
     } catch (issue) { if (ticket === pending.current) setError(friendlyError(issue)); } finally { if (ticket === pending.current) setBusy(null); }
   }
   async function uploadFile(file: File) {
@@ -222,7 +260,8 @@ export default function App() {
       const { dataUrl, ...source } = result.image;
       const nextInput = createImageInput(source, file.name.replace(/\.[^.]+$/, ''));
       const next = createDesign(nextInput, { designId: crypto.randomUUID(), revision: 1 });
-      commit({ document: next, imageDataUrl: dataUrl, records: [] }, '画像を開きました。動かしたい部分を囲んでください。'); setEditing(true); setView('front'); setStage(1); setZoom(1); setRecord(blankRecord(next));
+      const loaded = { document: next, imageDataUrl: dataUrl, records: [] };
+      await beginWorkspace(loaded, { ...defaultDraft(loaded), editing: true }); setMessage('画像を開きました。動かしたい部分を囲んでください。');
     } catch (issue) { if (ticket === pending.current) setError(issue instanceof TypeError ? '画像の確認サーバーに接続できません。接続を確認して再試行してください。編集中の作品は残っています。' : friendlyError(issue), 'image'); }
     finally { if (ticket === pending.current) setBusy(null); }
   }
@@ -253,52 +292,130 @@ export default function App() {
       setMessage('確認用SVGを出力しました。各ファイルがA4の1ページです。');
     } catch (issue) { setError(friendlyError(issue)); }
   }
-  function save(): boolean {
-    if (!selection) { setError('動かす部分を選んでから保存してください。選択をやり直すか、やり直しで戻れます。'); return false; }
-    if (recordStarted) { setError('入力中の実物記録は、先に「この設計版に記録を追加」で確定してください。下書きはまだ作品に保存されていません。'); return false; }
-    let serialized: string;
-    try { serialized = serializeProject(project); }
-    catch (issue) { setError(friendlyError(issue)); return false; }
-    try { localStorage.setItem(STORAGE_KEY, serialized); setHasSaved(true); setDirty(false); setSaveLabel(`第${doc.revision}版をこのブラウザに保存済み`); setError(''); setMessage('画像・設計・実物の記録を、このブラウザだけに保存しました。'); return true; }
-    catch { setError('ブラウザに保存できませんでした。空き容量や設定を確認するか、プロジェクトを書き出してください。'); return false; }
+  function applyWorkspace(next: Project, draft = defaultDraft(next), keepHistory = false) {
+    pending.current++; projectRef.current = next; setProject(next);
+    if (!keepHistory) { setHistory([]); setFuture([]); }
+    const selected = draft.selectionReady === false ? draft.selection : draft.selection ?? next.document.input.selection;
+    setSelection(selected); setStage(draft.stage); setZoom(draft.zoom); setView(draft.view); setEditing(draft.editing ?? !selected); setSelectionMode(draft.selectionMode ?? 'drag'); setHelper(draft.helper ?? 'manual');
+    const base = draft.numericBase ?? next.document;
+    numbers.restore(draft.numericDrafts ?? {}, `${base.designId}:${base.revision}:${base.designHash}`);
+    setRecord(draft.recordDraft ?? blankRecord(next.document));
+    setPlaying(false); setPosition(0); setTravelPreview(null); setCompare(false); setPrintPage(1); setBusy(null); setDirty(false); setAutoSave(true); setOpened(true); setHome(false); setError('');
   }
-  function askReplace(action: () => void) {
+  function restoreEntry(entry: StoredEntry, keepHistory = false) {
+    const normalized = { ...entry, draft: normalizeWorkspace(entry.project, entry.draft) };
+    library.adopt(normalized); applyWorkspace(entry.project, normalized.draft, keepHistory);
+    setMessage('保存した作品を開きました。入力途中の値と実物記録の下書きも、確定した設計とは分けて復元しています。');
+  }
+  async function beginWorkspace(next: Project, draft = defaultDraft(next), saveImmediately = true, id?: string) {
+    draft = normalizeWorkspace(next, draft);
+    await library.startNew(next, draft, { discardUnsaved: discardSwitch.current, id }); discardSwitch.current = false;
+    applyWorkspace(next, draft); setAutoSave(saveImmediately);
+  }
+  async function save(): Promise<boolean> {
+    setAutoSave(true);
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    try { if (library.error) await library.retry(); await library.flush({ force: true }); setDirty(false); setMessage('確定した作品と復元用の下書きを、このブラウザに保存しました。'); return true; }
+    catch { return false; }
+  }
+  async function askReplace(action: () => void) {
     saveDialog.current?.close();
-    if (hasUnsaved) { queuedAction.current = action; replaceDialog.current?.showModal(); }
-    else action();
+    if (autoSave || dirty || numbers.hasDrafts || recordStarted) {
+      try { await library.flush(); }
+      catch { queuedAction.current = action; replaceDialog.current?.showModal(); return; }
+    }
+    action();
   }
-  function finishReplacement(saveFirst: boolean) {
-    if (saveFirst && !save()) return;
-    if (!saveFirst) numbers.discard();
-    replaceDialog.current?.close();
-    const action = queuedAction.current; queuedAction.current = null;
-    if (action) action();
+  async function finishReplacement(saveFirst: boolean) {
+    if (saveFirst && !await save()) return;
+    discardSwitch.current = !saveFirst; replaceDialog.current?.close();
+    const action = queuedAction.current; queuedAction.current = null; if (action) action();
   }
   function chooseFile(event: ChangeEvent<HTMLInputElement>, kind: 'image' | 'project') {
     const file = event.target.files?.[0]; event.target.value = ''; if (!file) return;
-    askReplace(() => void (kind === 'image' ? uploadFile(file) : importFile(file)));
+    void askReplace(() => void (kind === 'image' ? uploadFile(file) : importFile(file)));
   }
   function exportProject() {
-    if (!selection || !project.imageDataUrl) return;
-    if (recordStarted) { setError('入力中の実物記録を先に追加してください。未確定の下書きはファイルに含まれません。'); return; }
-    try { downloadFile(serializeProject(project), 'application/json', `${doc.designId}.ugoku.json`); setDirty(false); setSaveLabel(`第${doc.revision}版をファイルに書き出し済み`); setMessage('画像を含むプロジェクトを書き出しました。このブラウザの保存とは別です。'); setError(''); }
+    if (!project.imageDataUrl) return;
+    try { downloadFile(serializeProject(project), 'application/json', `${doc.designId}.ugoku.json`); setMessage(recordStarted ? '確定した設計と追加済み記録を書き出しました。入力途中も持ち出すには「下書きも含めて書き出す」を使ってください。' : '画像を含むプロジェクトを書き出しました。ブラウザ内の保存状態とは別です。'); setError(''); }
     catch (cause) { setError(friendlyError(cause)); }
   }
+  async function exportBackup() {
+    try { downloadFile(await serializeWorkspaceBackup(project, workspaceDraft), 'application/json', `${doc.designId}.ugoku-recovery.json`); setMessage('確定した設計と下書きを分けて書き出しました。このファイルから途中の入力も再開できます。'); }
+    catch (issue) { setError(friendlyError(issue)); }
+  }
+  async function openEntry(id: string) {
+    const ticket = ++pending.current, before = projectRef.current, beforeDraft = workspaceDraftRef.current;
+    try { const entry = await library.load(id); if (ticket !== pending.current || before !== projectRef.current || beforeDraft !== workspaceDraftRef.current) throw new Error('読込中に編集が変わりました。現在の内容を残しています。もう一度作品を選んでください。'); if (!entry) throw new Error('この作品は削除されています。作品一覧を更新してください。'); restoreEntry(entry); }
+    catch (issue) { if (issue instanceof Error && 'code' in issue && issue.code === 'corrupt') setLoadIssues(previous => ({ ...previous, [id]: friendlyError(issue) })); setError(friendlyError(issue)); throw issue; }
+  }
   async function resume() {
-    const ticket = ++pending.current;
-    setBusy('保存した作品を確認しています…');
-    try { const saved = localStorage.getItem(STORAGE_KEY); if (!saved) throw new Error('保存した作品がありません。'); const restored = await parseProject(saved); if (ticket !== pending.current) return; const retainedRecords = projectRef.current.document.designId === restored.document.designId && projectRef.current.records.some(item => !restored.records.some(saved => saved.id === item.id)); commit(restored, retainedRecords ? '保存した作品を開きました。あとで追加した実物記録も残しました。記録を含めて、もう一度保存してください。' : '保存した画像・選択領域・設計・記録を復元しました。'); setDirty(retainedRecords); setSaveLabel(retainedRecords ? '実物記録に未保存の変更があります' : `第${restored.document.revision}版をこのブラウザから再開`); setRecord(blankRecord(restored.document)); setStage(1); }
-    catch (issue) { if (ticket === pending.current) setError(friendlyError(issue)); } finally { if (ticket === pending.current) setBusy(null); }
+    const id = library.activeId ?? library.entries.find(entry => entry.status === 'ready')?.id;
+    if (id) { try { await openEntry(id); saveDialog.current?.close(); } catch { /* The work remains on screen. */ } }
   }
   async function importFile(file: File) {
-    const ticket = ++pending.current;
-    setBusy('プロジェクトを確認しています…');
-    try { assertProjectByteLength(file.size); const restored = await parseProject(await file.text()); if (ticket !== pending.current) return; const retainedRecords = projectRef.current.document.designId === restored.document.designId && projectRef.current.records.some(item => !restored.records.some(saved => saved.id === item.id)); commit(restored, retainedRecords ? 'ファイルを開きました。現在の作品に追加した実物記録も残っています。記録を含めて、もう一度保存してください。' : '画像を含むプロジェクトを開きました。'); setDirty(retainedRecords); setSaveLabel(retainedRecords ? '実物記録に未保存の変更があります' : 'ファイルから再開・ブラウザには未保存'); setRecord(blankRecord(restored.document)); setStage(1); }
-    catch (issue) { if (ticket === pending.current) setError(friendlyError(issue)); } finally { if (ticket === pending.current) setBusy(null); }
+    const ticket = ++pending.current; setBusy('プロジェクトを確認しています…');
+    try {
+      assertProjectByteLength(file.size); const loaded = await parseWorkspaceFile(await file.text());
+      if (ticket !== pending.current) return;
+      const current = projectRef.current, restored = loaded.project;
+      if (current.document.designId === restored.document.designId && opened) {
+        const records = [...new Map([...restored.records, ...current.records].map(record => [record.id, record])).values()];
+        const merged = { ...restored, records }; serializeProject(merged);
+        applyWorkspace(merged, loaded.draft ?? defaultDraft(merged));
+      } else await beginWorkspace(restored, loaded.draft ?? defaultDraft(restored), true, `import-${crypto.randomUUID()}`);
+      setMessage('ファイルから作品を開きました。元の画像・設計版・追加済みの実物記録を保っています。');
+    } catch (issue) { if (ticket === pending.current) setError(friendlyError(issue)); }
+    finally { if (ticket === pending.current) setBusy(null); }
   }
-  function removeSaved() {
-    try { localStorage.removeItem(STORAGE_KEY); setHasSaved(false); setDirty(true); setSaveLabel('このブラウザには未保存'); setMessage('このブラウザに保存した作品を削除しました。開いている作品は残ります。'); } catch { setError('ブラウザの保存領域にアクセスできず、削除できませんでした。'); }
+  async function renameEntry(id: string, name: string) {
+    if (id === library.activeId) await library.flush();
+    const summary = (await library.refresh()).find(entry => entry.id === id);
+    if (!summary?.generation) throw new Error('保存情報を読み取れません。作品を復元してください。');
+    await library.repository.rename(id, name, summary.generation);
+    if (id === library.activeId) { const entry = await library.repository.load(id); if (entry) { restoreEntry(entry, true); setHome(home); } }
+    await library.refresh();
   }
+  async function duplicateEntry(id: string) {
+    if (id === library.activeId) await library.flush();
+    const source = await library.repository.load(id); if (!source) throw new Error('作品が見つかりません。');
+    const entry = await library.repository.duplicate(id, source.generation);
+    await library.refresh(); setMessage(`「${entry.name}」を作りました。設計IDは新しく、実物記録は引き継いでいません。`);
+  }
+  async function deleteEntry(id: string) {
+    // The dialog explicitly includes unsaved edits/drafts. Deletion must remain
+    // available when those drafts cannot be saved. CAS still rejects a newer tab.
+    const summary = library.entries.find(entry => entry.id === id); if (!summary) return;
+    await library.repository.delete(id, id === library.activeId ? library.generation : summary.generation);
+    if (id === library.activeId) {
+      const empty = { ...project, document: createDesign(input, { designId: crypto.randomUUID(), revision: 1 }), records: [] };
+      await library.startNew(empty, normalizeWorkspace(empty), { discardUnsaved: true });
+      applyWorkspace(empty); setAutoSave(false); setHome(true); setOpened(false);
+      try { sessionStorage.removeItem(ACTIVE_WORKSPACE); } catch { /* Library access does not require this pointer. */ }
+    }
+    await library.refresh(); setMessage('指定した作品を削除しました。他の作品は残っています。');
+  }
+  async function exportEntry(id: string) {
+    if (id === library.activeId) { await exportBackup(); return; }
+    const entry = await library.repository.load(id); if (!entry) throw new Error('作品が見つかりません。');
+    downloadFile(await serializeWorkspaceBackup(entry.project, entry.draft), 'application/json', `${entry.project.document.designId}.ugoku-recovery.json`);
+  }
+  async function recoverEntry(id: string) {
+    await library.flush();
+    const recovered = await library.repository.recover(id); setRecoveryIssues(recovered.issues);
+    if (!recovered.project) throw new Error(recovered.issues.join(' '));
+    const entry = await library.repository.save({ id: `recovered-${crypto.randomUUID()}`, project: recovered.project, draft: recovered.draft ?? defaultDraft(recovered.project), name: `${recovered.project.document.input.title.slice(0, 110)}（復元）`, expectedGeneration: null });
+    restoreEntry(entry); await library.refresh(); setMessage('読み取れた設計と下書きを別の保存先へ復元しました。元の保存データは残しています。');
+  }
+  async function saveConflictCopy() {
+    const before = projectRef.current, beforeDraft = workspaceDraftRef.current;
+    try {
+      const entry = await library.repository.save({ id: `recovery-${crypto.randomUUID()}`, project, draft: workspaceDraft, name: `${input.title.slice(0, 110)}（復旧）`, expectedGeneration: null });
+      if (before !== projectRef.current || beforeDraft !== workspaceDraftRef.current) { await library.refresh(); setMessage('復旧用の保存を作成しました。その後の編集は画面に残っています。必要ならもう一度保存してください。'); return; }
+      restoreEntry(entry); await library.refresh(); setMessage('同じ作品の編集を復旧用の別名で保存しました。実物記録の設計IDと版を保持しています。');
+    } catch (issue) { setError(friendlyError(issue)); }
+  }
+  function showLibrary() { setHome(true); setPlaying(false); saveDialog.current?.close(); void library.refresh().catch(issue => setError(friendlyError(issue))); }
   async function addPhotos(event: ChangeEvent<HTMLInputElement>) {
     const ticket = pending.current, recordId = record.id;
     const files = [...(event.target.files ?? [])]; event.target.value = '';
@@ -314,7 +431,7 @@ export default function App() {
     const next = { ...projectRef.current, records: [...projectRef.current.records, record] };
     try { serializeProject(next); }
     catch (issue) { setError(`記録を追加できませんでした。${friendlyError(issue)} 下書きは残っています。`); return; }
-    setProject(next); projectRef.current = next; setDirty(true); setSaveLabel('実物記録に未保存の変更があります');
+    setProject(next); projectRef.current = next; setDirty(true);
     setRecord(blankRecord(doc)); setError(''); setMessage(`入力を始めた第${record.revision}版に実物の記録を追加しました。記録を残すにはブラウザへ保存するか、プロジェクトを書き出してください。`);
   }
 
@@ -323,16 +440,20 @@ export default function App() {
     <a className="skip-link" href="#workbench">工作の編集へ</a>
     <header className="site-header">
       <div className="brand"><span className="brand-mark" aria-hidden="true">↗</span><span>うごく紙工房</span></div>
-      <div className="header-actions"><span className={`save-state ${hasUnsaved ? 'unsaved' : ''}`}>{hasUnsaved ? '未保存の変更があります' : saveLabel}</span><button className="text-button" title="元に戻す" aria-label="元に戻す" disabled={!history.length} onClick={() => restoreHistory()}><span aria-hidden="true">↶</span> 元に戻す</button><button className="text-button" title="やり直す" aria-label="やり直す" disabled={!future.length} onClick={() => restoreHistory(true)}><span aria-hidden="true">↷</span> やり直す</button><button className="secondary" onClick={() => saveDialog.current?.showModal()}>保存・再開</button></div>
+      <div className="header-actions"><span className={`save-state ${hasUnsaved ? 'unsaved' : ''}`} role="status" data-save-status={library.status}>{saveLabel}</span><button className="text-button" onClick={showLibrary}>作品一覧</button><button className="text-button" title="元に戻す" aria-label="元に戻す" hidden={home} disabled={!history.length} onClick={() => restoreHistory()}><span aria-hidden="true">↶</span> 元に戻す</button><button className="text-button" title="やり直す" aria-label="やり直す" hidden={home} disabled={!future.length} onClick={() => restoreHistory(true)}><span aria-hidden="true">↷</span> やり直す</button><button className="secondary" hidden={!opened} onClick={() => saveDialog.current?.showModal()}>保存・再開</button></div>
     </header>
-    <main data-design-revision={doc.revision} data-design-hash={doc.designHash}>
+    <main data-design-id={doc.designId} data-design-revision={doc.revision} data-design-hash={doc.designHash} data-save-status={library.status} data-workspace-id={library.activeId ?? ''} data-save-generation={library.generation ?? ''}>
+      {home && <HomeLibrary entries={library.entries.map(entry => loadIssues[entry.id] ? { ...entry, status: 'corrupt' as const, issue: loadIssues[entry.id] } : entry)} activeId={library.activeId ?? undefined} loading={library.initializing} error={library.initializationError?.message || (home ? error : '')} activeStatus={opened ? saveLabel : undefined} onContinue={opened ? () => setHome(false) : undefined} onCreateOwn={() => imageInput.current?.click()} onTrySample={() => askReplace(() => void sample())} onOpen={openEntry} onRename={renameEntry} onDuplicate={duplicateEntry} onDelete={deleteEntry} onImport={() => projectInput.current?.click()} onExport={exportEntry} onRecover={recoverEntry} onRetry={async () => { await library.refresh(); }} />}
+      {library.error && <section className="notice warning storage-error" role="alert"><h2>{library.status === 'conflict' ? '別のタブと保存が競合しました' : '保存できませんでした'}</h2><p>{library.error.message}</p>{library.lastSaved && <p>最後に保存できた地点：第{library.lastSaved.revision}版 · 保存世代{library.lastSaved.generation}</p>}<p>現在の編集と下書きはこの画面に残っています。</p><div className="button-row"><button className="secondary" onClick={() => void library.retry().catch(() => {})}>保存を再試行</button><button className="secondary" onClick={() => void exportBackup()}>下書きも含めて書き出す</button><button className="secondary" onClick={() => void saveConflictCopy()}>復旧用に別名保存</button><button className="text-button" onClick={showLibrary}>作品を整理する</button></div></section>}
+      {!!recoveryIssues.length && <div className="notice warning" role="status">{recoveryIssues.map(issue => <p key={issue}>{issue}</p>)}<button className="text-button" onClick={() => setRecoveryIssues([])}>復元の案内を閉じる</button></div>}
+      <div hidden={home}>
       <nav className="workflow" aria-label="工作の流れ">{['絵を選ぶ','動きをつける','印刷して作る'].map((label,index) => <button key={label} className={stage === index + 1 ? 'active' : ''} aria-current={stage === index + 1 ? 'step' : undefined} onClick={() => goTo(index + 1)}><span className="step-number">{index + 1}</span><span>{label}</span></button>)}</nav>
       {error && (errorScope === 'global' || (errorScope === 'image' && stage !== 1) || (errorScope === 'print' && stage !== 3)) && <div ref={errorBanner} role="alert" className="notice error-message"><p>{error}</p><button className="text-button" onClick={() => setError('')}>メッセージを閉じる</button></div>}
       <div className="workspace-layout">
         <div className="workspace-main">
           <div className="mobile-start" hidden={stage !== 1}><button className={doc.designId === 'turtle-sample' && !dirty ? 'primary' : 'secondary'} onClick={() => imageInput.current?.click()} disabled={!!busy}>自分の絵ではじめる</button><button className="text-button" onClick={() => askReplace(() => void sample())} disabled={!!busy}>サンプルで試す</button>{imageFailure}</div>
           <section className="workbench" id="workbench" ref={workbench} aria-labelledby="art-title" hidden={stage === 2 && !!candidateActive}>
-            <div className="workbench-header"><div><p className="eyebrow">{stage === 1 ? '動かすところを、四角く囲む。' : stage === 2 ? '引いて、動きを確かめる。' : 'この姿を、紙でためす。'}</p><h1 id="art-title">{input.title}</h1></div><span className="revision">第{doc.revision}版</span></div>
+            <div className="workbench-header"><div><p className="eyebrow">{stage === 1 ? '動かすところを、四角く囲む。' : stage === 2 ? '引いて、動きを確かめる。' : 'この姿を、紙でためす。'}</p><h1 id="art-title">{library.entries.find(entry => entry.id === library.activeId)?.name ?? input.title}</h1></div><span className="revision">第{doc.revision}版</span></div>
             <div className="canvas-toolbar"><div className="segmented" role="group" aria-label="表示する面">{([{key:'front',label:'正面'},{key:'original',label:'原画像'},{key:'back',label:'裏のしくみ'},{key:'print',label:'印刷図'}] as const).map(item => <button key={item.key} aria-pressed={view === item.key} onClick={() => { setView(item.key); setPlaying(false); if (item.key !== 'front') setEditing(false); }}>{item.label}</button>)}</div>{previous && canCompare && <button className="text-button" onClick={() => setCompare(value => !value)} aria-pressed={compare}>変更前と比較</button>}</div>
             <div className={`artwork-stage ${view === 'print' ? 'print-stage' : ''}`}>
               {compare && <span className="comparison-label">変更前 · 第{previous?.document.revision}版</span>}
@@ -379,11 +500,12 @@ export default function App() {
         <details><summary>印刷の設定と確認用SVG</summary><div className="printing-note"><p><strong>「実際のサイズ／100%」</strong>で印刷し、「用紙に合わせる縮小」は無効にします。まず50mmの校正線を定規で測ってください。</p><p>切る線は実線、折る線は破線、接着場所は斜線と文字です。画面での大きさは実寸ではありません。</p><button className="secondary" data-design-action onClick={exportSvg} disabled={!!failChecks.length || !selection}>確認用SVGをダウンロード</button><p className="field-note">はさみ・カッターと小さな部品の扱いに気をつけてください。必要に応じて大人と作業します。</p></div></details>
       <details className="physical-section"><summary>実物でためした記録 <span>{project.records.length}件 · 自分の工作ノート</span></summary><p className="muted">入力を始めた版に実物の記録を結び付けます。実際に試した欄だけを書いてください。記録を追加しても機構全体の検証済みにはなりません。</p><div className="record-meta">記録の対象：第{recordStarted ? record.revision : doc.revision}版<br />設計ハッシュ <code>{recordStarted ? record.designHash : doc.designHash}</code><br />使用した型紙 {recordStarted ? record.pattern : `${doc.designId}-r${doc.revision}.pdf`}</div>{recordIsOlder && <div className="notice warning"><p>{record.designId !== doc.designId ? '入力中の記録は別の作品のものです。' : `入力中の記録は第${record.revision}版のものです。現在の第${doc.revision}版には付け替えません。`}対象の型紙に書かれた距離と部品を確認して記入してください。</p><button className="text-button" onClick={() => { setRecord(blankRecord(doc)); setMessage(`下書きを破棄しました。第${doc.revision}版の記録を始められます。`); }}>下書きを破棄して現在の版で記録</button></div>}{!recordIsOlder && <ul className="physical-checklist">{kit.physicalTestItems.map(item => <li key={item}>{item}</li>)}</ul>}<div className="record-grid"><label className="field">使った材料<input value={record.material} onChange={event => updateRecord({material: event.target.value})} maxLength={1000} placeholder="例：厚紙0.25mm、木工用接着剤" /></label><label className="field">印刷倍率<input value={record.printScale} onChange={event => updateRecord({printScale: event.target.value})} maxLength={100} placeholder="例：100%" /></label><label className="field">50mm校正線の実測<input value={record.measuredLine} onChange={event => updateRecord({measuredLine: event.target.value})} maxLength={100} placeholder="測った長さをmmで記入" /></label><label className="field">移動の両端と途中<textarea value={record.endpoints} onChange={event => updateRecord({endpoints: event.target.value})} maxLength={2000} rows={2} placeholder={recordIsOlder ? '対象の型紙で、開始位置・途中・終点の様子を確認' : `開始位置・途中・${input.travelMm}mmの終点での様子`} /></label><label className="field">ガイドがタブを保持するか<textarea value={record.guideRetention} onChange={event => updateRecord({guideRetention: event.target.value})} maxLength={2000} rows={2} placeholder="始点・途中・終点でG1・G2から抜けないか、引き手をつかめるか" /></label><label className="field">接着面と表裏の確認<textarea value={record.glueFaces} onChange={event => updateRecord({glueFaces: event.target.value})} maxLength={2000} rows={2} placeholder="C1の上下の足、ガイドの足、通り道に糊がないか" /></label><label className="field">組み立て時の修正<textarea value={record.modifications} onChange={event => updateRecord({modifications: event.target.value})} maxLength={3000} rows={2} placeholder="切り直し、すき間調整、補強など" /></label><label className="field">動作結果<textarea value={record.movement} onChange={event => updateRecord({movement: event.target.value})} maxLength={3000} rows={2} placeholder="意図した動きに近づいたか、残る課題" /></label><label className="field">10往復程度の初期チェック<textarea value={record.roundTrips} onChange={event => updateRecord({roundTrips: event.target.value})} maxLength={2000} rows={2} placeholder="実際の往復回数と、前後の引っかかり・緩みの変化。耐久性の保証ではありません。" /></label><label className="field">正面・裏面・始点・終点の様子<textarea value={record.viewObservations} onChange={event => updateRecord({viewObservations: event.target.value})} maxLength={2000} rows={2} placeholder="確認した向きや位置だけ記入。未確認のものは空欄のままで構いません。" /></label><label className="field">写真（4枚まで）<input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={event => void addPhotos(event)} /></label></div>{!!record.photos.length && <div className="record-photos">{record.photos.map((photo, index) => <figure key={index}><img src={photo} alt={`追加する実物写真 ${index + 1}`} /><label>写真{index + 1}の向き<select aria-label={`写真${index + 1}の向き`} value={record.photoViews[index] ?? 'unspecified'} onChange={event => updateRecord({photoViews: record.photos.map((_, i) => i === index ? event.target.value as PhysicalRecord['photoViews'][number] : record.photoViews[i] ?? 'unspecified')})}>{Object.entries(photoViewLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><button className="text-button" onClick={() => setRecord({...record, photos: record.photos.filter((_, i) => i !== index), photoViews: record.photos.map((_, i) => record.photoViews[i] ?? 'unspecified').filter((_, i) => i !== index)})}>写真を削除</button></figure>)}</div>}<button className="secondary" onClick={saveRecord}>この設計版に記録を追加</button>{project.records.map(item => <article className="saved-record" key={item.id}><h3>第{item.revision}版の実物記録</h3><small>{item.designHash} · {item.pattern}</small><dl>{[{label:'材料',value:item.material},{label:'印刷倍率 / 校正線',value:`${item.printScale || '未記入'} / ${item.measuredLine || '未記入'}`},{label:'移動の両端と途中',value:item.endpoints},{label:'ガイドの保持',value:item.guideRetention},{label:'接着面・表裏',value:item.glueFaces},{label:'組み立て時の修正',value:item.modifications},{label:'動作結果',value:item.movement},{label:'10往復程度の初期チェック',value:item.roundTrips},{label:'正面・裏面・始点・終点',value:item.viewObservations}].map(field => <div key={field.label}><dt>{field.label}</dt><dd>{field.value || '未記入'}</dd></div>)}</dl><div className="record-photos">{item.photos.map((photo, index) => <figure key={index}><img src={photo} alt={`第${item.revision}版の実物写真 ${index + 1}：${photoViewLabels[item.photoViews[index] ?? 'unspecified']}`} /><figcaption>{photoViewLabels[item.photoViews[index] ?? 'unspecified']}</figcaption></figure>)}</div></article>)}</details>
       </section>
+      </div>
       <input className="sr-only" tabIndex={-1} ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp" onChange={event => chooseFile(event, 'image')} aria-label="画像を選ぶ" />
       <input ref={projectInput} className="sr-only" tabIndex={-1} type="file" accept=".json,application/json" aria-label="プロジェクトファイルを選ぶ" onChange={event => chooseFile(event, 'project')} />
     </main>
     <dialog ref={inputDialog} aria-label="入力途中の値" className="project-dialog" onCancel={() => { queuedInputButton.current = null; }}><h2>入力途中の値があります</h2><p>設計と印刷には、確定した値だけを使います。入力を確定するか、取り消してから進めてください。</p>{inputDialogError && <p role="alert" className="notice warning">{inputDialogError}</p>}<div className="button-row"><button className="primary" onClick={() => finishInputAction(false)}>入力を確定して続ける</button><button className="secondary" onClick={correctInputs}>入力を直す</button><button className="text-button" onClick={() => finishInputAction(true)}>入力を取り消して続ける</button></div></dialog>
-    <dialog ref={saveDialog} aria-label="保存と再開" className="project-dialog"><div className="dialog-heading"><h2>保存と再開</h2><button className="text-button" onClick={() => saveDialog.current?.close()}>閉じる</button></div><p>元画像・設計・追加済みの工作記録を一緒に残します。自動保存はしません。</p><p className="save-state">{hasUnsaved ? '未保存の変更があります' : saveLabel}</p>{recordStarted && <p className="notice warning">実物記録の下書きがあります。先に工程3で記録を追加してください。</p>}<div className="project-actions"><button className="primary" data-design-action onClick={() => save()} disabled={!project.imageDataUrl || !selection}>このブラウザに保存</button><button className="secondary" onClick={() => askReplace(() => void resume())} disabled={!hasSaved || !!busy}>保存した作品を開く</button><button className="secondary" disabled={!project.imageDataUrl || !selection} data-design-action onClick={exportProject}>プロジェクトを書き出す</button><button className="secondary" onClick={() => projectInput.current?.click()}>プロジェクトを読み込む</button></div><details><summary>保存したデータの削除</summary><p>このブラウザの保存だけを削除します。編集中の作品や、書き出したファイルは残ります。</p><button className="text-button" disabled={!hasSaved} onClick={removeSaved}>ブラウザの保存を削除</button><button className="text-button" onClick={() => { removeSaved(); setMessage('ブラウザには保存しません。未保存の内容は画面を閉じると消えます。'); }}>保存しない</button></details>{error && <p className="notice warning" role="alert">{error}</p>}<p className="field-note">{busy || message}</p></dialog>
-    <dialog ref={replaceDialog} aria-label="未保存の変更" className="project-dialog" onCancel={() => { queuedAction.current = null; }}><h2>未保存の変更があります</h2><p>別の作品に切り替える前に、現在の作品を残しますか？</p>{recordStarted && <p className="notice warning">実物記録の下書きがあります。「編集を続ける」で戻り、記録を追加してから保存してください。</p>}<div className="project-actions"><button className="primary" disabled={recordStarted || !selection} data-design-action onClick={() => finishReplacement(true)}>保存して切り替える</button><button className="secondary" onClick={() => finishReplacement(false)}>保存せず切り替える</button><button className="text-button" onClick={() => { queuedAction.current = null; replaceDialog.current?.close(); }}>編集を続ける</button></div>{error && <p role="alert" className="notice warning">{error}</p>}</dialog>
+    <dialog ref={saveDialog} aria-label="保存と再開" className="project-dialog"><div className="dialog-heading"><h2>保存と再開</h2><button className="text-button" onClick={() => saveDialog.current?.close()}>閉じる</button></div><p>編集後に自動保存します。入力途中の数値や工作記録は、復元用の下書きとして分けて残します。</p><p className="save-state">{saveLabel}</p><div className="project-actions"><button className="primary" onClick={() => void save()} disabled={!project.imageDataUrl}>このブラウザに保存</button><button className="secondary" onClick={() => void resume()} disabled={!hasSaved || !!busy}>保存した作品を開く</button><button className="secondary" disabled={!project.imageDataUrl || !selection} data-design-action onClick={exportProject}>プロジェクトを書き出す</button><button className="secondary" disabled={!project.imageDataUrl} onClick={() => void exportBackup()}>下書きも含めて書き出す</button><button className="secondary" onClick={() => projectInput.current?.click()}>プロジェクトを読み込む</button><button className="text-button" onClick={showLibrary}>作品一覧で管理する</button></div><p className="field-note">通常のプロジェクトには確定した設計・追加済み記録が入ります。入力途中も持ち出す場合は、下書きを含む復元用ファイルを選んでください。</p>{(error || library.error) && <p className="notice warning" role="alert">{error || library.error?.message}</p>}<p className="field-note">{busy || message}</p></dialog>
+    <dialog ref={replaceDialog} aria-label="未保存の変更" className="project-dialog" onCancel={() => { queuedAction.current = null; }}><h2>保存できていない変更があります</h2><p>保存失敗または別タブとの競合により、別の作品へ安全に切り替えられませんでした。編集中の内容と下書きは残っています。</p><div className="project-actions"><button className="primary" onClick={() => void finishReplacement(true)}>保存して切り替える</button><button className="secondary" onClick={() => void exportBackup()}>下書きも含めて書き出す</button><button className="text-button" onClick={() => void finishReplacement(false)}>保存せず切り替える</button><button className="text-button" onClick={() => { queuedAction.current = null; replaceDialog.current?.close(); }}>編集を続ける</button></div>{library.error && <p role="alert" className="notice warning">{library.error.message}</p>}</dialog>
   </div>;
 }

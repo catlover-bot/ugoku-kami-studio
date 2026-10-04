@@ -72,7 +72,9 @@ try {
   await page.addInitScript('globalThis.__name = (value) => value;');
   await page.goto(process.env.MEASURE_BASE_URL ?? 'http://127.0.0.1:4173');
   await instrument(page);
-  await page.getByLabel('画像を選ぶ', { exact: true }).setInputFiles({ name: 'pattern.png', mimeType: 'image/png', buffer: input });
+  const chooser = page.waitForEvent('filechooser');
+  await page.locator('.home-library').getByRole('button', { name: '自分の絵ではじめる', exact: true }).click();
+  await (await chooser).setFiles({ name: 'pattern.png', mimeType: 'image/png', buffer: input });
   await expect(page.getByRole('button', { name: '選択の編集を終える', exact: true })).toBeVisible();
   const initial = await saveProject(page);
   for (let iteration = 0; iteration < 3; iteration++) {
@@ -98,8 +100,9 @@ try {
   }
   await precision(page);
   for (const value of ['17', '18', '19']) {
-    await arm(page, `adjust-${value}mm`, 'revision', '#travel', 'input');
-    await page.getByLabel('動く距離（mm）', { exact: true }).fill(value); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter'); await completed(page);
+    await page.getByLabel('動く距離（mm）', { exact: true }).fill(value);
+    await arm(page, `adjust-${value}mm`, 'revision', '#number-travelMm', 'keydown');
+    await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter'); await completed(page);
   }
   await manual(page);
   for (const value of ['15', '16', '17']) {
@@ -120,8 +123,9 @@ try {
     const state = window as unknown as Instrumented;
     return { measurements: state.ugokuMeasurements, longTasksMs: state.ugokuLongTasks, userAgent: navigator.userAgent, devicePixelRatio, hardwareConcurrency: navigator.hardwareConcurrency, resources: performance.getEntriesByType('resource').filter(item => item.name.includes('/fonts/')).map(item => ({ name: new URL(item.name).pathname, duration: item.duration, transferSize: (item as PerformanceResourceTiming).transferSize })) };
   });
-  const result = { date: new Date().toISOString(), kind: 'Local headless Chromium measurement, not user or mobile device evidence; no Gemini calls', input: { path: inputPath, bytes: input.length, width: metadata.width, height: metadata.height, sha256: createHash('sha256').update(input).digest('hex'), normalizedImageId: initial.document.input.image.id }, environment: { browser: browser.version(), node: process.version, platform: platform(), architecture: arch(), cpuModel: cpus()[0]?.model, viewport: { width: 1440, height: 900 }, concurrency: 'single browser measurement page; other workspace activity may exist' }, method: { iterations: 3, revision: 'Captured input/pointerup/click event to changed main revision plus two requestAnimationFrame callbacks', candidate: 'Captured click to candidate DOM plus two requestAnimationFrame callbacks', pdf: 'Captured click to real PDF bytes ready and native download click; includes font fetch and worker creation if applicable; download event also awaited', warmth: 'Same loaded page. PDF first and repeats separately identified; font resource timings recorded. No CPU/network throttling.' }, ...captured, longTaskSummary: { count: captured.longTasksMs.length, maximumMs: Math.max(0, ...captured.longTasksMs) } };
-  await mkdir('artifacts/goal003/usability', { recursive: true });
-  await writeFile(`artifacts/goal003/usability/${reportName}.json`, JSON.stringify(result, null, 2));
+  const result = { date: new Date().toISOString(), kind: 'Local headless Chromium measurement, not user or mobile device evidence; no Gemini calls', input: { path: inputPath, bytes: input.length, width: metadata.width, height: metadata.height, sha256: createHash('sha256').update(input).digest('hex'), normalizedImageId: initial.document.input.image.id }, environment: { browser: browser.version(), node: process.version, platform: platform(), architecture: arch(), cpuModel: cpus()[0]?.model, viewport: { width: 1440, height: 900 }, concurrency: 'single browser measurement page; other workspace activity may exist' }, method: { iterations: 3, revision: 'Captured Enter-keydown/pointerup/click commit event to changed main revision plus two requestAnimationFrame callbacks', candidate: 'Captured click to candidate DOM plus two requestAnimationFrame callbacks', pdf: 'Captured click to real PDF bytes ready and native download click; includes font fetch and worker creation if applicable; download event also awaited', warmth: 'Same loaded page. PDF first and repeats separately identified; font resource timings recorded. No CPU/network throttling.' }, ...captured, longTaskSummary: { count: captured.longTasksMs.length, maximumMs: Math.max(0, ...captured.longTasksMs) } };
+  const outputDir = process.env.MEASURE_OUTPUT_DIR ?? 'artifacts/goal005/performance';
+  await mkdir(outputDir, { recursive: true });
+  await writeFile(`${outputDir}/${reportName}.json`, JSON.stringify(result, null, 2));
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 } finally { await browser.close(); }

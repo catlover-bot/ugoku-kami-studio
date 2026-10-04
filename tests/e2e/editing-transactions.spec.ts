@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { PDFDocument } from 'pdf-lib';
 import type { Project } from '../../apps/web/src/project';
-import { closeDialog, openSave, physical, precision, stage } from './helpers';
+import { startSample, closeDialog, openSave, physical, precision, stage } from './helpers';
 
 /** These tests use only the AI-disabled application and real browser controls. */
 async function stamp(page: Page) {
@@ -18,7 +18,7 @@ async function portable(page: Page): Promise<Project> {
   return project;
 }
 async function ready(page: Page) {
-  await page.goto('/');
+  await page.goto('/'); await startSample(page);
   await expect(page.locator('.artwork-stage .artwork-svg > image').first()).toHaveAttribute('href', /^data:image\/png/);
 }
 const undo = (page: Page) => page.getByRole('button', { name: '元に戻す', exact: true });

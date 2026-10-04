@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { applyDesignPatch, parseDesignDocument, type DesignDocument } from '@ugoku/core';
-import { ai, precision } from './helpers';
+import { startSample, ai, precision } from './helpers';
 
 // HTTP fixtures are confined to this browser test. No key, SDK request or production fallback is used.
 type RequestBody = { requestId: string; prompt: string; baseRevision: number; baseHash: string };
@@ -92,7 +92,7 @@ class AiFixture {
 }
 
 async function open(page: Page, fixture: AiFixture) {
-  await fixture.attach(page); await page.goto('/');
+  await fixture.attach(page); await page.goto('/'); await startSample(page);
   await precision(page); await ai(page);
   await expect(page.getByText('Gemini設定済み', { exact: true })).toBeVisible();
   await expect(page.getByRole('textbox', { name: '動く距離（mm）' })).toHaveValue('20');
@@ -148,7 +148,7 @@ test.describe('AI panel — test-only HTTP fixtures, no live Gemini', () => {
       }
       return route.fallback();
     });
-    await page.goto('/');
+    await page.goto('/'); await startSample(page);
     await precision(page); await ai(page);
     await page.getByLabel('AIアクセスコード').fill('test-only-access');
     await page.getByLabel('どんな動きにしたいですか？').fill('動く距離を15mmにしたい');

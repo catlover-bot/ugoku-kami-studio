@@ -3,9 +3,9 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib';
 import { parseDesignDocument, getAssemblySteps, getFabricationChecks } from '@ugoku/core';
-import { ai, closeDialog, manual, openSave, pdfButton, physical, precision, saveProject, selectionNumbers, stage } from './helpers';
+import { startSample, ai, manual, pdfButton, physical, precision, saveProject, selectionNumbers, stage } from './helpers';
 
-const root = 'artifacts/goal004/regression';
+const root = 'artifacts/goal005/regression';
 async function saved(page: Page) {
   return saveProject(page);
 }
@@ -31,7 +31,7 @@ async function evidence(page: Page, stem: string) {
 }
 test.beforeEach(async ({ page }, info) => {
   await mkdir(`${root}/${info.project.name}`, { recursive: true });
-  await page.goto('/');
+  await page.goto('/'); await startSample(page);
   await stage(page, 2);
   await expect(pdfButton(page)).toBeEnabled();
 });
@@ -129,9 +129,8 @@ test('S2/S3/S6/S8 own portrait art: upward motion, original scale, instructions 
   expect(stored.records[0].photos).toEqual([]);
   expect(stored.document.physicalValidation).toBe('unverified');
   await page.reload();
-  await openSave(page);
-  await page.getByRole('button', { name: '保存した作品を開く', exact: true }).click();
-  await closeDialog(page);
+  await expect(page.locator('main')).toHaveAttribute('data-design-hash', current.designHash);
+  await expect(page.locator('main')).toHaveAttribute('data-design-revision', String(current.revision));
   await stage(page, 2);
   await expect(page.locator('#art-title')).toContainText('上がるランタン');
   const resumed = await evidence(page, `${stem}-resumed`);

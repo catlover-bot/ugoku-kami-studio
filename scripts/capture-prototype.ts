@@ -15,7 +15,9 @@ const execute = promisify(execFile);
 const json = (path: string, value: unknown) => writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
 const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
-/** Local production UI, explicit AI-disabled config, no .env loading or model calls. */
+/** Local production UI through Home import (shared live-browser helper), explicit
+ * AI-disabled config, no .env loading or model calls. Pass a new outDir per goal
+ * to preserve prior prototype evidence. */
 export async function capturePrototype(outDir = resolve('artifacts/goal004/prototype')) {
   outDir = resolve(outDir);
   const projectPath = join(outDir, 'prototype.ugoku.json');

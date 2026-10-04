@@ -10,6 +10,16 @@ Aでは数値を文字列draftとして保持し、Enter/blurで一度確定、E
 
 Aの作業ツリーで `npm run check`（lint/型検査/単体・統合101件/build）と `npm run test:e2e -- --workers=4`（PC53・モバイルChromium53、106件）が成功。追加P2/P3試験は実UIの空欄・小数・Enter+blurの二重確定防止・無効値・Escape・native text Undo・ドラッグ・pointercancel・held-key・Redo・記録保持・実PDFの版を確認する。IMEは合成compositionイベントの処理確認であり、実OSの日本語入力や実iPhoneの確認とは区別する。各統合のクリーン導入・SHA/CIは `artifacts/goal005/` の実行記録に残す。
 
+Aはコミット [`553f405d2652a10833187d19f9cf7c4cc8049641`](https://github.com/catlover-bot/ugoku-kami-studio/commit/553f405d2652a10833187d19f9cf7c4cc8049641) を別worktreeに展開し、`npm ci` / doctor / check（101件）/ E2E（106件）/ examples（4例）が成功。[作業ブランチCI](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37173172713)成功後、mainへfast-forwardし、[同SHAのmain CI](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37173435051)もコンテナを含む2ジョブが成功した。PC1440pxと320pxで入力・Undo/Redo・PDF前の判断を操作した12画面を実際に開き、欠け・重なり・横overflowがないことを確認した。証跡は `artifacts/goal005/phase-a-integration.json` と `phase-a-ui/manifest.json`。
+
+Bの保存層は確定作品・draft・一覧metadata・移行markerを別storeへ保存する。世代照合と更新を同じreadwrite transactionで行い、oncompleteで初めて成功とする。削除の小さなtombstoneにより、再作成で古い世代を再利用しない。旧データは移行後にも削除しない。軽い一覧検査で発見できない本文破損は開く時に検出し、その一作品だけの復旧を案内する。復元用ファイルでも設計と下書きは分離し、合算45MB上限と所有作品の照合を行う。
+
+Bのrepository/hook/復元用ファイルは、実ChromiumのIndexedDBで25件成功。同期的なquota例外・transaction abort・storage拒否の注入はブラウザの実容量消費やOS設定変更とは区別する。React StrictMode、600ms debounce、下書きのみの更新では画像を書き直さないこと、遅延完了、保存直後のdirty renderからpending表示、同時タブのCAS、移行idempotence、破損一件の回復、資格情報除去、容量上限を確認する。作品一覧からの統合E2EとBのmain反映は以下の実行記録で区別する。
+
+作品一覧を通る新P4/P5はPC/mobile計14件が成功し、3作品・v1/v2・通常複製の新設計IDと記録消去・対象名付き削除・工程/表示/数値/未選択/記録draftの再開・旧保存の移行・破損一件の隔離・実際の2タブ競合・復旧用の別名保存・quota/拒否時の持出しを確認した。保存できない下書きがある作品でも、明示削除の取消しは保持し、確定はその作品だけを削除する。作品一覧/復元/失敗のPC・狭幅画面は `library-ui/manifest.json` に入力とsource/bundle hashを残して目視確認した。
+
+既存の手動保存試験は、UIで保存完了を待ち、IndexedDBの確定作品と復元draftを読み戻す方法へ改訂した。自動保存後の切替は確認なし、保存失敗時だけ保持・書出し・破棄の確認をする。古い写真形式の読込は新しいタブから実施し、現在作品の新しい記録を劣化させないことも確認する。旧回帰は初回104/106、その前提修正後の2/2が成功（単一120件実行とは区別）。理由と対象ファイルは `artifacts/goal005/phase-b-regression/migration-and-results.json`。
+
 変更前の同条件証跡は `artifacts/goal005/before/manifest.json`（自作絵/サンプル×PC/狭幅、36画面、実PDF4件）。実物・実Gemini・初見の人・実スマートフォン・Cloud Run公開は引き続き未実施。B〜DとP1/P4〜P8の新しい受入確認はこの段階では未完了。
 
 ## Goal 004-R — 現在の統合方針

@@ -2,7 +2,7 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import { applyDesignPatch, parseDesignDocument, type DesignDocument } from '@ugoku/core';
-import { ai, physical, saveProject, stage } from './helpers';
+import { startSample, ai, physical, saveProject, stage } from './helpers';
 
 // Every AI response in this file is a labelled HTTP fixture. No live provider is contacted.
 class OfflineAi {
@@ -39,7 +39,7 @@ class OfflineAi {
   }
 }
 async function openAi(page: Page, fixture: OfflineAi) {
-  await fixture.attach(page); await page.goto('/'); await page.locator('.artwork-stage .artwork-svg').waitFor(); await ai(page);
+  await fixture.attach(page); await page.goto('/'); await startSample(page); await page.locator('.artwork-stage .artwork-svg').waitFor(); await ai(page);
   await expect(page.getByText('模擬接続（テスト）', {exact: true})).toBeVisible();
   await page.getByLabel('AIアクセスコード').fill('private-fixture-access-code');
   await page.getByLabel('どんな動きにしたいですか？').fill('動く距離を15mmにしたい');
@@ -109,7 +109,7 @@ test('G4 rejection, failure and cancellation retain separate evidence without ch
 });
 
 test('G4 a mismatched image response is actionable and preserves the current artwork', async ({page}) => {
-  await page.goto('/'); await page.locator('.artwork-stage .artwork-svg').waitFor(); const before = await saveProject(page);
+  await page.goto('/'); await startSample(page); await page.locator('.artwork-stage .artwork-svg').waitFor(); const before = await saveProject(page);
   const bytes = await sharp({create: {width: 640, height: 480, channels: 4, background: '#ffffff'}}).png().toBuffer();
   await page.route('**/api/images', route => route.fulfill({contentType: 'application/json', body: JSON.stringify({image: {id: '0'.repeat(64), widthPx: 640, heightPx: 480, mimeType: 'image/png', dataUrl: `data:image/png;base64,${bytes.toString('base64')}`}})}));
   await page.getByLabel('画像を選ぶ', {exact: true}).setInputFiles({name: 'developer-test.png', mimeType: 'image/png', buffer: bytes});
@@ -124,7 +124,7 @@ test('G4 a mismatched image response is actionable and preserves the current art
 });
 
 test('G4 physical record stores four labelled views and an explicitly unperformed initial check', async ({page}) => {
-  await page.goto('/'); await page.locator('.artwork-stage .artwork-svg').waitFor(); const before = await mainHash(page); await physical(page);
+  await page.goto('/'); await startSample(page); await page.locator('.artwork-stage .artwork-svg').waitFor(); const before = await mainHash(page); await physical(page);
   await page.getByLabel('10往復程度の初期チェック', {exact: true}).fill('自動テストの保存確認。実物での往復は未実施。');
   await page.getByLabel('正面・裏面・始点・終点の様子', {exact: true}).fill('開発者の合成画像。実物写真ではありません。');
   const bytes = await sharp({create: {width: 60, height: 50, channels: 3, background: '#ddd8ce'}}).png().toBuffer();
@@ -135,7 +135,13 @@ test('G4 physical record stores four labelled views and an explicitly unperforme
   expect(record.photos).toHaveLength(4); expect(record.photoViews).toEqual(['front','back','start','end']); expect(record.roundTrips).toContain('未実施'); expect(record.designHash).toBe(before);
   const legacy = {...saved, version: 1, records: [{...record, photos: record.photos.slice(0,3)}]};
   delete legacy.records[0].photoViews; delete legacy.records[0].roundTrips; delete legacy.records[0].viewObservations;
-  await page.reload(); await page.getByLabel('プロジェクトファイルを選ぶ', {exact: true}).setInputFiles({name: 'legacy.ugoku.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(legacy))});
-  await expect(page.locator('.status-message')).toContainText('画像を含むプロジェクトを開きました');
-  const resumed = await saveProject(page); expect(resumed.records[0].photos).toHaveLength(3); expect(resumed.records[0].photoViews).toEqual([]); expect(resumed.records[0].roundTrips).toBe('');
+  // Import the legacy file from Home in a new tab. Reload now restores the active
+  // project automatically, where merging correctly preserves the newer record.
+  const legacyPage = await page.context().newPage();
+  await legacyPage.goto('/'); await expect(legacyPage.locator('.home-library')).toBeVisible();
+  await legacyPage.getByLabel('プロジェクトファイルを選ぶ', {exact: true}).setInputFiles({name: 'legacy.ugoku.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(legacy))});
+  await expect(legacyPage.locator('.status-message')).toContainText('ファイルから作品を開きました');
+  const resumed = await saveProject(legacyPage); expect(resumed.records[0].photos).toHaveLength(3); expect(resumed.records[0].photoViews).toEqual([]); expect(resumed.records[0].roundTrips).toBe('');
+  expect((await saveProject(page)).records[0]).toEqual(record);
+  await legacyPage.close();
 });

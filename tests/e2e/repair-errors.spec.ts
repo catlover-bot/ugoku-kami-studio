@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { PDFDocument } from 'pdf-lib';
 import sharp from 'sharp';
 import { createDesign } from '@ugoku/core';
-import { closeDialog, openSave, precision, saveProject, stage } from './helpers';
+import { startSample, closeDialog, openSave, precision, saveProject, stage } from './helpers';
 
 const imageHash = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 async function backgroundPng() {
@@ -22,7 +22,7 @@ const candidate = (page: Page) => page.locator('.repair-candidate');
 
 for (const format of ['jpeg', 'webp'] as const) {
   test(`U2/U5/U7 ${format} background passes the local decoder, becomes bound PNG, and exports that revision`, async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/'); await startSample(page);
     const before = await saveProject(page);
     await openRepair(page);
     const input = await sharp(await backgroundPng()).toFormat(format).toBuffer();
@@ -52,7 +52,7 @@ for (const format of ['jpeg', 'webp'] as const) {
 }
 
 test('U5/U6 rejected images and broken success responses leave the current design and saved source intact', async ({ page }) => {
-  await page.goto('/'); const before = await saveProject(page); await openRepair(page);
+  await page.goto('/'); await startSample(page); const before = await saveProject(page); await openRepair(page);
   const bytes = await backgroundPng();
   let requests = 0;
   await page.route('**/api/images', route => { requests++; return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { message: '背景画像の確認が一時的に利用できません。' } }) }); });
@@ -75,7 +75,7 @@ test('U5/U6 rejected images and broken success responses leave the current desig
 });
 
 test('U4/U6 stale repair candidates must be rebuilt after edits, and a pending image cannot cross to another design with the same hash', async ({ page }) => {
-  await page.goto('/'); const original = await saveProject(page); await openRepair(page);
+  await page.goto('/'); await startSample(page); const original = await saveProject(page); await openRepair(page);
   await page.getByLabel('背景の色', { exact: true }).fill('#e3b868');
   await page.getByRole('button', { name: 'この色で比較する', exact: true }).click();
   await precision(page); await page.getByLabel('動く距離（mm）', { exact: true }).fill('18'); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter');
@@ -98,7 +98,7 @@ test('U4/U6 stale repair candidates must be rebuilt after edits, and a pending i
   await openSave(page);
   await page.getByLabel('プロジェクトファイルを選ぶ', { exact: true }).setInputFiles({ name: 'other.ugoku.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ ...repaired, document: otherDocument })) });
   await closeDialog(page);
-  await expect(page.getByRole('status').filter({ hasText: 'プロジェクトを開きました' })).toBeVisible();
+  await expect(page.locator('.status-message').filter({ hasText: 'ファイルから作品を開きました' })).toBeVisible();
   await held!.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ image: { id: imageHash(bytes), widthPx: 400, heightPx: 300, mimeType: 'image/png', dataUrl: `data:image/png;base64,${bytes.toString('base64')}` } }) });
   await expect(page.locator('.background-repair [role="alert"]')).toContainText('読み込み中に設計が変わりました');
   await expect(candidate(page)).toHaveCount(0);
@@ -107,7 +107,7 @@ test('U4/U6 stale repair candidates must be rebuilt after edits, and a pending i
 });
 
 test('U5/U7 adopting a repair discards a PDF already in flight, then exports only the adopted revision', async ({ page }) => {
-  await page.goto('/'); const before = await saveProject(page); await openRepair(page);
+  await page.goto('/'); await startSample(page); const before = await saveProject(page); await openRepair(page);
   await page.getByLabel('背景の色', { exact: true }).fill('#e3b868');
   await page.getByRole('button', { name: 'この色で比較する', exact: true }).click();
   let release!: () => void, requested = false;

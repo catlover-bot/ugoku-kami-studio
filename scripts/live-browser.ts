@@ -31,10 +31,16 @@ export async function importProject(page: Page, origin: string, path: string) {
   const doc = parseDesignDocument(raw.document);
   await page.goto(origin);
   await expect(page.locator('main')).toHaveAttribute('data-design-hash', /[a-f0-9]{64}/);
-  await page.getByRole('button', { name: '保存・再開', exact: true }).click();
-  await page.getByLabel('プロジェクトファイルを選ぶ', { exact: true }).setInputFiles(path);
+  // The Home import is also available when a previous workspace auto-restores.
+  await page.getByRole('button', { name: '作品一覧', exact: true }).click();
+  const chooser = page.waitForEvent('filechooser');
+  await page.locator('.home-library').getByRole('button', { name: 'ファイルを読み込む', exact: true }).click();
+  await (await chooser).setFiles(path);
+  await expect(page.locator('.workflow')).toBeVisible();
+  await expect(page.locator('.status-message')).toContainText('ファイルから作品を開きました');
   await expect(page.locator('main')).toHaveAttribute('data-design-hash', doc.designHash);
-  if (await page.getByRole('dialog', { name: '保存と再開' }).isVisible()) await page.getByRole('button', { name: '閉じる', exact: true }).click();
+  await expect(page.locator('main')).toHaveAttribute('data-design-id', doc.designId);
+  await expect(page.locator('main')).toHaveAttribute('data-design-revision', String(doc.revision));
   return doc;
 }
 export async function exportProject(page: Page, path: string) {

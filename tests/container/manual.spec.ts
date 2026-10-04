@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { PDFDocument } from 'pdf-lib';
 import { parseDesignDocument } from '@ugoku/core';
 import { INSTRUCTION_PAGE_COUNT } from '@ugoku/export';
-import { closeDialog, openSave, precision, saveProject, stage } from '../e2e/helpers';
+import { startSample, precision, saveProject, stage } from '../e2e/helpers';
 
 test('built image serves manual editing, restoration and a PDF for the same design revision', async ({ page, request, baseURL }, info) => {
   const errors: string[] = [];
@@ -25,8 +25,8 @@ test('built image serves manual editing, restoration and a PDF for the same desi
   expect(status.ai).toMatchObject({ enabled: false, mode: 'manual', sendsImage: false });
 
   await page.goto('/');
-  await expect(page.locator('.workflow')).toBeVisible();
-  await page.getByRole('button', { name: 'サンプルで試す', exact: true }).click();
+  await expect(page.locator('.home-library')).toBeVisible();
+  await startSample(page);
   await precision(page);
   await expect(page.getByLabel('動く距離（mm）', { exact: true })).toHaveValue('20');
   const originalHash = await page.locator('main').getAttribute('data-design-hash');
@@ -55,9 +55,8 @@ test('built image serves manual editing, restoration and a PDF for the same desi
   }
 
   await page.reload();
-  await openSave(page);
-  await page.getByRole('button', { name: '保存した作品を開く', exact: true }).click();
-  await closeDialog(page);
+  await expect(page.locator('main')).toHaveAttribute('data-design-hash', document.designHash);
+  await expect(page.locator('main')).toHaveAttribute('data-design-revision', String(document.revision));
   await precision(page);
   await expect(page.getByLabel('動く距離（mm）', { exact: true })).toHaveValue('18');
   await expect(page.locator('main')).toHaveAttribute('data-design-hash', document.designHash);
