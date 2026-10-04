@@ -10,5 +10,5 @@ export default defineConfig({
   ],
   // Own a separate, AI-disabled server. Reusing a developer's live-enabled server
   // would allow an unmocked test request to consume their API quota.
-  webServer: { command: 'npm run build && PORT=4183 AI_ENABLED=false GEMINI_API_KEY= AI_ACCESS_SECRET= LIVE_API_AUTHORIZED= npm start', url: 'http://127.0.0.1:4183/api/health', reuseExistingServer: false, timeout: 120000 },
+  webServer: { command: 'npm run build && PORT=4183 AI_PROVIDER=none GEMINI_API_KEY= AI_ACCESS_SECRET= LIVE_API_AUTHORIZED= npm start', url: 'http://127.0.0.1:4183/api/health', reuseExistingServer: false, timeout: 120000 },
 });

@@ -5,7 +5,7 @@ on:
 permissions:
   contents: read
 env:
-  AI_ENABLED: 'false'
+  AI_PROVIDER: 'none'
   GEMINI_API_KEY: ''
   AI_ACCESS_SECRET: ''
   LIVE_API_AUTHORIZED: ''
@@ -55,7 +55,7 @@ jobs:
           mkdir -p artifacts/goal004-r/container
           echo "CONTAINER_IMAGE_ID=$(docker image inspect --format '{{.Id}}' ugoku-kami-studio:check)" >> "$GITHUB_ENV"
           docker run --rm -d --name ugoku-check -p 127.0.0.1:8080:8080 \
-            -e AI_ENABLED=false -e GEMINI_API_KEY= -e AI_ACCESS_SECRET= -e LIVE_API_AUTHORIZED= \
+            -e AI_PROVIDER=none -e GEMINI_API_KEY= -e AI_ACCESS_SECRET= -e LIVE_API_AUTHORIZED= \
             ugoku-kami-studio:check
           for i in $(seq 1 20); do
             if curl --fail --silent http://127.0.0.1:8080/api/health; then exit 0; fi

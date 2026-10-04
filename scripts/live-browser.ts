@@ -27,13 +27,17 @@ const json = (path: string, value: unknown) => writeFile(path, JSON.stringify(va
 export async function goStage(page: Page, stage: 1 | 2 | 3) {
   await page.locator('.workflow').getByRole('button', { name: new RegExp(`${['絵を選ぶ', '動きをつける', '印刷して作る'][stage - 1]}$`) }).click();
 }
+export async function openRequestEditor(page: Page) {
+  const editor = page.locator('.motion-request > .request-editor');
+  if (!await editor.evaluate(element => (element as HTMLDetailsElement).open)) await editor.locator(':scope > summary').click();
+}
 export async function importProject(page: Page, origin: string, path: string) {
   const raw = JSON.parse(await readFile(path, 'utf8'));
   const doc = parseDesignDocument(raw.document);
   await page.goto(origin);
   await expect(page.locator('main')).toHaveAttribute('data-design-hash', /[a-f0-9]{64}/);
   // The Home import is also available when a previous workspace auto-restores.
-  await page.getByRole('button', { name: '作品一覧', exact: true }).click();
+  if (!await page.locator('.home-library').isVisible()) await page.getByRole('button', { name: '作品一覧', exact: true }).click();
   const chooser = page.waitForEvent('filechooser');
   await page.locator('.home-library').getByRole('button', { name: 'ファイルを読み込む', exact: true }).click();
   await (await chooser).setFiles(path);
@@ -116,12 +120,13 @@ export async function runBrowserCase(options: { page: Page; origin: string; proj
   page.on('response', onResponse);
   try {
     await goStage(page, 2);
-    await page.getByRole('button', { name: 'Gemini', exact: true }).click();
-    const aiSettings = page.locator('.ai-settings');
-    if (!(await aiSettings.evaluate(element => (element as HTMLDetailsElement).open))) await aiSettings.locator(':scope > summary').click();
-    await page.getByLabel('AIアクセスコード').fill(accessSecret);
-    await page.getByLabel('どんな動きにしたいですか？', { exact: true }).fill(result.prompt);
-    await page.getByRole('button', { name: '変更案をつくる', exact: true }).click();
+    await page.getByRole('button', { name: '設定', exact: true }).click();
+    const settings = page.getByRole('dialog', { name: '設定', exact: true });
+    await settings.getByLabel('AIアクセスコード').fill(accessSecret);
+    await settings.getByRole('button', { name: '閉じる', exact: true }).click();
+    await openRequestEditor(page);
+    await page.getByLabel('どう動かしたいですか？', { exact: true }).fill(result.prompt);
+    await page.getByRole('button', { name: 'AIで案をつくる', exact: true }).click();
     if (caseId === 'L3') {
       // The bounded manual parser no longer limits the AI entry point. The
       // normal server rejects this definite unsupported request before dispatch.
@@ -189,6 +194,7 @@ export async function runBrowserCase(options: { page: Page; origin: string; proj
       await expect(page.locator('main')).toHaveAttribute('data-design-hash', base.designHash);
     }
     await goStage(page, 2);
+    await page.getByRole('button', { name: '設定', exact: true }).click();
     await page.locator('.ai-evidence > summary').click();
     const evidence = page.waitForEvent('download');
     await page.getByRole('button', { name: 'AI実行記録を書き出す', exact: true }).click();
@@ -204,6 +210,7 @@ export async function runBrowserCase(options: { page: Page; origin: string; proj
       expect(entry.decision.status).toBe('accepted');
       expect(entry.decision.adopted).toMatchObject({ designId: result.adopted.designId, revision: result.adopted.revision, designHash: result.adopted.designHash });
     }
+    await page.getByRole('dialog', { name: '設定', exact: true }).getByRole('button', { name: '閉じる', exact: true }).click();
     return result;
   } catch (error) {
     result.status = 'verification-failed';

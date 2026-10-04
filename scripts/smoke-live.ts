@@ -18,7 +18,7 @@ if (!options) {
     const environment = loadServerEnv();
     const config = readConfig();
     const ledger = await readLedger(campaignDir);
-    console.log(JSON.stringify({ status: 'offline-plan', environmentFile: environment.path, configurationLoaded: environment.loaded, model: config.model, aiEnabled: config.aiEnabled, apiKeyConfigured: !!config.apiKey, accessSecretConfigured: config.accessSecret.length >= 32, caseId, sentData: '開発用の白背景作品の設計寸法・選択座標・検査結果と依頼文。画像本体なし。', perAttempt: { modelCalls: Math.min(config.maxModelCalls, ATTEMPT_LIMITS.modelCalls), toolCalls: Math.min(config.maxToolCalls, ATTEMPT_LIMITS.toolCalls), timeoutMs: Math.min(config.runTimeoutMs, ATTEMPT_LIMITS.executionMs), inputBytes: Math.min(config.maxInputBytes, 65_536), outputTokens: Math.min(config.maxOutputTokens, 4096) }, campaign: { ...CAMPAIGN_LIMITS, reservedAttempts: ledger.attempts.length, remainingAttempts: CAMPAIGN_LIMITS.attempts - ledger.attempts.length }, browserPath: '同じFastify API → 通常画面の比較・採用 → PDFワーカー', pricingReference: 'docs/live-gemini.md', networkRequests: 0, paidApiCalls: 0 }, null, 2));
+    console.log(JSON.stringify({ status: 'offline-plan', selectedProvider: config.provider, eligibleForGeminiRun: config.provider === 'gemini', environmentFile: environment.path, configurationLoaded: environment.loaded, model: config.model, aiEnabled: config.aiEnabled, apiKeyConfigured: !!config.apiKey, accessSecretConfigured: config.accessSecret.length >= 32, caseId, sentData: '開発用の白背景作品の設計寸法・選択座標・検査結果と依頼文。画像本体なし。', perAttempt: { modelCalls: Math.min(config.maxModelCalls, ATTEMPT_LIMITS.modelCalls), toolCalls: Math.min(config.maxToolCalls, ATTEMPT_LIMITS.toolCalls), timeoutMs: Math.min(config.runTimeoutMs, ATTEMPT_LIMITS.executionMs), inputBytes: Math.min(config.maxInputBytes, 65_536), outputTokens: Math.min(config.maxOutputTokens, 4096) }, campaign: { ...CAMPAIGN_LIMITS, reservedAttempts: ledger.attempts.length, remainingAttempts: CAMPAIGN_LIMITS.attempts - ledger.attempts.length }, browserPath: '同じFastify API → 通常画面の比較・採用 → PDFワーカー', pricingReference: 'docs/live-gemini.md', networkRequests: 0, paidApiCalls: 0 }, null, 2));
   } catch { console.error('BLOCKED: 設定または履歴を確認できません。npm run doctor を実行してください。API呼び出し0回。'); process.exitCode = 1; }
 } else if (!options.authorize || process.env.LIVE_API_AUTHORIZED !== 'yes') {
   // Authorization is deliberately not loaded from .env. The operator must opt
@@ -41,7 +41,7 @@ async function authorizedRun() {
   try {
     loadServerEnv();
     const configured = readConfig();
-    if (!configured.aiEnabled || !configured.apiKey || configured.accessSecret.length < 32 || !process.env.GEMINI_MODEL) throw new Error('Live configuration missing');
+    if (configured.provider !== 'gemini' || !configured.aiEnabled || !configured.apiKey || configured.accessSecret.length < 32 || !process.env.GEMINI_MODEL) throw new Error('Explicit Gemini configuration missing');
     if (!existsSync('apps/web/dist/index.html')) throw new Error('Build missing');
     const { chromium } = await import('@playwright/test');
     if (!existsSync(chromium.executablePath())) throw new Error('Chromium missing');

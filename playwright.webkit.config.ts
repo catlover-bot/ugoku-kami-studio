@@ -22,7 +22,7 @@ export default defineConfig({
     use: { browserName: 'webkit', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
   }],
   webServer: {
-    command: 'npm run build && PORT=4819 AI_ENABLED=false GEMINI_API_KEY= AI_ACCESS_SECRET= LIVE_API_AUTHORIZED= npm start',
+    command: 'npm run build && PORT=4819 AI_PROVIDER=none GEMINI_API_KEY= AI_ACCESS_SECRET= LIVE_API_AUTHORIZED= npm start',
     url: 'http://127.0.0.1:4819/api/health',
     reuseExistingServer: false,
     timeout: 120_000,

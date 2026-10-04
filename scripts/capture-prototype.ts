@@ -30,7 +30,7 @@ export async function capturePrototype(outDir = resolve('artifacts/goal004/proto
   expect(manifest.designHash).toBe(doc.designHash);
   const staticRoot = resolve('apps/web/dist');
   const builtIndexHash = sha256(await readFile(join(staticRoot, 'index.html')));
-  const app = await createApp({ config: readConfig({ AI_ENABLED: 'false' }), staticRoot });
+  const app = await createApp({ config: readConfig({ AI_PROVIDER: 'none' }), staticRoot });
   const origin = await app.listen({ port: 0, host: '127.0.0.1' });
   const browser = await chromium.launch({ headless: true });
   const records: unknown[] = [];

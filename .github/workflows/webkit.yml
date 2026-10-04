@@ -5,7 +5,7 @@ on:
 permissions:
   contents: read
 env:
-  AI_ENABLED: 'false'
+  AI_PROVIDER: 'none'
   GEMINI_API_KEY: ''
   AI_ACCESS_SECRET: ''
   LIVE_API_AUTHORIZED: ''

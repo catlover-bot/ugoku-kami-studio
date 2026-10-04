@@ -122,7 +122,7 @@ await writeFile(join(snapshot, 'empty.env'), '');
 await unusedPort();
 const server = spawn(process.execPath, ['dist/server/index.js'], {
   cwd: snapshot, stdio: ['ignore', 'pipe', 'pipe'],
-  env: { PATH: process.env.PATH ?? '', PORT: String(port), AI_ENABLED: 'false', GEMINI_API_KEY: '', AI_ACCESS_SECRET: '', LIVE_API_AUTHORIZED: '', UGOKU_ENV_FILE: join(snapshot, 'empty.env') },
+  env: { PATH: process.env.PATH ?? '', PORT: String(port), AI_PROVIDER: 'none', GEMINI_API_KEY: '', AI_ACCESS_SECRET: '', LIVE_API_AUTHORIZED: '', UGOKU_ENV_FILE: join(snapshot, 'empty.env') },
 });
 let serverLog = '';
 server.stdout!.on('data', bytes => { serverLog += String(bytes); });

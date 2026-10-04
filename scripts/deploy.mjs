@@ -13,7 +13,7 @@ console.log('DRY RUN ONLY — リソース作成・デプロイ・IAM変更は�
 console.log(`未設定: ${missing.length ? missing.join(', ') : 'なし'}`);
 console.log('別途確認: 課金の明示許可、対象プロジェクト、認証アカウント、実行サービスアカウント、既存レジストリ、Secret Manager、認証付きアクセス。');
 console.log('計画（実行されません）:');
-console.log(['gcloud run deploy', service, '--project', project, '--region', region, '--image', image, '--port 8080', '--no-allow-unauthenticated', '--min-instances 0', '--max-instances 1', '--concurrency 8', '--set-env-vars AI_ENABLED=false'].join(' '));
+console.log(['gcloud run deploy', service, '--project', project, '--region', region, '--image', image, '--port 8080', '--no-allow-unauthenticated', '--min-instances 0', '--max-instances 1', '--concurrency 8', '--set-env-vars AI_PROVIDER=none'].join(' '));
 console.log('AI有効化にはアクセスシークレットとAPIキーをSecret Managerから設定し、別途サービス全体の費用対策を確認してください。インスタンス内制限は総課金上限ではありません。');
 if (process.argv.includes('--execute')) {
   console.error('--execute は未対応です。確認した計画を、明示許可の対象内で運用者が実行してください。');

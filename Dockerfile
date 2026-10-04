@@ -11,7 +11,7 @@ RUN npm run build
 RUN npm prune --omit=dev
 
 FROM node:24.20.0-bookworm-slim AS runtime
-ENV NODE_ENV=production PORT=8080 AI_ENABLED=false
+ENV NODE_ENV=production PORT=8080 AI_PROVIDER=none
 WORKDIR /app
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/package.json ./package.json
