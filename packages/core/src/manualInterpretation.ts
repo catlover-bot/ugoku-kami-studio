@@ -1,15 +1,15 @@
 import type { Direction } from './types.js';
 import type { DistanceOperation, RequestInterpretation } from './interpretation.js';
 
-export type ManualReading = { interpretation: RequestInterpretation; issues: { field: 'distance' | 'direction' | 'size' | 'paper' | 'other'; text: string; message: string }[]; forbiddenDistancesMm: number[] };
-const negative = /^(?:(?:の話|について|に関して)?は|を|も|に|には|へは)?(?:させたくない|したくない|させず|させない|さず|しない(?!と)|しなく|せず|せない|ない|なく|ず|不要|ではなく|じゃなく|はやめ|をやめ)/;
+export type ManualReading = { interpretation: RequestInterpretation; issues: { field: 'distance' | 'direction' | 'size' | 'paper' | 'other'; text: string; message: string }[]; forbiddenDistancesMm: number[]; absoluteTrends: { targetMm: number; change: 'increase' | 'decrease' }[] };
+const negative = /^(?:(?:の話|について|に関して)?は|を|も|に|には|へは)?(?:(?:させる|する)必要(?:は|が)?ない|させたくない|したくない|させず|させない|さず|しない(?!と)|しなく|せず|せない|ない|なく|ず|不要|ではなく|じゃなく|はやめ|をやめ)/;
 const directionNames: Record<string, Direction> = { 右: 'right', 左: 'left', 上: 'up', 下: 'down', right: 'right', left: 'left', up: 'up', down: 'down' };
 export const importantUnrepresented = /速度|速さ|スピード|速く|ゆっくり|遅く|遅さ|秒|時間|分間|往復|交互|順番|自動|繰り返|重さ|重量|色|赤|青|静か|検査|承認|解除|無視|チェック/;
 
 /** Bounded clause reader. Unconsumed conditions remain questions, not success. */
 export function readManualRequest(request: string): ManualReading {
   const interpretation: RequestInterpretation = { distance: { kind: 'unspecified' }, direction: { forbidden: [] }, size: 'unspecified', paper: { kind: 'unspecified' }, mechanism: 'single-pull-tab', unresolved: [] };
-  const issues: ManualReading['issues'] = [], forbiddenDistancesMm: number[] = [];
+  const issues: ManualReading['issues'] = [], forbiddenDistancesMm: number[] = [], absoluteTrends: ManualReading['absoluteTrends'] = [];
   const issue = (field: ManualReading['issues'][number]['field'], text: string, message: string) => {
     if (!issues.some(item => item.field === field && item.text === text && item.message === message)) issues.push({ field, text, message });
   };
@@ -19,7 +19,12 @@ export function readManualRequest(request: string): ManualReading {
     issue('other', match, '引用された内容を目標値とは決めていません。今回の希望に使う部分を確認してください。'); return ' ';
   });
   // A conjunction between two explicit subjects is a clause boundary as well.
-  const clauses = quoted.split(/[。、,;；!?！？\n]+|(?<=[ずて])(?=(?:右|左|上|下)(?:へ|に))|(?<=しない)(?=動き)|(?<=保って)(?=紙)|(?<=せず)(?=右|左|上|下)/u).map(s => s.trim()).filter(Boolean);
+  const clauses = quoted.split(/[。、,;；!?！？\n]+|(?<=[ずて])(?=(?:右|左|上|下)(?:へ|に))|(?<=しない)(?=動き)|(?<=保って)(?=紙)|(?<=せず)(?=右|左|上|下)/u).map(s => s.trim()).filter(Boolean).flatMap(clause => {
+    // An explicit switch from artwork/paper to movement starts a new subject,
+    // even without punctuation. Do not consume both predicates as a size clause.
+    const nextSubject = clause.search(/(?:動き|動く距離|移動量|移動距離)(?:だけ|は|を)/);
+    return nextSubject > 0 && /絵|画像|作品|サイズ|大きさ|紙|枚数/.test(clause.slice(0, nextSubject)) ? [clause.slice(0, nextSubject), clause.slice(nextSubject)] : [clause];
+  });
   const operations: DistanceOperation[] = [], desired: Direction[] = [], sizes: string[] = [], papers: RequestInterpretation['paper'][] = [];
   const qualitative: ('increase' | 'decrease')[] = [];
   for (const clause of clauses) {
@@ -39,7 +44,7 @@ export function readManualRequest(request: string): ManualReading {
       const uncertain = /かどうか|なのか|できるか|とは|の説明|の話/.test(tail) || !explicitlyPositive && /ない|なく|ず|不要|わから/.test(tail);
       if (!negated && !uncertain) interpretation.mechanism = 'unsupported';
       else if (!negated && interpretation.mechanism !== 'unsupported') { interpretation.mechanism = 'uncertain'; issue('other', clause, '非対応の動きを求めているのか確定できません。直線1か所の希望か確認してください。'); }
-      consume(new RegExp(match[0] + '(?:(?:の話|について|に関して)?は|を)?(?:させたくない|したくない|させずに?|させない|さずに?|しない|せずに?|ない|ずに?|不要|ではなく|じゃなく)?', 'i'));
+      consume(new RegExp(match[0] + '(?:(?:の話|について|に関して)?は|を)?(?:(?:させる|する)必要(?:は|が)?ない|させたくない|したくない|させずに?|させない|さずに?|しない|せずに?|ない|ずに?|不要|ではなく|じゃなく)?', 'i'));
     }
     const directionMatches = [...clause.matchAll(/(右|左|上|下)(?:へ|に|方向|向き)|\b(right|left|up|down)(?:ward)?\b/gi)];
     for (let i = 0; i < directionMatches.length; i++) {
@@ -84,7 +89,12 @@ export function readManualRequest(request: string): ManualReading {
       if (/^(?:は|に)?(?:動かさない|しない|ではなく|じゃなく|以外)/.test(tail)) { forbiddenDistancesMm.push(value * (unit === 'cm' ? 10 : 1)); consume(new RegExp(match[0])); consume(/(?:は|に)?(?:動かさない|しない|ではなく|じゃなく|以外)/g); continue; }
       const minus = /減ら|短く|小さく|減算|マイナス/.test(tail) || /(?:減ら|マイナス)[^\d]*$/.test(prefix);
       const plus = /長く|遠く|大きく|伸ば|増や|加え|足し|足す|プラス/.test(tail) || /(?:あと|追加で?|さらに|余分に|より|増や|プラス)[^\d]*$/.test(prefix);
-      operations.push(minus || plus ? { kind: 'relative', delta: minus ? -value : value, unit } : { kind: 'absolute', value, unit });
+      const targetAmount = /^(?:に|へ)\s*(?:増や|減ら|長く|短く|大きく|小さく|伸ば)/.test(tail);
+      operations.push(!targetAmount && (minus || plus) ? { kind: 'relative', delta: minus ? -value : value, unit } : { kind: 'absolute', value, unit });
+      if (targetAmount) {
+        absoluteTrends.push({ targetMm: value * (unit === 'cm' ? 10 : 1), change: minus ? 'decrease' : 'increase' });
+        if (/(?:あと|追加|余分に)[^\d]*$/.test(prefix)) issue('distance', clause, '追加量と到達する距離の指定が重なっています。増減量か絶対距離かを確認してください。');
+      }
       if (!minus && !plus && /(?:大きく|遠く|長く).{0,8}動か/.test(prefix)) qualitative.push('increase');
       if (!minus && !plus && /(?:小さく|短く).{0,8}動か/.test(prefix)) qualitative.push('decrease');
       consume(new RegExp(match[0]));
@@ -123,5 +133,5 @@ export function readManualRequest(request: string): ManualReading {
   if (ops.length && qs.length) issue('distance', text, '数値と定性的な増減を併記しています。今回の距離の操作を確認してください。');
   if (forbiddenDistancesMm.length && !ops.length) issue('distance', text, '指定された距離にはしない希望です。使う距離を指定してください。');
   interpretation.unresolved = unique(issues.map(item => item.text));
-  return { interpretation, issues, forbiddenDistancesMm };
+  return { interpretation, issues, forbiddenDistancesMm, absoluteTrends };
 }

@@ -86,6 +86,28 @@ describe('Goal006 actual bounded request interpreter, without a language model',
     expect(result.status).toBe('alternative'); expect(result.requestedPatch.travelMm).toBe(40); expect(result.document!.input.travelMm).toBeLessThan(40);
     expect(result.intent.summary.join(' ')).toContain('20→40mm'); expect(result.messages.join(' ')).toContain('代案');
   });
+  it('distinguishes target に/へ amounts from bare increments and asks about reversed target trends', () => {
+    for (const [request, kind, target] of [
+      ['距離を15mmに減らして', 'absolute', 15], ['距離を15mm減らして', 'relative', 5],
+      ['距離を25mmへ増やして', 'absolute', 25], ['距離を5mm増やして', 'relative', 25],
+      ['2.5cmに長くして', 'absolute', 25], ['0.5cm長くして', 'relative', 25],
+    ] as const) {
+      const result = buildDesignSuggestion(fixture(), request);
+      expect(result.status, request).toBe('ready'); expect(result.intent.interpretation.distance.kind).toBe(kind); expect(result.document!.input.travelMm).toBe(target);
+    }
+    for (const request of ['距離を5mmに増やして', '距離を25mmに減らして', 'あと5mmに増やして']) expect(buildDesignSuggestion(fixture(), request).status, request).toBe('clarify');
+  });
+  it('keeps a second movement subject separate from artwork or paper predicates without requiring punctuation', () => {
+    for (const request of ['絵を大きくしないで動きを大きくする', '絵を大きくしないで動きを大きくして', '絵を大きくしない。動きを大きくする', '紙を増やさないで動きを大きくして']) {
+      const result = buildDesignSuggestion(fixture(), request);
+      expect(result.status, request).toBe('ready'); expect(result.document!.input.travelMm).toBe(25);
+      expect(result.document!.input.widthMm).toBe(160); expect(result.document!.input.heightMm).toBe(110);
+    }
+    for (const request of ['回転させる必要はない。左へ動かして', '回転する必要がない。左へ動かして']) {
+      const result = buildDesignSuggestion(fixture(), request); expect(result.intent.supported).toBe(true); expect(result.status).toBe('ready'); expect(result.document!.input.direction).toBe('left');
+    }
+    expect(buildDesignSuggestion(fixture(), '回転させる必要がある。左へ動かして').status).toBe('unsupported');
+  });
   it('binds relative calculations and corrections to exact request text, identity, revision and hash', () => {
     const base = fixture(), request = 'あと5mm動かして', intent = interpretDesignRequest(base, request);
     const changed = applyDesignPatch(base, { travelMm: 21 });

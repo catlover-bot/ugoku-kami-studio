@@ -96,7 +96,9 @@ function deriveIntent(document: DesignDocument, request: string, proposed: Reque
   if (operation.kind === 'qualitative') intent.relativeTravel = operation.change;
   if (operation.kind !== 'unspecified' && operation.kind !== 'maintain') { intent.patch.travelMm = target; intent.explicitTravelMm = target; }
   if (target < 2 || target > 70) addIssue('distance', `希望の移動量は${displayDimension(target)}mmです。この機構の範囲2〜70mmを外れます。上限・下限へ読み替えません。`, [{label:'現在の距離を保つ',changes:{distance:{kind:'maintain'}}}]);
-  if (readManualRequest(request).forbiddenDistancesMm.includes(target)) addIssue('distance', `指定しない希望だった${displayDimension(target)}mmと計算結果が重なっています。`);
+  const quantities = readManualRequest(request);
+  if (quantities.forbiddenDistancesMm.includes(target)) addIssue('distance', `指定しない希望だった${displayDimension(target)}mmと計算結果が重なっています。`);
+  if (!trustedCorrection?.distance && operation.kind === 'absolute' && quantities.absoluteTrends.some(trend => trend.targetMm === target && (trend.change === 'increase' ? target <= input.travelMm : target >= input.travelMm))) addIssue('distance', '到達する距離と「増やす／減らす」の希望が現在値に対して一致しません。距離の操作を確認してください。');
   intent.summary.splice(1, 0, target === input.travelMm ? `動く距離 ${displayDimension(input.travelMm)}mmを維持${operation.kind === 'unspecified' ? '（未指定）' : ''}` : `動く距離 ${displayDimension(input.travelMm)}→${displayDimension(target)}mm${operation.kind === 'relative' ? `（${operation.delta > 0 ? '+' : ''}${displayDimension(operation.delta * (operation.unit === 'cm' ? 10 : 1))}mm）` : operation.kind === 'qualitative' ? '（定性的な希望への目安）' : ''}`);
   for (const key of input.locks) if (key in intent.patch && JSON.stringify(intent.patch[key]) !== JSON.stringify(input[key]) && !(key === 'maxSheets' && Number(intent.patch.maxSheets) < input.maxSheets)) addIssue(key === 'direction' ? 'direction' : key === 'maxSheets' ? 'paper' : 'distance', `${names[key]}は固定中です。解釈では固定を解除できません。`);
   return intent;
