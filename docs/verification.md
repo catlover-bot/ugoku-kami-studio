@@ -12,7 +12,7 @@
 
 Cloud Runはapp/Ollama同一インスタンス、instance-based CPU、HTTP8/モデル1、min0/max1の計画を作成。モデル/ランタイムの全SHA、公式Node linux/amd64 manifestを固定しました。重み4,336,359,085 bytesとruntime70,751,265 bytesのstage照合は成功。モデル入りコンテナ・Cloud Run admission/性能・公開審査経路は未確認です。通常のapp-only CIと区別します。`deploy:plan -- --ollama`は不足設定を表示し、クラウド操作をしません。
 
-公開先候補は標準gcloud配置、関連環境変数、本リポジトリ設定の読み取りでは見つかりませんでした。その後、本人から既存projectと東京リージョンの候補指定を受け、非公開資料へ記録しました。ADCや関連認証環境変数も未設定で、IAM/請求先/クォータのクラウド読み取りは未完了です。費用・停止方法はGit対象外の `artifacts/submission/private/cost-plan.md`。このローカル準備をDEPLOYED_REVIEWABLEやREADY_TO_SUBMITとはしません。実Gemini・実物・初見の人・実スマートフォンも未確認です。
+公開先候補は標準gcloud配置、関連環境変数、本リポジトリ設定の読み取りでは見つかりませんでした。その後、本人から既存projectと東京リージョンの候補指定を受け、非公開資料へ記録しました。公式配布SHAを検証したgcloud 587.0.0を専用ユーザー領域へ導入し、指定projectだけのREST読み取りhelperを準備しました。専用configの認証は0件で、実行結果は `authentication_required` / cloudRequests 0 / cloudWrites 0。本人認証後に再開します。7件の模擬試験で通信範囲・秘密除外・権限不足・API未有効の扱いを検証しましたが、IAM/請求先/クォータの実確認は未完了です。費用・停止方法はGit対象外の `artifacts/submission/private/cost-plan.md`。このローカル準備をDEPLOYED_REVIEWABLEやREADY_TO_SUBMITとはしません。実Gemini・実物・初見の人・実スマートフォンも未確認です。
 
 
 ## Goal 006 — 希望の読み取りと訂正（実装・回帰確認済み）

@@ -44,4 +44,4 @@ Google Cloud の指定実行プロダクトと指定AI技術をそれぞれ1つ�
 
 公開用の表現はローカル実演の実態に合わせます。Gemmaへ画像本体は送らず、希望文と寸法等を入力します。手動探索の代案をAIの発見と説明しません。実物成功や人の負担軽減を未測定のまま主張しません。
 
-課金計画はprivate/cost-plan.mdとcost-estimate.json。既存のGCP設定から候補は見つかっておらず、対象/予算/認証を待っています。Cloud Runの準備ができても、公開URL・新規ブラウザの実AI経路・YouTube URLが未確認ならREADY_TO_SUBMITとはしません。
+課金計画はprivate/cost-plan.mdとcost-estimate.json。本人から既存projectと東京リージョンの候補指定を受け、非公開資料に記録しました。専用gcloudと[読み取り確認手順](cloud-inspection.md)は準備済みですが、本人認証・権限/請求先確認と対象/期間/予算の承認は未完了です。Cloud Runの準備ができても、公開URL・新規ブラウザの実AI経路・YouTube URLが未確認ならREADY_TO_SUBMITとはしません。
