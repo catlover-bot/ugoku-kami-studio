@@ -150,7 +150,7 @@ test('U4 same-scale synchronized comparison keeps the current document until exp
   await comparison.getByRole('button', { name: 'この案にする', exact: true }).click();
   const adopted = await saveProject(page);
   expect(adopted.document.input.travelMm).toBeGreaterThan(before.document.input.travelMm);
-  await page.getByRole('button', { name: 'やり直し', exact: true }).click();
+  await page.getByRole('button', { name: '元に戻す', exact: true }).click();
   const undone = await saveProject(page);
   expect(undone.document.input).toEqual(before.document.input);
   expect(undone.document.revision).toBeGreaterThan(adopted.document.revision);
@@ -178,7 +178,7 @@ test('U5/U8 reduced motion and view-only controls preserve the design identity',
 
 test('U5/U6 text undo and cancelling replacement preserve unsaved work', async ({ page }) => {
   await page.goto('/'); await precision(page);
-  await page.getByLabel('動く距離（mm）', { exact: true }).fill('18');
+  await page.getByLabel('動く距離（mm）', { exact: true }).fill('18'); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter');
   const edited = await identity(page);
   await manual(page);
   const prompt = page.getByLabel('どう動かしたいですか？', { exact: true });

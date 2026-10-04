@@ -15,7 +15,7 @@ test.beforeEach(async ({ page }) => {
 
 test('サンプルの編集・正面/裏側・原寸PDFとSVG', async ({ page }, info) => {
   await expect(page.getByLabel('動く距離（mm）', { exact: true })).toHaveValue('20');
-  await page.getByLabel('動く距離（mm）', { exact: true }).fill('18');
+  await page.getByLabel('動く距離（mm）', { exact: true }).fill('18'); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter');
   await page.getByRole('button', { name: '裏のしくみ', exact: true }).click();
   await expect(page.getByRole('img', { name: /裏側.*仕組み/ })).toBeVisible();
   await page.getByRole('button', { name: '正面', exact: true }).click();
@@ -45,11 +45,11 @@ test('自分の画像を検証して選択・設計・保存から復元する',
   await page.getByLabel('画像を選ぶ', { exact: true }).setInputFiles({ name: 'held-out-workshop.png', mimeType: 'image/png', buffer: raster });
   await expect(page.getByRole('status').filter({ hasText: /画像/ })).toBeVisible();
   await selectionNumbers(page);
-  await page.getByLabel('選択のX', { exact: true }).fill('300');
-  await page.getByLabel('選択のY', { exact: true }).fill('180');
-  await page.getByLabel('選択の幅', { exact: true }).fill('180');
+  await page.getByLabel('選択のX', { exact: true }).fill('300'); await page.getByLabel('選択のX', { exact: true }).press('Enter');
+  await page.getByLabel('選択のY', { exact: true }).fill('180'); await page.getByLabel('選択のY', { exact: true }).press('Enter');
+  await page.getByLabel('選択の幅', { exact: true }).fill('180'); await page.getByLabel('選択の幅', { exact: true }).press('Enter');
   await precision(page);
-  await page.getByLabel('動く距離（mm）', { exact: true }).fill('12');
+  await page.getByLabel('動く距離（mm）', { exact: true }).fill('12'); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter');
   const pdfDownload = page.waitForEvent('download');
   await stage(page, 3);
   await page.getByRole('button', { name: 'PDFをダウンロード', exact: true }).click();
@@ -74,10 +74,10 @@ test('自分の画像を検証して選択・設計・保存から復元する',
 });
 
 test('条件違反・未対応・AI未接続でも編集できる', async ({ page }) => {
-  await page.getByLabel('動く距離（mm）', { exact: true }).fill('60');
+  await page.getByLabel('動く距離（mm）', { exact: true }).fill('60'); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter');
   await expect(pdfButton(page)).toBeDisabled();
   await expect(page.getByText(/条件違反|見直す|要修正|修正が必要/).first()).toBeVisible();
-  await page.getByLabel('動く距離（mm）', { exact: true }).fill('20');
+  await page.getByLabel('動く距離（mm）', { exact: true }).fill('20'); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter');
   await expect(pdfButton(page)).toBeEnabled();
   await ai(page);
   await expect(page.getByText('AI未接続', { exact: true })).toBeVisible();
@@ -95,7 +95,7 @@ test('通信失敗で作業を失わず、不正な画像を拒否する', async
   await precision(page);
   await ai(page);
   await expect(page.getByText(/サーバーに接続できません/)).toBeVisible();
-  await page.getByLabel('動く距離（mm）', { exact: true }).fill('17');
+  await page.getByLabel('動く距離（mm）', { exact: true }).fill('17'); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter');
   await stage(page, 1);
   await page.getByLabel('画像を選ぶ', { exact: true }).setInputFiles({ name: 'pretend.png', mimeType: 'image/png', buffer: Buffer.from('<svg onload="alert(1)"></svg>') });
   await page.getByRole('dialog', { name: '未保存の変更', exact: true }).getByRole('button', { name: '保存せず切り替える', exact: true }).click();
@@ -130,7 +130,7 @@ test('プロジェクト持ち出しと実物記録を同じ版に結び付け�
   expect(data.records[0].designHash).toBe(data.document.designHash);
   expect(data.records[0].measuredLine).toBe('');
   await precision(page);
-  await page.getByLabel('動く距離（mm）', { exact: true }).fill('17');
+  await page.getByLabel('動く距離（mm）', { exact: true }).fill('17'); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter');
   await openSave(page);
   await page.getByLabel('プロジェクトファイルを選ぶ', { exact: true }).setInputFiles({ name: 'portable.ugoku.json', mimeType: 'application/json', buffer: bytes });
   await page.getByRole('dialog', { name: '未保存の変更', exact: true }).getByRole('button', { name: '保存せず切り替える', exact: true }).click();
@@ -147,8 +147,8 @@ test('プロジェクト持ち出しと実物記録を同じ版に結び付け�
 });
 
 test('画像の縦横比と選択座標がプレビュー・印刷で一致する', async ({ page }) => {
-  await page.getByLabel('作品の幅（mm）', { exact: true }).fill('180');
-  await page.getByLabel('作品の高さ（mm）', { exact: true }).fill('60');
+  await page.getByLabel('作品の幅（mm）', { exact: true }).fill('180'); await page.getByLabel('作品の幅（mm）', { exact: true }).press('Enter');
+  await page.getByLabel('作品の高さ（mm）', { exact: true }).fill('60'); await page.getByLabel('作品の高さ（mm）', { exact: true }).press('Enter');
   await page.getByLabel('動きの位置', { exact: true }).fill('1');
   const preview = page.locator('#workbench').getByRole('img', { name: '正面の動きのプレビュー', exact: true });
   const transform = await preview.locator(':scope > g[transform]').first().getAttribute('transform');
@@ -180,10 +180,10 @@ test('画像の縦横比と選択座標がプレビュー・印刷で一致す�
 
 test('検査違反の印刷図・選択解除・固定条件が安全に動く', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
-  await page.getByLabel('動く距離（mm）', { exact: true }).fill('60');
+  await page.getByLabel('動く距離（mm）', { exact: true }).fill('60'); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter');
   await page.getByRole('button', { name: '印刷図', exact: true }).click();
   await expect(pdfButton(page)).toBeDisabled();
-  await page.getByLabel('動く距離（mm）', { exact: true }).fill('20');
+  await page.getByLabel('動く距離（mm）', { exact: true }).fill('20'); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter');
   await stage(page, 1);
   await page.getByRole('button', { name: '動かす部分を選び直す', exact: true }).click();
   await page.getByRole('button', { name: '選択を解除', exact: true }).click();
@@ -191,7 +191,7 @@ test('検査違反の印刷図・選択解除・固定条件が安全に動く',
   await openSave(page);
   await expect(page.getByRole('button', { name: 'このブラウザに保存', exact: true })).toBeDisabled();
   await closeDialog(page);
-  await page.getByRole('button', { name: 'やり直し', exact: true }).click();
+  await page.getByRole('button', { name: '元に戻す', exact: true }).click();
   await expect(pdfButton(page)).toBeEnabled();
   await precision(page);
   await page.getByLabel('動く距離を固定', { exact: true }).check();
@@ -207,7 +207,7 @@ test('サンプル画像の到着前に編集しても、絵と編集を両方�
   await page.reload({ waitUntil: 'domcontentloaded' });
   await precision(page);
   await expect.poll(() => requested).toBe(true);
-  await page.getByLabel('動く距離（mm）', { exact: true }).fill('18');
+  await page.getByLabel('動く距離（mm）', { exact: true }).fill('18'); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter');
   release();
   await expect(page.locator('#workbench').getByRole('img', { name: '正面の動きのプレビュー', exact: true })).toBeVisible();
   await expect(pdfButton(page)).toBeEnabled();

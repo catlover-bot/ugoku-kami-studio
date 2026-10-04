@@ -61,7 +61,7 @@ export default function BackgroundRepairPanel({ project, onAccept, onCandidateCh
       <p>採用前の印刷対象は、いまの作品です。模様の境目と四角い紙の輪郭を両端で確認してください。</p>
       {stale && <p className="notice warning" role="status">候補を作ったあとに設計が変わりました。現在の作品で比較し直してください。<button onClick={recalculate}>背景の候補を作り直す</button><button onClick={() => setCandidate(null)}>この案を使わない</button></p>}
       {!stale && <DesignComparison before={project.document} after={candidate.document} imageDataUrl={project.imageDataUrl} beforeBackgroundImageDataUrl={project.backgroundImageDataUrl} afterBackgroundImageDataUrl={candidate.backgroundImageDataUrl} preserved={['元画像・動かす範囲・寸法・機構・部品数は変更しません。']} remaining={['背景を作者が指定する補正です。元の絵の復元や、実物での動作確認ではありません。']}>
-        <div className="button-row"><button className="primary" disabled={disabled || !!stale} onClick={() => { if (!stale && !disabled) { onAccept(candidate.document, candidate.backgroundImageDataUrl); setCandidate(null); } }}>この案にする</button><button onClick={() => { ++request.current; setCandidate(null); }}>この案を使わない</button></div>
+        <div className="button-row"><button className="primary" disabled={disabled || !!stale} data-design-action onClick={() => { if (!stale && !disabled) { onAccept(candidate.document, candidate.backgroundImageDataUrl); setCandidate(null); } }}>この案にする</button><button onClick={() => { ++request.current; setCandidate(null); }}>この案を使わない</button></div>
       </DesignComparison>}
     </section>}
   </details>;

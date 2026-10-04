@@ -139,6 +139,12 @@ button[aria-pressed=true] { background: var(--accent-soft); border-color: var(--
 .advanced-fields .range-label { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .range-label > div { display: flex; align-items: center; gap: 8px; }
 .range-label input { max-width: 75px; }
+.draft-number { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.draft-number input { width: 100%; }
+.field-error { color: var(--error, #8e301c); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.draft-number input[aria-invalid="true"] { border: 2px solid #8e301c; }
+.range-label:has(.field-error) { align-items: start; flex-wrap: wrap; }
+.range-label:has(.field-error) > div { width: 100%; align-items: start; }
 .travel-range { margin: 8px 0 12px !important; }
 .check-label { display: flex; align-items: center; gap: 9px; min-height: 44px; font-size: 14px; cursor: pointer; }
 .check-summary { font-size: 14px; margin-bottom: 12px; }

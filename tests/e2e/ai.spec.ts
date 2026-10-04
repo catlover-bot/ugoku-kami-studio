@@ -95,7 +95,7 @@ async function open(page: Page, fixture: AiFixture) {
   await fixture.attach(page); await page.goto('/');
   await precision(page); await ai(page);
   await expect(page.getByText('Gemini設定済み', { exact: true })).toBeVisible();
-  await expect(page.getByRole('spinbutton', { name: '動く距離（mm）' })).toHaveValue('20');
+  await expect(page.getByRole('textbox', { name: '動く距離（mm）' })).toHaveValue('20');
   await page.getByLabel('AIアクセスコード').fill('test-only-access');
   await page.getByLabel('どんな動きにしたいですか？').fill('動く距離を15mmにしたい');
 }
@@ -162,7 +162,7 @@ test.describe('AI panel — test-only HTTP fixtures, no live Gemini', () => {
     await oldResponse;
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     await page.locator('.ai-panel').getByRole('button', { name: 'この案にする', exact: true }).click();
-    await expect(page.getByRole('spinbutton', { name: '動く距離（mm）', exact: true })).toHaveValue('15');
+    await expect(page.getByRole('textbox', { name: '動く距離（mm）', exact: true })).toHaveValue('15');
     expect(approvalSession).toBe('active-session-B');
     expect(sessionCount).toBe(2);
   });
@@ -171,9 +171,9 @@ test.describe('AI panel — test-only HTTP fixtures, no live Gemini', () => {
     const fixture = new AiFixture(); await open(page, fixture);
     await page.getByRole('button', { name: '変更案をつくる' }).click();
     await expect(page.getByRole('heading', { name: '変更案 · 採用待ち' })).toBeVisible();
-    await expect(page.getByRole('spinbutton', { name: '動く距離（mm）' })).toHaveValue('20');
+    await expect(page.getByRole('textbox', { name: '動く距離（mm）' })).toHaveValue('20');
     await page.locator('.ai-panel').getByRole('button', { name: 'この案にする', exact: true }).click();
-    await expect(page.getByRole('spinbutton', { name: '動く距離（mm）' })).toHaveValue('15');
+    await expect(page.getByRole('textbox', { name: '動く距離（mm）' })).toHaveValue('15');
     expect(fixture.approvals).toEqual([{ requestId: fixture.requests[0]!.requestId, baseRevision: fixture.requests[0]!.baseRevision, baseHash: fixture.requests[0]!.baseHash }]);
     await expect(page.getByRole('button', { name: '変更前と比較' })).toBeEnabled();
     fixture.targetDistance = 12;
@@ -181,7 +181,7 @@ test.describe('AI panel — test-only HTTP fixtures, no live Gemini', () => {
     await expect(page.getByRole('heading', { name: '変更案 · 採用待ち' })).toBeVisible();
     await page.locator('.ai-panel').getByRole('button', { name: 'この案を使わない', exact: true }).click();
     await expect(page.getByText('変更案を却下しました。設計は変わりません。')).toBeVisible();
-    await expect(page.getByRole('spinbutton', { name: '動く距離（mm）' })).toHaveValue('15');
+    await expect(page.getByRole('textbox', { name: '動く距離（mm）' })).toHaveValue('15');
     expect(fixture.rejects).toBe(1);
   });
 
@@ -190,9 +190,9 @@ test.describe('AI panel — test-only HTTP fixtures, no live Gemini', () => {
     await page.getByRole('button', { name: '変更案をつくる' }).click();
     await expect.poll(() => Boolean(fixture.pendingStart)).toBe(true);
     const original = fixture.requests[0]!;
-    await page.getByRole('spinbutton', { name: '動く距離（mm）' }).fill('18');
-    await page.getByRole('button', { name: 'やり直し', exact: true }).click();
-    await expect(page.getByRole('spinbutton', { name: '動く距離（mm）' })).toHaveValue('20');
+    await page.getByRole('textbox', { name: '動く距離（mm）' }).fill('18'); await page.getByRole('textbox', { name: '動く距離（mm）' }).press('Enter');
+    await page.getByRole('button', { name: '元に戻す', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: '動く距離（mm）' })).toHaveValue('20');
     await fixture.release(fixture.pendingStart!);
     await expect(page.getByRole('button', { name: '変更案をつくる' })).toBeEnabled();
     await expect(page.getByRole('heading', { name: '変更案 · 採用待ち' })).toHaveCount(0);
@@ -208,11 +208,11 @@ test.describe('AI panel — test-only HTTP fixtures, no live Gemini', () => {
     await page.getByRole('button', { name: '変更案をつくる' }).click();
     await page.locator('.ai-panel').getByRole('button', { name: 'この案にする', exact: true }).click();
     await expect.poll(() => Boolean(fixture.pendingApproval)).toBe(true);
-    await page.getByRole('spinbutton', { name: '動く距離（mm）' }).fill('18');
-    await page.getByRole('button', { name: 'やり直し', exact: true }).click();
+    await page.getByRole('textbox', { name: '動く距離（mm）' }).fill('18'); await page.getByRole('textbox', { name: '動く距離（mm）' }).press('Enter');
+    await page.getByRole('button', { name: '元に戻す', exact: true }).click();
     await fixture.pendingApproval!.route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ document: fixture.pendingApproval!.document }) });
     await expect(page.getByRole('button', { name: '変更案をつくる' })).toBeEnabled();
-    await expect(page.getByRole('spinbutton', { name: '動く距離（mm）' })).toHaveValue('20');
+    await expect(page.getByRole('textbox', { name: '動く距離（mm）' })).toHaveValue('20');
     await expect(page.getByRole('heading', { name: '変更案 · 採用待ち' })).toHaveCount(0);
     await page.getByRole('button', { name: '変更案をつくる' }).click();
     await expect.poll(() => fixture.requests.length).toBe(2);
@@ -224,14 +224,14 @@ test.describe('AI panel — test-only HTTP fixtures, no live Gemini', () => {
     const fixture = new AiFixture(); fixture.mode = 'provider429'; await open(page, fixture);
     await page.getByRole('button', { name: '変更案をつくる' }).click();
     await expect(page.getByText('Geminiの利用上限に達しました。時間をおいて再試行してください。')).toBeVisible();
-    await expect(page.getByRole('spinbutton', { name: '動く距離（mm）' })).toBeEnabled();
+    await expect(page.getByRole('textbox', { name: '動く距離（mm）' })).toBeEnabled();
     fixture.mode = 'http429';
     await page.getByRole('button', { name: '再試行する', exact: true }).click();
     await expect(page.getByText('現在の実行上限です。時間をおいて再試行してください。')).toBeVisible();
     fixture.mode = 'proposal';
     await page.getByRole('button', { name: /変更案をつくる|再試行する/ }).click();
     await expect(page.getByRole('heading', { name: '変更案 · 採用待ち' })).toBeVisible();
-    await expect(page.getByRole('spinbutton', { name: '動く距離（mm）' })).toHaveValue('20');
+    await expect(page.getByRole('textbox', { name: '動く距離（mm）' })).toHaveValue('20');
     expect(fixture.requests).toHaveLength(3);
   });
 
@@ -240,15 +240,15 @@ test.describe('AI panel — test-only HTTP fixtures, no live Gemini', () => {
     await page.getByRole('button', { name: '変更案をつくる' }).click();
     await page.locator('.ai-panel').getByRole('button', { name: 'この案にする', exact: true }).click();
     await expect.poll(() => Boolean(fixture.pendingApproval)).toBe(true);
-    await page.getByRole('spinbutton', { name: '動く距離（mm）' }).fill('18');
+    await page.getByRole('textbox', { name: '動く距離（mm）' }).fill('18'); await page.getByRole('textbox', { name: '動く距離（mm）' }).press('Enter');
     await fixture.pendingApproval!.route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ document: fixture.pendingApproval!.document }) });
     await expect(page.getByRole('button', { name: '変更案をつくる' })).toBeEnabled();
-    await expect(page.getByRole('spinbutton', { name: '動く距離（mm）' })).toHaveValue('18');
+    await expect(page.getByRole('textbox', { name: '動く距離（mm）' })).toHaveValue('18');
     await page.getByRole('button', { name: '変更案をつくる' }).click();
     await expect.poll(() => fixture.requests.length).toBe(2);
     expect(fixture.sessions).toBe(2);
     await expect(page.getByRole('heading', { name: '変更案 · 採用待ち' })).toBeVisible();
-    await expect(page.getByRole('spinbutton', { name: '動く距離（mm）' })).toHaveValue('18');
+    await expect(page.getByRole('textbox', { name: '動く距離（mm）' })).toHaveValue('18');
   });
 
   test('cancel dismisses a running request and ignores a late poll result', async ({ page }) => {
@@ -260,8 +260,8 @@ test.describe('AI panel — test-only HTTP fixtures, no live Gemini', () => {
     await fixture.release(fixture.pendingPoll!, 'awaiting_approval');
     await expect(page.getByRole('button', { name: '変更案をつくる' })).toBeEnabled();
     await expect(page.getByRole('heading', { name: '変更案 · 採用待ち' })).toHaveCount(0);
-    await page.getByRole('spinbutton', { name: '動く距離（mm）' }).fill('16');
-    await expect(page.getByRole('spinbutton', { name: '動く距離（mm）' })).toHaveValue('16');
+    await page.getByRole('textbox', { name: '動く距離（mm）' }).fill('16'); await page.getByRole('textbox', { name: '動く距離（mm）' }).press('Enter');
+    await expect(page.getByRole('textbox', { name: '動く距離（mm）' })).toHaveValue('16');
     expect(fixture.cancels).toBe(1);
   });
 

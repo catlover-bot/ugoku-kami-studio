@@ -13,7 +13,7 @@ async function request<T>(url: string, method: string, body?: unknown, token?: s
   return result;
 }
 
-export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl, onAccept, selectionReady = true, onCandidateChange, onManual}: {document: DesignDocument; imageDataUrl: string; backgroundImageDataUrl?: string; onCandidateChange?: (active: boolean) => void; onAccept: (document: DesignDocument) => void; selectionReady?: boolean; onManual?: () => void}) {
+export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl, onAccept, inputDraftActive = false, selectionReady = true, onCandidateChange, onManual}: {document: DesignDocument; imageDataUrl: string; backgroundImageDataUrl?: string; onCandidateChange?: (active: boolean) => void; onAccept: (document: DesignDocument) => void; selectionReady?: boolean; inputDraftActive?: boolean; onManual?: () => void}) {
   const [connection, setConnection] = useState<{enabled: boolean; reason?: string; mode: string; model?: string | null}>({enabled: false, mode: 'manual', reason: '接続を確認中です。'});
   const [prompt, setPrompt] = useState('もう少し大きく動かしたい。絵の大きさは変えず、紙も増やさない');
   const [access, setAccess] = useState('');
@@ -27,10 +27,11 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
   const [evidence, setEvidence] = useState<AiEvidence[]>([]);
   const sessionRef = useRef<Session | null>(null);
   const documentRef = useRef(document); documentRef.current = document;
-  const identity = `${document.designId}:${document.revision}:${document.designHash}:${selectionReady}`;
+  const draftRef = useRef(inputDraftActive); draftRef.current = inputDraftActive;
+  const identity = `${document.designId}:${document.revision}:${document.designHash}:${selectionReady}:${inputDraftActive}`;
   const previousIdentity = useRef(identity);
   const acceptedIdentity = useRef<string | null>(null);
-  const isCurrent = (base: DesignDocument) => base.designId === documentRef.current.designId && base.revision === documentRef.current.revision && base.designHash === documentRef.current.designHash;
+  const isCurrent = (base: DesignDocument) => !draftRef.current && base.designId === documentRef.current.designId && base.revision === documentRef.current.revision && base.designHash === documentRef.current.designHash;
   const generation = useRef(0);
   const endedGenerations = useRef(new Map<number, 'cancelled' | 'stale'>());
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -173,7 +174,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
         if (ticket !== generation.current || !isCurrent(base)) {decide(run.id, 'stale', undefined, '採用応答が届く前に作品を変更したため、この応答を適用していません。'); if (sessionRef.current === session) sessionRef.current = null; return;}
         const next = parseDesignDocument(result.document);
         const accepted = {...run, status: 'succeeded' as const, proposal: undefined}; runRef.current = accepted;
-        acceptedIdentity.current = `${next.designId}:${next.revision}:${next.designHash}:${selectionReady}`;
+        acceptedIdentity.current = `${next.designId}:${next.revision}:${next.designHash}:${selectionReady}:false`;
         decide(run.id, 'accepted', next); setRun(accepted); onAccept(next); setMessage(`第${next.revision}版に変更案を採用しました。印刷して作る工程から、この版のPDFを出力できます。`);
       } else {
         const result = await request<{run: Run}>(path, 'DELETE', undefined, session.token, access); rememberResponse(result.run);
@@ -197,11 +198,11 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     <textarea id="ai-prompt" value={prompt} onChange={event => editPrompt(event.target.value)} maxLength={2000} rows={3} placeholder="例：紙は2枚のまま、首をもう少し遠くまで動かしたい" />
     <p className="field-note">実行すると入力文・設計寸法・選択範囲がGeminiへ送られます。画像そのものは送信しません。</p>
     {connection.enabled && <label className="field">AIアクセスコード<input type="password" value={access} onChange={event => setAccess(event.target.value)} autoComplete="off" placeholder="管理者が設定したコード" /><small>この画面のメモリだけで扱い、保存しません。</small></label>}
-    <div className="button-row"><button onClick={() => void start()} disabled={busy || pollInterrupted || !prompt.trim() || !selectionReady} className="secondary">{run?.status === 'failed' ? '再試行する' : busy ? '検査しています…' : '変更案をつくる'}</button></div></details>
+    <div className="button-row"><button data-design-action onClick={() => void start()} disabled={busy || pollInterrupted || !prompt.trim() || !selectionReady} className="secondary">{run?.status === 'failed' ? '再試行する' : busy ? '検査しています…' : '変更案をつくる'}</button></div></details>
     {(busy || pollInterrupted) && <div className="ai-wait"><p>{pollInterrupted ? '通信の確認が必要です。現在の作品は変わっていません。' : run?.status === 'awaiting_approval' ? '採用の結果を確認しています。' : '候補を待っています。現在の作品は変わっていません。'}</p><div className="button-row">{pollInterrupted && <button className="secondary" onClick={() => void resumePolling()}>状況を確認する</button>}<button onClick={() => void cancel()} className="text-button">中断する</button></div></div>}
     {message && <p role="status" className={`notice ${unsupported || run?.status === 'failed' ? 'warning' : ''}`}>{message}</p>}
     {unsupported && <button className="text-button" onClick={() => { editPrompt('引っぱりタブでまっすぐ動く距離を調整したい'); setUnsupported(false); setMessage('代案を入力しました。実行するか、手動で調整してください。'); }}>代案「まっすぐ動かす」を選ぶ</button>}
-    {run?.proposal && run.status === 'awaiting_approval' && run.baseHash === document.designHash && run.baseRevision === document.revision && <div className="proposal"><h3>AIの変更案 · 採用待ち</h3>{run.proposal.fulfillsRequested === false && <p className="notice warning">希望の{run.proposal.requestedTravelMm}mmに対し、候補は{run.proposal.document.input.travelMm}mmです。希望と異なる距離であることを確認してから採用してください。</p>}<DesignComparison before={document} after={run.proposal.document} imageDataUrl={imageDataUrl} backgroundImageDataUrl={backgroundImageDataUrl} preserved={run.proposal.protectedConditions ?? run.intentSummary?.protections ?? document.input.locks.map(key => `${fieldNames[key] ?? key}を固定`)}><div className="button-row"><button className="primary" disabled={busy || getKitSummary(run.proposal.document).status === 'blocked'} onClick={() => void resolveProposal(true)}>この案にする</button><button className="secondary" disabled={busy} onClick={() => void resolveProposal(false)}>この案を使わない</button></div></DesignComparison></div>}
+    {run?.proposal && run.status === 'awaiting_approval' && run.baseHash === document.designHash && run.baseRevision === document.revision && <div className="proposal"><h3>AIの変更案 · 採用待ち</h3>{run.proposal.fulfillsRequested === false && <p className="notice warning">希望の{run.proposal.requestedTravelMm}mmに対し、候補は{run.proposal.document.input.travelMm}mmです。希望と異なる距離であることを確認してから採用してください。</p>}<DesignComparison before={document} after={run.proposal.document} imageDataUrl={imageDataUrl} backgroundImageDataUrl={backgroundImageDataUrl} preserved={run.proposal.protectedConditions ?? run.intentSummary?.protections ?? document.input.locks.map(key => `${fieldNames[key] ?? key}を固定`)}><div className="button-row"><button className="primary" disabled={busy || getKitSummary(run.proposal.document).status === 'blocked'} data-design-action onClick={() => void resolveProposal(true)}>この案にする</button><button className="secondary" disabled={busy} onClick={() => void resolveProposal(false)}>この案を使わない</button></div></DesignComparison></div>}
     {!busy && onManual && (!connection.enabled || unsupported || run?.status === 'failed') && <button className="text-button" onClick={onManual}>手動支援を使う</button>}
     {!!run?.validationIssues?.length && <div className="notice warning"><h3>設計で見つかった問題</h3>{run.validationIssues.map(issue => <p key={issue.id}>{issue.partIds.join('・')}：{issue.message} {issue.suggestion}</p>)}</div>}
     {!!run?.constraintSuggestions?.length && <div className="notice"><h3>条件変更の提案</h3>{run.constraintSuggestions.map((item, index) => <p key={index}>{fieldNames[item.key] ?? item.key} → {String(item.value)}：{item.reason}（自動では変更しません）</p>)}</div>}

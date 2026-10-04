@@ -4,7 +4,7 @@ import { getArtworkComposition, type DesignDocument, type Rect } from '@ugoku/co
 type View = 'front' | 'back' | 'original';
 type Point = { x: number; y: number };
 type Gesture = { start: Point; initial: Rect; corner?: string; move: boolean };
-type Props = { document: DesignDocument; imageDataUrl: string; backgroundImageDataUrl?: string; position: number; view: View; editing: boolean; selection: Rect | null; onSelection: (selection: Rect) => void; showMotion?: boolean; bounds?: Rect; zoom?: number; selectionMode?: 'drag' | 'corners' };
+type Props = { document: DesignDocument; imageDataUrl: string; backgroundImageDataUrl?: string; position: number; view: View; editing: boolean; selection: Rect | null; onSelection: (selection: Rect) => void; showMotion?: boolean; bounds?: Rect; zoom?: number; selectionMode?: 'drag' | 'corners'; travelPreviewMm?: number };
 
 /** One common millimetre viewport for every design in a comparison. */
 export function getPreviewBounds(documents: DesignDocument[], view: View = 'front'): Rect {
@@ -17,10 +17,11 @@ export function getPreviewBounds(documents: DesignDocument[], view: View = 'fron
   return { x, y, width: Math.max(...extents.map(rect => rect.x + rect.width)) + 10 - x, height: Math.max(...extents.map(rect => rect.y + rect.height)) + 12 - y };
 }
 
-export default function Preview({ document, imageDataUrl, backgroundImageDataUrl, position, view, editing, selection, onSelection, showMotion = false, bounds, zoom = 1, selectionMode = 'drag' }: Props) {
+export default function Preview({ document, imageDataUrl, backgroundImageDataUrl, position, view, editing, selection, onSelection, showMotion = false, bounds, zoom = 1, selectionMode = 'drag', travelPreviewMm }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const gesture = useRef<Gesture | null>(null);
   const anchor = useRef<Point | null>(null);
+  const keyboardDraft = useRef<Rect | null>(null);
   const [draft, setDraft] = useState<Rect | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [unit, setUnit] = useState(0.4);
@@ -32,13 +33,13 @@ export default function Preview({ document, imageDataUrl, backgroundImageDataUrl
   const selectedMm = { x: placement.x + selected.x * scale, y: placement.y + selected.y * scale, width: selected.width * scale, height: selected.height * scale };
   const fixedMm = document.artwork.selectionMm;
   const { axis, slot } = document.motion;
-  const dx = axis.x * input.travelMm * position, dy = axis.y * input.travelMm * position;
+  const dx = axis.x * (travelPreviewMm ?? input.travelMm) * position, dy = axis.y * (travelPreviewMm ?? input.travelMm) * position;
   const tab = document.parts.find(part => part.role === 'pull-tab')!;
   const mirror = (rect: Rect): Rect => view === 'back' ? { ...rect, x: input.widthMm - rect.x - rect.width } : rect;
   const extent = bounds ?? getPreviewBounds([document], view);
   const viewport = { x: extent.x + extent.width * (1 - 1 / zoom) / 2, y: extent.y + extent.height * (1 - 1 / zoom) / 2, width: extent.width / zoom, height: extent.height / zoom };
-  const cancel = () => { gesture.current = null; anchor.current = null; setDraft(null); setSelecting(false); };
-  useEffect(() => { gesture.current = null; anchor.current = null; setDraft(null); setSelecting(false); }, [editing, view, selectionMode, input.image.id, document.designId, document.designHash]);
+  const cancel = () => { gesture.current = null; anchor.current = null; keyboardDraft.current = null; setDraft(null); setSelecting(false); };
+  useEffect(() => { gesture.current = null; anchor.current = null; keyboardDraft.current = null; setDraft(null); setSelecting(false); }, [editing, view, selectionMode, input.image.id, document.designId, document.designHash]);
   useEffect(() => {
     const svg = svgRef.current;
     if (!svg) return;
@@ -98,13 +99,16 @@ export default function Preview({ document, imageDataUrl, backgroundImageDataUrl
     if (event.key === 'Escape') { event.preventDefault(); cancel(); return; }
     if (!editing || !selection || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
     event.preventDefault(); const amount = event.shiftKey ? 10 : 1;
-    onSelection({ ...selection, x: Math.max(0, Math.min(input.image.widthPx - selection.width, selection.x + (event.key === 'ArrowRight' ? amount : event.key === 'ArrowLeft' ? -amount : 0))), y: Math.max(0, Math.min(input.image.heightPx - selection.height, selection.y + (event.key === 'ArrowDown' ? amount : event.key === 'ArrowUp' ? -amount : 0))) });
+    const start = keyboardDraft.current ?? selection;
+    keyboardDraft.current = { ...start, x: Math.max(0, Math.min(input.image.widthPx - start.width, start.x + (event.key === 'ArrowRight' ? amount : event.key === 'ArrowLeft' ? -amount : 0))), y: Math.max(0, Math.min(input.image.heightPx - start.height, start.y + (event.key === 'ArrowDown' ? amount : event.key === 'ArrowUp' ? -amount : 0))) };
+    setDraft(keyboardDraft.current); setSelecting(true);
   }
+  function finishKeyboard() { const next = keyboardDraft.current; if (!next) return; cancel(); if (JSON.stringify(next) !== JSON.stringify(selection)) onSelection(next); }
   const tabPose = mirror({ ...tab.assembly, x: tab.assembly.x + dx, y: tab.assembly.y + dy });
   const motionStart = mirror(fixedMm), motionEnd = mirror({ ...fixedMm, x: fixedMm.x + axis.x * input.travelMm, y: fixedMm.y + axis.y * input.travelMm });
   const handles: [string, number, number][] = [['nw',selectedMm.x,selectedMm.y],['ne',selectedMm.x+selectedMm.width,selectedMm.y],['sw',selectedMm.x,selectedMm.y+selectedMm.height],['se',selectedMm.x+selectedMm.width,selectedMm.y+selectedMm.height]];
   return <div className="preview-surface">
-    <svg ref={svgRef} className={`artwork-svg ${editing ? 'editing' : ''}`} viewBox={`${viewport.x} ${viewport.y} ${viewport.width} ${viewport.height}`} data-design-hash={document.designHash} data-revision={document.revision} data-phase={position} data-zoom={zoom} role="img" aria-label={view === 'original' ? '元の絵。切り抜きや白い台紙の処理をしていない原画像' : view === 'back' ? '裏側から見た仕組み。左右を反転したタブ、ガイド、抜け止めと接着位置' : editing ? '動かす領域。ドラッグまたは2点タップで選択、矢印キーで移動、Shiftと矢印で10px移動' : '正面の動きのプレビュー'} tabIndex={editing ? 0 : undefined} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={cancel} onLostPointerCapture={() => { if (gesture.current) cancel(); }} onKeyDown={keyboard}>
+    <svg ref={svgRef} className={`artwork-svg ${editing ? 'editing' : ''}`} viewBox={`${viewport.x} ${viewport.y} ${viewport.width} ${viewport.height}`} data-design-hash={document.designHash} data-revision={document.revision} data-phase={position} data-zoom={zoom} role="img" aria-label={view === 'original' ? '元の絵。切り抜きや白い台紙の処理をしていない原画像' : view === 'back' ? '裏側から見た仕組み。左右を反転したタブ、ガイド、抜け止めと接着位置' : editing ? '動かす領域。ドラッグまたは2点タップで選択、矢印キーで移動、Shiftと矢印で10px移動' : '正面の動きのプレビュー'} tabIndex={editing ? 0 : undefined} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={cancel} onLostPointerCapture={() => { if (gesture.current) cancel(); }} onKeyDown={keyboard} onKeyUp={finishKeyboard} onBlur={finishKeyboard}>
       <defs>
         {/* Zero offset forces one paper+ink composite before clipping, as in the PDF Form. */}
         <filter id={`${prefix}-paper-composite`} filterUnits="userSpaceOnUse" {...placement} colorInterpolationFilters="sRGB"><feOffset dx="0" dy="0" /></filter>

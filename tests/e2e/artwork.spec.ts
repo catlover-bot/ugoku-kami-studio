@@ -110,7 +110,7 @@ test('U2 transparent pixels have printable white paper at both endpoints; solid 
   await page.getByRole('button', { name: 'この色で比較する', exact: true }).click();
   await page.locator('.repair-candidate').getByRole('button', { name: 'この案にする', exact: true }).click();
   expect((await saveProject(page)).document.designHash).toEqual(applyArtworkRepair(legacy.document,{mode:'solid', color:'#cfdfc8'}).designHash);
-  await page.getByRole('button', { name: 'やり直し', exact: true }).click();
+  await page.getByRole('button', { name: '元に戻す', exact: true }).click();
   expect((await saveProject(page)).document.designHash).toEqual(legacy.document.designHash);
 });
 
@@ -126,7 +126,7 @@ test('U3 mouse, two-tap and keyboard use source pixels through zoom; pointer can
   const dragged = await saveProject(page);
   for (const [key, value] of Object.entries({x:260,y:170,width:160,height:150})) expect(dragged.document.input.selection[key]).toBeCloseTo(value, 0);
   expect(dragged.document.revision).toBe(before.document.revision + 1);
-  await page.getByRole('button', { name: 'やり直し', exact: true }).click();
+  await page.getByRole('button', { name: '元に戻す', exact: true }).click();
   expect((await saveProject(page)).document.input.selection).toEqual(before.document.input.selection);
   await page.getByRole('button', { name: '2点で囲む', exact: true }).click();
   await frame.scrollIntoViewIfNeeded();
@@ -155,7 +155,7 @@ test('U3 mouse, two-tap and keyboard use source pixels through zoom; pointer can
   const resized = await saveProject(page);
   expect(resized.document.input.selection).toEqual({x:290,y:190,width:190,height:170});
   expect(resized.document.revision).toBe(current.document.revision + 1);
-  await page.getByRole('button', { name: 'やり直し', exact: true }).click();
+  await page.getByRole('button', { name: '元に戻す', exact: true }).click();
   expect((await saveProject(page)).document.input.selection).toEqual(current.document.input.selection);
   await page.getByRole('button', { name: '2点で囲む', exact: true }).click();
   const partial = await sourceScreenPoint(page, 280, 190); await tap(partial);

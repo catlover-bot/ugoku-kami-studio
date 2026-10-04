@@ -30,7 +30,7 @@ test('built image serves manual editing, restoration and a PDF for the same desi
   await precision(page);
   await expect(page.getByLabel('動く距離（mm）', { exact: true })).toHaveValue('20');
   const originalHash = await page.locator('main').getAttribute('data-design-hash');
-  await page.getByLabel('動く距離（mm）', { exact: true }).fill('18');
+  await page.getByLabel('動く距離（mm）', { exact: true }).fill('18'); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter');
   const saved = await saveProject(page);
   const document = parseDesignDocument(saved.document);
   expect(document.input.travelMm).toBe(18);

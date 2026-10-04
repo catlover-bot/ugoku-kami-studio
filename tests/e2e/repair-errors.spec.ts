@@ -78,7 +78,7 @@ test('U4/U6 stale repair candidates must be rebuilt after edits, and a pending i
   await page.goto('/'); const original = await saveProject(page); await openRepair(page);
   await page.getByLabel('背景の色', { exact: true }).fill('#e3b868');
   await page.getByRole('button', { name: 'この色で比較する', exact: true }).click();
-  await precision(page); await page.getByLabel('動く距離（mm）', { exact: true }).fill('18');
+  await precision(page); await page.getByLabel('動く距離（mm）', { exact: true }).fill('18'); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter');
   const edited = await saveProject(page); await openRepair(page);
   await expect(candidate(page)).toContainText('設計が変わりました');
   await expect(candidate(page).getByRole('button', { name: 'この案にする', exact: true })).toHaveCount(0);

@@ -83,13 +83,13 @@ test('S2/S3/S6/S8 own portrait art: upward motion, original scale, instructions 
   await page.getByLabel('画像を選ぶ', { exact: true }).setInputFiles({ name: '開発者テスト・上がるランタン.png', mimeType: 'image/png', buffer: bytes });
   await selectionNumbers(page);
   await expect(page.getByLabel('選択のX', { exact: true })).toBeVisible();
-  for (const [name, value] of [['選択のX','250'],['選択のY','130'],['選択の幅','140'],['選択の高さ','170']]) await page.getByLabel(name!, { exact: true }).fill(value!);
+  for (const [name, value] of [['選択のX','250'],['選択のY','130'],['選択の幅','140'],['選択の高さ','170']]) { await page.getByLabel(name!, { exact: true }).fill(value!); await page.getByLabel(name!, { exact: true }).press('Enter'); }
   const selection = page.locator('#workbench').getByRole('img', { name: /動かす領域/ });
   await selection.focus(); await page.keyboard.press('ArrowRight');
   await expect(page.getByLabel('選択のX', { exact: true })).toHaveValue('251');
   await precision(page);
-  await page.getByLabel('作品の幅（mm）', { exact: true }).fill('120');
-  await page.getByLabel('作品の高さ（mm）', { exact: true }).fill('160');
+  await page.getByLabel('作品の幅（mm）', { exact: true }).fill('120'); await page.getByLabel('作品の幅（mm）', { exact: true }).press('Enter');
+  await page.getByLabel('作品の高さ（mm）', { exact: true }).fill('160'); await page.getByLabel('作品の高さ（mm）', { exact: true }).press('Enter');
   await page.getByRole('button', { name: '上へ', exact: true }).click();
   // Moving to stage 2 above confirms the same selected rectangle and ends editing.
   await ask(page, '選んだ部分を上へ出す。距離を18mm。絵の大きさを保って、厚紙は2枚まで');
@@ -142,9 +142,9 @@ test('S2/S3/S6/S8 own portrait art: upward motion, original scale, instructions 
 
 test('S4 incompatible sheet budget is explained; explicit relaxation preserves art scale', async ({ page }) => {
   await precision(page);
-  await page.getByLabel('作品の幅（mm）', { exact: true }).fill('190');
-  await page.getByLabel('作品の高さ（mm）', { exact: true }).fill('220');
-  await page.getByLabel('紙の上限（枚）', { exact: true }).fill('1');
+  await page.getByLabel('作品の幅（mm）', { exact: true }).fill('190'); await page.getByLabel('作品の幅（mm）', { exact: true }).press('Enter');
+  await page.getByLabel('作品の高さ（mm）', { exact: true }).fill('220'); await page.getByLabel('作品の高さ（mm）', { exact: true }).press('Enter');
+  await page.getByLabel('紙の上限（枚）', { exact: true }).fill('1'); await page.getByLabel('紙の上限（枚）', { exact: true }).press('Enter');
   for (const name of ['作品の幅を固定','作品の高さを固定','紙の上限を固定']) await page.getByLabel(name, { exact: true }).check();
   const base = await saved(page);
   await ask(page, 'もう少し大きく動かす。絵の大きさは保って、紙は増やさない');
@@ -155,7 +155,7 @@ test('S4 incompatible sheet budget is explained; explicit relaxation preserves a
   expect((await saved(page)).document).toEqual(base.document);
   await page.getByRole('button', { name: '変更してよい条件を見直す', exact: true }).click();
   await page.getByLabel('紙の上限を固定', { exact: true }).uncheck();
-  await page.getByLabel('紙の上限（枚）', { exact: true }).fill('2');
+  await page.getByLabel('紙の上限（枚）', { exact: true }).fill('2'); await page.getByLabel('紙の上限（枚）', { exact: true }).press('Enter');
   await ask(page, 'もう少し大きく動かす。絵の大きさは保って、厚紙は2枚まで');
   await page.locator('.intent-panel').getByRole('button', { name: 'この案にする', exact: true }).click();
   const after = await saved(page);
@@ -176,7 +176,7 @@ test('S6 export pending then edit discards stale PDF; S7 manual recovery stays a
   await page.getByRole('button', { name: 'PDFをダウンロード', exact: true }).click();
   await expect.poll(() => requested).toBe(true);
   await precision(page);
-  await page.getByLabel('動く距離（mm）', { exact: true }).fill('17');
+  await page.getByLabel('動く距離（mm）', { exact: true }).fill('17'); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter');
   release();
   await expect(page.getByRole('status').filter({ hasText: '古いPDFを破棄' })).toBeVisible();
   expect(downloads).toEqual([]);
@@ -196,7 +196,7 @@ test('S8 physical draft keeps its measured revision, and design undo cannot dele
   await physical(page);
   await page.getByLabel('使った材料', { exact: true }).fill('自動回帰テスト：この最初の版で記入開始。実物未実施');
   await precision(page);
-  await page.getByLabel('動く距離（mm）', { exact: true }).fill('18');
+  await page.getByLabel('動く距離（mm）', { exact: true }).fill('18'); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter');
   await physical(page);
   await page.getByRole('button', { name: 'この設計版に記録を追加', exact: true }).click();
   const changed = await saved(page);
@@ -204,7 +204,7 @@ test('S8 physical draft keeps its measured revision, and design undo cannot dele
   expect(changed.records[0].revision).toBe(first.document.revision);
   expect(changed.records[0].designHash).toBe(first.document.designHash);
   expect(changed.records[0].pattern).toBe(`${first.document.designId}-r${first.document.revision}.pdf`);
-  await page.getByRole('button', { name: 'やり直し', exact: true }).click();
+  await page.getByRole('button', { name: '元に戻す', exact: true }).click();
   const undone = await saved(page);
   expect(undone.document.input.travelMm).toBe(20);
   expect(undone.records).toEqual(changed.records);

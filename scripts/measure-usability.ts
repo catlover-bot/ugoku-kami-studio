@@ -99,7 +99,7 @@ try {
   await precision(page);
   for (const value of ['17', '18', '19']) {
     await arm(page, `adjust-${value}mm`, 'revision', '#travel', 'input');
-    await page.getByLabel('動く距離（mm）', { exact: true }).fill(value); await completed(page);
+    await page.getByLabel('動く距離（mm）', { exact: true }).fill(value); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter'); await completed(page);
   }
   await manual(page);
   for (const value of ['15', '16', '17']) {

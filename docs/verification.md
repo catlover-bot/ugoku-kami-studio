@@ -1,5 +1,17 @@
 # 検証記録
 
+## Goal 005 — 入力から中断再開・組立まで（進行中）
+
+2026-10-04。[依頼全文](goals/005-product-experience.md)。開始時のmainは `aaba6c4afe6cd001bf639a164ecc55adbd8397fe`、同SHAの[Check](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37169793731)成功と作業ツリーがクリーンであることを確認した。既存サーバー・成果物を保持し、A→B→C→Dのまとまりで通常統合する。Bの保存repositoryとCの印刷分割は別worktreeで準備し、Aには混ぜていない。
+
+Aでは数値を文字列draftとして保持し、Enter/blurで一度確定、Escapeで取消し、無効値を欄の近くに表示する。スライダーと選択枠は終了時に一履歴、キャンセルは開始状態へ戻す。「元に戻す」「やり直す」を分け、新しい編集でRedoを破棄する。履歴は作品内に限定し、Undo/Redoで版を進め、実物記録は保持する。AI・印刷・候補採用の前に入力途中を確認でき、入力開始で古いAI応答を失効させる。
+
+仕様変更に合わせて、旧E2Eと性能計測スクリプトの数値入力を `fill` だけから `fill` + Enterへ更新した。数値欄のroleは入力途中の文字列を許すtextboxへ、旧「やり直し」は「元に戻す」へ変更した。既存の寸法・記録・AI応答保護のassertionは維持している。
+
+Aの作業ツリーで `npm run check`（lint/型検査/単体・統合101件/build）と `npm run test:e2e -- --workers=4`（PC53・モバイルChromium53、106件）が成功。追加P2/P3試験は実UIの空欄・小数・Enter+blurの二重確定防止・無効値・Escape・native text Undo・ドラッグ・pointercancel・held-key・Redo・記録保持・実PDFの版を確認する。IMEは合成compositionイベントの処理確認であり、実OSの日本語入力や実iPhoneの確認とは区別する。各統合のクリーン導入・SHA/CIは `artifacts/goal005/` の実行記録に残す。
+
+変更前の同条件証跡は `artifacts/goal005/before/manifest.json`（自作絵/サンプル×PC/狭幅、36画面、実PDF4件）。実物・実Gemini・初見の人・実スマートフォン・Cloud Run公開は引き続き未実施。B〜DとP1/P4〜P8の新しい受入確認はこの段階では未完了。
+
 ## Goal 004-R — 現在の統合方針
 
 2026-10-04。[再開指示の全文](goals/004-resume-and-main.md) により、確認済み変更のコミット、作業ブランチpush、mainへの通常統合・push、必要なPRと通常CIの実行が許可された。以下の過去記録にある「作成者未設定」「push保留」「Goal全体の外部確認待ち」は当時の事実として保持し、今回の停止条件にはしない。実API課金・GCP/IAM変更・Cloud Run公開は引き続き未許可。
