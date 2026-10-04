@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FinishReason, type Content, type Part } from '@google/genai';
+import { toolResult, toolIds, responseParts, type FixturePart as Part } from './fixture.js';
+import type { ConversationMessage as Content } from '../src/provider.js';
 import { applyDesignPatch, createDesign, interpretDesignRequest, SAMPLE_INPUT, type InterpretationChanges, type RequestInterpretation } from '@ugoku/core';
 import { createApp, type App } from '../src/app.js';
 import { readConfig, type ServerConfig } from '../src/config.js';
@@ -9,7 +10,7 @@ import { publicRun, type Run } from '../src/runs.js';
 const access = 'test-request-understanding-secret-32-characters';
 const apps: App[] = [];
 afterEach(async () => { await Promise.all(apps.splice(0).map(app => app.close())); });
-const response = (parts: Part[]): ProviderResponse => ({ candidates: [{ content: { role: 'model', parts }, finishReason: FinishReason.STOP }] });
+const response = (parts: Part[]): ProviderResponse => responseParts(parts);
 const call = (name: string, args: Record<string, unknown> = {}): Part => ({ functionCall: { name, args, id: `mock-${name}` } });
 const final = response([{ text: '模擬応答です。解釈と決定的な検査結果を確認してください。' }]);
 const meaning = (distance: RequestInterpretation['distance'], extra: Partial<RequestInterpretation> = {}): RequestInterpretation => ({ distance, direction: { forbidden: [] }, size: 'unspecified', paper: { kind: 'unspecified' }, mechanism: 'single-pull-tab', unresolved: [], ...extra });
@@ -18,7 +19,7 @@ function scripted(items: ProviderResponse[]): ModelProvider & { histories: Conte
   return { histories, generate: vi.fn(async history => { histories.push(structuredClone(history)); return items.shift() ?? final; }) };
 }
 async function setup(provider: ModelProvider, document = createDesign(SAMPLE_INPUT), overrides: Partial<ServerConfig> = {}) {
-  const app = await createApp({ config: { ...readConfig({ AI_ENABLED: 'true', GEMINI_API_KEY: 'test-only', AI_ACCESS_SECRET: access }), ...overrides }, provider }); apps.push(app);
+  const app = await createApp({ config: { ...readConfig({ AI_PROVIDER: 'gemini', GEMINI_API_KEY: 'test-only', AI_ACCESS_SECRET: access }), ...overrides }, provider }); apps.push(app);
   const created = (await app.inject({ method: 'POST', url: '/api/sessions', payload: { document } })).json() as { sessionId: string; token: string };
   const headers = { authorization: `Bearer ${created.token}`, 'x-ai-access': access };
   const session = app.sessions.authorize(created.sessionId, headers.authorization), url = `/api/sessions/${created.sessionId}`;
@@ -64,8 +65,8 @@ describe('Goal006 actual API / RunManager / core tools with injected mock model,
     expect(run.status).toBe('awaiting_approval'); expect(run.proposal!.document.input.travelMm).toBe(25);
     expect(run.requestInterpretation.interpretation.distance).toEqual(interpreted.distance);
     expect(run.toolCalls).toBe(2); expect(run.modelCalls).toBe(2);
-    expect(provider.histories[1]![1]!.parts![0]).toEqual(signed);
-    expect(provider.histories[1]![2]!.parts!.map(part => part.functionResponse?.id)).toEqual(['mock-propose_request_interpretation', 'mock-propose_design_patch']);
+    expect(provider.histories[1]![1]).toEqual(response([signed, call('propose_design_patch')]).message);
+    expect(toolIds(provider.histories[1]!)).toEqual(['mock-propose_request_interpretation', 'mock-propose_design_patch']);
     expect(JSON.stringify(publicRun(run))).not.toMatch(/opaque-private-fixture-signature|data:image|test-request-understanding-secret/);
   });
 
@@ -96,7 +97,7 @@ describe('Goal006 actual API / RunManager / core tools with injected mock model,
     const malicious = scripted([response([call('propose_request_interpretation', { ...meaning({ kind: 'absolute', value: 25, unit: 'mm' }), paperApproval: { from: 2, to: 3 } })]), final]);
     const other = await setup(malicious), denied = await other.start('動く距離を25mmにしたい');
     expect(denied.status).toBe('failed'); expect(denied.proposal).toBeUndefined();
-    expect(malicious.histories[1]!.at(-1)!.parts![0]!.functionResponse!.response).toMatchObject({ error: { code: 'invalid_arguments' } });
+    expect(toolResult(malicious.histories[1]!)).toMatchObject({ error: { code: 'invalid_arguments' } });
   });
 
   it.each([

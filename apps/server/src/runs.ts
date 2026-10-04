@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { applyIntentPatch, assertRequestBinding, distanceTargetMm, InterpretationCorrectionSchema, interpretDesignRequest, interpretModelRequest, parseDesignDocument, validateDesign, type DesignDocument, type DesignPatch, type DesignIntent, type LockKey, type CheckResult, type InterpretationCorrection, type RequestInterpretation } from '@ugoku/core';
-import type { Content, Part } from '@google/genai';
+import type { ConversationMessage, ToolResult, LocalTiming, LocalModel } from './conversation.js';
+import { OllamaProvider } from './ollama.js';
 import type { ServerConfig } from './config.js';
 import { AppError, publicError } from './errors.js';
 import { assertModelInput, GeminiProvider, type ModelProvider, type ProviderResponse } from './provider.js';
@@ -19,7 +20,7 @@ function interpretationView(intent: DesignIntent): PublicInterpretation {
 type Event = { sequence: number; type: 'model' | 'tool' | 'validation'; tool?: string; message: string; designHash?: string; patch?: DesignPatch; checkStatuses?: { id: string; status: string }[]; durationMs: number };
 export type Proposal = { id: string; requestId: string; baseRevision: number; baseHash: string; patch: DesignPatch; document: DesignDocument; addedLocks: LockKey[]; protectedConditions: string[]; requestedTravelMm?: number; fulfillsRequested: boolean };
 export type TokenUsage = { promptTokens: number; outputTokens: number; thinkingTokens: number; cachedInputTokens: number; toolPromptTokens: number; totalTokens: number };
-export type ModelUsage = { call: number; inputBytes: number; outputTokenLimit: number; durationMs: number; received: boolean; finishReason: string | null; modelVersion: string | null; usage: TokenUsage | null };
+export type ModelUsage = { call: number; inputBytes: number; outputTokenLimit: number; durationMs: number; received: boolean; finishReason: string | null; modelVersion: string | null; usage: TokenUsage | null; localTiming?: LocalTiming; localModel?: LocalModel };
 function tokenUsage(usage: ProviderResponse['usageMetadata']): TokenUsage | null {
   if (!usage) return null;
   const count = (value: number | undefined) => Number.isSafeInteger(value) && value! >= 0 ? value! : 0;
@@ -27,7 +28,7 @@ function tokenUsage(usage: ProviderResponse['usageMetadata']): TokenUsage | null
 }
 export type Run = {
   id: string; requestId: string; baseRevision: number; baseHash: string; fingerprint: string;
-  model: string; mode: 'gemini' | 'injected-test'; modelUsage: ModelUsage[];
+  model: string; provider: 'none' | 'gemini' | 'ollama'; mode: 'gemini' | 'ollama' | 'injected-test'; modelUsage: ModelUsage[];
   prompt: string; authorCorrection?: InterpretationCorrection; interpretationProposal: RequestInterpretation;
   requestInterpretation: PublicInterpretation;
   intent: DesignIntent; intentSummary: { protections: string[]; notes: string[] };
@@ -126,7 +127,7 @@ export class RunManager {
     if (this.active >= this.config.maxConcurrentRuns || this.starts.length >= this.config.runsPerHour || this.starts.filter(time => now - time < 60_000).length >= this.config.runsPerMinute) throw new AppError('instance_limit', '現在の実行上限です。時間をおいて再試行してください。', 429);
     if (previous) this.cancel(previous);
     for (const older of session.runs.values()) if (older.status === 'awaiting_approval') this.cancel(older);
-    const run: Run = { id: randomUUID(), requestId: input.requestId, baseRevision: input.baseRevision, baseHash: input.baseHash, fingerprint, model: this.config.model, mode: this.provider instanceof GeminiProvider ? 'gemini' : 'injected-test', modelUsage: [], prompt: input.prompt, authorCorrection, interpretationProposal: structuredClone(previous?.interpretationProposal ?? intent.interpretation), requestInterpretation: interpretationView(intent), intent: structuredClone(intent), intentSummary: { protections: protectionLabels(session.document, intent), notes: [...intent.notes] }, status: 'running', message: '現在の設計と、守る条件を確認しています。', events: [], validationIssues: [], constraintSuggestions: [], modelCalls: 0, toolCalls: 0, elapsedMs: 0, usage: { promptTokens: 0, outputTokens: 0, thinkingTokens: 0, cachedInputTokens: 0, toolPromptTokens: 0, totalTokens: 0, responsesWithUsage: 0, responsesWithoutUsage: 0 }, controller: new AbortController() };
+    const run: Run = { id: randomUUID(), requestId: input.requestId, baseRevision: input.baseRevision, baseHash: input.baseHash, fingerprint, model: this.config.model, provider: this.config.provider, mode: this.provider instanceof GeminiProvider ? 'gemini' : this.provider instanceof OllamaProvider ? 'ollama' : 'injected-test', modelUsage: [], prompt: input.prompt, authorCorrection, interpretationProposal: structuredClone(previous?.interpretationProposal ?? intent.interpretation), requestInterpretation: interpretationView(intent), intent: structuredClone(intent), intentSummary: { protections: protectionLabels(session.document, intent), notes: [...intent.notes] }, status: 'running', message: '現在の設計と、守る条件を確認しています。', events: [], validationIssues: [], constraintSuggestions: [], modelCalls: 0, toolCalls: 0, elapsedMs: 0, usage: { promptTokens: 0, outputTokens: 0, thinkingTokens: 0, cachedInputTokens: 0, toolPromptTokens: 0, totalTokens: 0, responsesWithUsage: 0, responsesWithoutUsage: 0 }, controller: new AbortController() };
     session.runs.set(run.id, run);
     this.starts.push(now); this.active++;
     run.done = this.execute(session, run, input.prompt).finally(() => { this.active--; });
@@ -142,7 +143,7 @@ export class RunManager {
   cancel(run: Run): Run {
     if (run.status === 'running' || run.status === 'awaiting_approval' || run.status === 'clarification_required') {
       run.status = 'cancelled'; run.proposal = undefined;
-      run.message = '中断しました。送信済みのAPI呼び出しの課金取消しは保証されません。';
+      run.message = run.mode === 'gemini' ? '中断しました。送信済みのAPI呼び出しの課金取消しは保証されません。' : '中断しました。後続の検査・候補適用を停止しました。送信済みの推論が停止したとは限りません。';
       run.controller.abort(new AppError('cancelled', '利用者が中断しました。'));
     }
     return run;
@@ -182,13 +183,13 @@ export class RunManager {
     const signal = run.controller.signal;
     const base = structuredClone(parseDesignDocument(session.document));
     const context: ToolContext = { prompt, correction: run.authorCorrection, interpretationProposal: run.interpretationProposal, base, candidate: base, patch: structuredClone(run.intent.patch), intent: run.intent, seenHashes: new Set([base.designHash]), seenInterpretationDesigns: new Set(), constraintSuggestions: run.constraintSuggestions };
-    const history: Content[] = [{ role: 'user', parts: [{ text: JSON.stringify({ request: prompt, design: base, requestIntent: run.intent, ...(run.authorCorrection ? { authorCorrection: run.authorCorrection } : {}), sentData: '画像本体は送信していません。選択領域・寸法と検査結果です。' }) }] }];
+    const history: ConversationMessage[] = [{ role: 'user', text: JSON.stringify({ request: prompt, design: base, requestIntent: run.intent, ...(run.authorCorrection ? { authorCorrection: run.authorCorrection } : {}), sentData: '画像本体は送信していません。選択領域・寸法と検査結果です。' }) }];
     const failures = new Map<string, number>();
     let unresolvedToolFailure = false;
     try {
       while (run.modelCalls < this.config.maxModelCalls) {
         signal.throwIfAborted(); assertCurrent(session, run.baseRevision, run.baseHash);
-        const inputBytes = assertModelInput(this.config, history);
+        const inputBytes = assertModelInput(this.config, history, this.provider);
         run.modelCalls++;
         const modelStart = Date.now();
         const meter: ModelUsage = { call: run.modelCalls, inputBytes, outputTokenLimit: this.config.maxOutputTokens, durationMs: 0, received: false, finishReason: null, modelVersion: null, usage: null };
@@ -197,7 +198,8 @@ export class RunManager {
         try { response = await abortable(this.provider!.generate(history, signal), signal); }
         finally { meter.durationMs = Date.now() - modelStart; }
         meter.received = true;
-        meter.finishReason = response.candidates?.[0]?.finishReason ?? null;
+        meter.finishReason = response.finishReason ?? null;
+        meter.localTiming = response.localTiming; meter.localModel = response.localModel;
         meter.modelVersion = response.modelVersion?.slice(0, 128) ?? null;
         meter.usage = tokenUsage(response.usageMetadata);
         if (meter.usage) {
@@ -206,16 +208,16 @@ export class RunManager {
         }
         signal.throwIfAborted(); assertCurrent(session, run.baseRevision, run.baseHash);
         run.events.push({ sequence: run.events.length + 1, type: 'model', message: `モデル応答 ${run.modelCalls}`, durationMs: Date.now() - modelStart });
-        const candidate = response.candidates?.[0];
-        if (response.promptFeedback?.blockReason || ['SAFETY', 'RECITATION', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII'].includes(candidate?.finishReason || '')) throw new AppError('refusal', 'AIがこの依頼への応答を拒否しました。内容を変更して再試行してください。');
-        if (candidate?.finishReason && !['STOP'].includes(candidate.finishReason)) throw new AppError('invalid_output', 'AIの応答が途中で終了しました。設計は変更されていません。');
-        const content = candidate?.content;
-        if (!content?.parts?.length || JSON.stringify(content).length > 100_000) throw new AppError('invalid_output', 'AIの応答形式が不正です。');
-        // Keep the entire SDK Content, including all parts, function call IDs and opaque thought signatures.
-        history.push(structuredClone(content));
-        const calls = content.parts.flatMap(part => part.functionCall ? [part.functionCall] : []);
+        const finishReason = response.finishReason;
+        if (response.refusal || ['SAFETY', 'RECITATION', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII'].includes(finishReason || '')) throw new AppError('refusal', 'AIがこの依頼への応答を拒否しました。内容を変更して再試行してください。');
+        if (finishReason && finishReason !== 'STOP') throw new AppError('invalid_output', 'AIの応答が途中で終了しました。設計は変更されていません。');
+        const content = response.message;
+        if (!content || content.role !== 'assistant' || typeof content.text !== 'string' || !Array.isArray(content.calls) || Buffer.byteLength(JSON.stringify(content), 'utf8') > 100_000) throw new AppError('invalid_output', 'AIの応答形式が不正です。');
+        // Keep message identity so each adapter can replay its private original parts.
+        history.push(content);
+        const calls = content.calls;
         if (!calls.length) {
-          const text = content.parts.filter(part => !part.thought && part.text).map(part => part.text).join('\n').slice(0, 6000);
+          const text = content.text.slice(0, 6000);
           if (!text.trim()) throw new AppError('invalid_output', 'AIから表示できる応答が届きませんでした。');
           if (!run.intent.supported) throw new AppError('unsupported_motion', run.intent.notes.join(' ') || 'この依頼は対応する直線運動の範囲外です。');
           if (run.intent.conflicts.length || run.intent.clarifications.length || run.intent.interpretation.unresolved.length) {
@@ -249,7 +251,7 @@ export class RunManager {
           } else { run.status = 'succeeded'; run.message = `設計の変更はありません。\n${text}`; }
           return;
         }
-        const results: Part[] = [];
+        const results: ToolResult[] = [];
         for (const call of calls) {
           signal.throwIfAborted(); assertCurrent(session, run.baseRevision, run.baseHash);
           if (run.toolCalls >= this.config.maxToolCalls) throw new AppError('tool_limit', 'ツール実行回数の上限に達しました。');
@@ -279,9 +281,9 @@ export class RunManager {
             if (count >= 2) throw new AppError('repeated_failure', '同じ失敗の反復を検出し、中止しました。');
           }
           run.events.push({ sequence: run.events.length + 1, type: 'tool', tool: call.name, message, designHash: context.candidate.designHash, patch: call.name === 'propose_design_patch' ? structuredClone(context.patch) : undefined, checkStatuses: context.candidate.checks.map(check => ({ id: check.id, status: check.status })), durationMs: Date.now() - toolStart });
-          results.push({ functionResponse: { name: call.name || 'unknown', ...(call.id ? { id: call.id } : {}), response: result } });
+          results.push({ name: call.name || 'unknown', ...(call.id ? { id: call.id } : {}), response: result });
         }
-        history.push({ role: 'user', parts: results });
+        history.push({ role: 'tool', results });
       }
       throw new AppError('model_limit', 'モデル呼び出し回数の上限に達しました。');
     } catch (error) {

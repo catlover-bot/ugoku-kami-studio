@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { applyIntentPatch, arrangePages, DesignPatchSchema, distanceTargetMm, interpretModelRequest, RequestInterpretationSchema, validateDesign, type DesignDocument, type DesignPatch, type DesignIntent, type InterpretationCorrection, type RequestInterpretation } from '@ugoku/core';
-import type { FunctionDeclaration } from '@google/genai';
+import type { ToolDeclaration } from './conversation.js';
 import { AppError } from './errors.js';
 
 const Empty = z.object({}).strict();
@@ -14,7 +14,7 @@ const noArgs = { type: 'object', properties: {}, additionalProperties: false };
 const interpretationSchema = z.toJSONSchema(RequestInterpretationSchema);
 delete interpretationSchema.$schema;
 
-export const declarations: FunctionDeclaration[] = [
+export const declarations: ToolDeclaration[] = [
   { name: 'inspect_design', description: '現在の設計・固定条件・実検査結果を読み取る。', parametersJsonSchema: noArgs },
   { name: 'propose_request_interpretation', description: '依頼を方向・禁止方向・絶対距離・増減量・維持・未指定に分けて提案する。単位換算と基準版からの計算はサーバーが行う。未解釈の重要条件はunresolvedへ残す。固定解除や本人の承認を指定する権限はない。確実な初期解釈に訂正が不要なら省略できる。', parametersJsonSchema: interpretationSchema },
   { name: 'propose_design_patch', description: '利用者の希望と保護条件の中で候補を生成し、決定的に検査する。空オブジェクトは解釈済み希望の初期候補を作る。返されたfailを読んで修正する。選択・画像・固定条件は変更できない。', parametersJsonSchema: {

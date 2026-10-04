@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import sharp from 'sharp';
-import { FinishReason, type Content, type Part } from '@google/genai';
+import { toolResult, userText, responseParts, type FixturePart as Part } from './fixture.js';
+import type { ConversationMessage as Content } from '../src/provider.js';
 import { applyArtworkRepair, createDesign, getAssemblySteps, SAMPLE_INPUT, type CheckResult, type DesignDocument } from '@ugoku/core';
 import { generatePdf, generateSvg } from '@ugoku/export';
 import { createApp, type App } from '../src/app.js';
@@ -10,7 +11,7 @@ import type { ModelProvider, ProviderResponse } from '../src/provider.js';
 import { publicRun } from '../src/runs.js';
 
 const access = 'test-only-access-secret-more-than-32-characters';
-const response = (parts: Part[]): ProviderResponse => ({ candidates: [{ content: { role: 'model', parts }, finishReason: FinishReason.STOP }] });
+const response = (parts: Part[]): ProviderResponse => responseParts(parts);
 const invoke = (name: string, args: Record<string, unknown> = {}): ProviderResponse => response([{ functionCall: { name, args, id: `test-call-${name}` } }]);
 const resultText = response([{ text: '候補の寸法と紙面を検査しました。実物の動作は未確認です。' }]);
 const apps: App[] = [];
@@ -21,12 +22,12 @@ function adjustingProvider() {
   const histories: Content[][] = [];
   const generate = vi.fn(async (history: Content[]): Promise<ProviderResponse> => {
     histories.push(structuredClone(history));
-    const result = history.at(-1)?.parts?.find(part => part.functionResponse)?.functionResponse?.response;
+    const result = history.at(-1)?.role === 'tool' ? toolResult(history) : undefined;
     if (!result) return invoke('propose_design_patch');
     if (result.error) throw new Error('The test provider could not create an authorized candidate');
     const checks = result.checks as CheckResult[];
     if (!checks.some(check => check.status === 'fail')) return resultText;
-    const original = JSON.parse(history[0]!.parts![0]!.text!) as { design: DesignDocument };
+    const original = JSON.parse(userText(history)) as { design: DesignDocument };
     const nextTravel = Math.floor((Number(result.candidateTravelMm) + original.design.input.travelMm) / 2);
     if (nextTravel <= original.design.input.travelMm) return invoke('propose_constraint_change', { key: 'widthMm', value: original.design.input.widthMm + 10, reason: '選択と台紙の縁の余裕が不足しています。作品サイズ変更を許すか、手動で選択位置を見直してください。' });
     return invoke('propose_design_patch', { travelMm: nextTravel });
@@ -38,7 +39,7 @@ function sequence(items: ProviderResponse[]): ModelProvider & { histories: Conte
   return { histories, generate: vi.fn(async history => { histories.push(structuredClone(history)); return items.shift() ?? resultText; }) };
 }
 async function setup(provider: ModelProvider, document = createDesign(SAMPLE_INPUT)) {
-  const app = await createApp({ config: readConfig({ AI_ENABLED: 'true', GEMINI_API_KEY: 'test-only-key', AI_ACCESS_SECRET: access }), provider }); apps.push(app);
+  const app = await createApp({ config: readConfig({ AI_PROVIDER: 'gemini', GEMINI_API_KEY: 'test-only-key', AI_ACCESS_SECRET: access }), provider }); apps.push(app);
   const created = await app.inject({ method: 'POST', url: '/api/sessions', payload: { document } });
   expect(created.statusCode).toBe(201);
   const body = created.json() as { sessionId: string; token: string };
@@ -59,8 +60,8 @@ describe('author intent through the actual server, core tools, approval and outp
   it('exposes and enforces the default paper cap through inspection, model repair, final proposal and approval', async () => {
     const provider = sequence([invoke('inspect_design'), invoke('propose_design_patch', { travelMm: 25, maxSheets: 3 }), invoke('propose_design_patch', { travelMm: 25 }), resultText]);
     const s = await setup(provider), run = await s.start('もう少し大きく動かしたい');
-    expect(provider.histories[1]!.at(-1)!.parts![0]!.functionResponse!.response!.requestProtections).toMatchObject({ maxSheets: 2 });
-    expect(provider.histories[2]!.at(-1)!.parts![0]!.functionResponse!.response!.error).toMatchObject({ code: 'protected_condition' });
+    expect(toolResult(provider.histories[1]!).requestProtections).toMatchObject({ maxSheets: 2 });
+    expect(toolResult(provider.histories[2]!).error).toMatchObject({ code: 'protected_condition' });
     expect(run.status).toBe('awaiting_approval');
     expect(run.proposal!.document.input.maxSheets).toBe(2);
     expect(run.proposal!.protectedConditions.join(' ')).toContain('2枚以内');
@@ -91,14 +92,14 @@ describe('author intent through the actual server, core tools, approval and outp
     const provider = sequence([invoke('propose_design_patch', { artworkRepair: { mode: 'white' } }), invoke('propose_design_patch', { travelMm: 15 }), resultText]);
     const s = await setup(provider, original);
     const run = await s.start('移動距離を15mmにしたい');
-    expect(provider.histories[1]!.at(-1)!.parts![0]!.functionResponse!.response!.error).toMatchObject({ code: 'invalid_arguments' });
+    expect(toolResult(provider.histories[1]!).error).toMatchObject({ code: 'invalid_arguments' });
     expect(run.status).toBe('awaiting_approval');
     expect(run.proposal!.document.schemaVersion).toBe(2);
     expect(run.proposal!.document.input.artworkRepair).toEqual(original.input.artworkRepair);
     const accepted = s.app.runs.approve(s.session, run.proposal!.id, { requestId: run.requestId, baseRevision: run.baseRevision, baseHash: run.baseHash }).document;
     expect(accepted.input.travelMm).toBe(15);
     expect(accepted.input.artworkRepair).toEqual(original.input.artworkRepair);
-    expect(provider.histories[0]![0]!.parts![0]!.text).not.toContain('data:image/');
+    expect(userText(provider.histories[0]!)).not.toContain('data:image/');
   });
 
   it('invalidates an existing proposal when a manual artwork repair changes the design', async () => {
@@ -130,7 +131,7 @@ describe('author intent through the actual server, core tools, approval and outp
     expect(s.session.document).toEqual(s.document); // Conditions are proposed, not applied before approval.
     expect(publicRun(run)).not.toHaveProperty('intent');
     expect(run.proposal!.protectedConditions.join(' ')).toContain('枚以内');
-    expect(provider.histories[0]![0]!.parts![0]!.text).not.toContain('data:image/');
+    expect(userText(provider.histories[0]!)).not.toContain('data:image/');
   });
 
   it.each(['絵のサイズはそのままで、首を右に出したい。厚紙はA4で2枚まで', '画像の寸法を維持して、右へ動かす。紙は二枚以内'])('persists equivalent protected conditions after approval: %s', async prompt => {
@@ -152,7 +153,7 @@ describe('author intent through the actual server, core tools, approval and outp
   it('repairs actual geometric failures using returned checks and labels an alternative to an explicit distance', async () => {
     const provider = adjustingProvider(); const s = await setup(provider);
     const run = await s.start('移動距離を70mmにしたい。絵の大きさは固定。厚紙は2枚まで');
-    const returnedChecks = provider.histories.slice(1).flatMap(history => history.at(-1)?.parts?.flatMap(part => part.functionResponse?.response?.checks as CheckResult[] ?? []) ?? []);
+    const returnedChecks = provider.histories.slice(1).flatMap(history => toolResult(history).checks as CheckResult[] ?? []);
     expect(returnedChecks.some(check => check.status === 'fail' && check.partIds.length > 0)).toBe(true);
     expect(run.status).toBe('awaiting_approval'); expect(run.proposal!.fulfillsRequested).toBe(false); expect(run.proposal!.requestedTravelMm).toBe(70);
     expect(run.proposal!.document.input.travelMm).toBeGreaterThan(s.document.input.travelMm); expect(run.proposal!.document.input.travelMm).toBeLessThan(70);
@@ -185,7 +186,7 @@ describe('author intent through the actual server, core tools, approval and outp
   it('denies model attempts to shrink protected artwork, add paper or supply a replacement interpretation', async () => {
     const provider = sequence([invoke('propose_design_patch', { widthMm: 100 }), invoke('propose_design_patch', { maxSheets: 3 }), invoke('propose_design_patch', { intent: { protections: {} }, locks: [] }), invoke('propose_design_patch'), resultText]);
     const s = await setup(provider); const run = await s.start('もっと大きく動かしたい。絵の大きさは変えない。紙は2枚まで');
-    const errors = provider.histories.slice(1, 4).map(history => history.at(-1)!.parts![0]!.functionResponse!.response!.error as {code: string});
+    const errors = provider.histories.slice(1, 4).map(history => toolResult(history).error as {code: string});
     expect(errors.map(error => error.code)).toEqual(['protected_condition', 'protected_condition', 'invalid_arguments']);
     expect(run.status).toBe('awaiting_approval'); expect(run.proposal!.document.input.widthMm).toBe(s.document.input.widthMm); expect(run.proposal!.document.input.maxSheets).toBe(2);
     const request = { requestId: run.requestId, baseRevision: run.baseRevision, baseHash: run.baseHash, patch: { widthMm: 100 }, intent: { protections: {} } };
@@ -197,7 +198,7 @@ describe('author intent through the actual server, core tools, approval and outp
     const provider = sequence([invoke('propose_design_patch', { travelMm: 10 }), resultText]); const s = await setup(provider);
     const run = await s.start('もっと大きく動かして。絵の大きさは保つ');
     expect(run.status).toBe('failed'); expect(run.proposal).toBeUndefined(); expect(s.session.document).toEqual(s.document);
-    expect(provider.histories[1]!.at(-1)!.parts![0]!.functionResponse!.response!.error).toMatchObject({ code: 'protected_condition' });
+    expect(toolResult(provider.histories[1]!).error).toMatchObject({ code: 'protected_condition' });
   });
 
   it('presents actual failed part reasons and a condition suggestion without applying it', async () => {

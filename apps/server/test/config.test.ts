@@ -14,7 +14,7 @@ describe('one offline configuration path', () => {
   it('loads only the selected env file, preserves process values and validates with readConfig', () => {
     const cwd = temporary();
     writeFileSync(join(cwd, '.env'), 'AI_ENABLED=false\nAI_MAX_MODEL_CALLS=4\nGEMINI_MODEL=gemini-3.8-flash\n');
-    writeFileSync(join(cwd, '.env.local'), 'AI_ENABLED=true\n');
+    writeFileSync(join(cwd, '.env.local'), 'AI_PROVIDER=gemini\n');
     const env: NodeJS.ProcessEnv = { AI_MAX_MODEL_CALLS: '2' };
     expect(loadServerEnv({ env, cwd })).toEqual({ path: join(cwd, '.env'), source: 'default', loaded: true });
     expect(readConfig(env)).toMatchObject({ aiEnabled: false, maxModelCalls: 2, model: 'gemini-3.8-flash' });
@@ -32,14 +32,14 @@ describe('one offline configuration path', () => {
   it('reports exact limit names without echoing bad values or accepting whitespace credentials', () => {
     expect(() => readConfig({ AI_MAX_INPUT_BYTES: 'private-value' })).toThrow('AI_MAX_INPUT_BYTES must be an integer');
     expect(() => readConfig({ AI_MAX_OUTPUT_TOKENS: '8193' })).toThrow('AI_MAX_OUTPUT_TOKENS');
-    expect(() => readConfig({ AI_ENABLED: 'true', GEMINI_API_KEY: '  ', AI_ACCESS_SECRET: 's'.repeat(32) })).toThrow('requires');
-    expect(() => readConfig({ AI_ENABLED: 'true', GEMINI_API_KEY: 'key', AI_ACCESS_SECRET: ' '.repeat(32) })).toThrow('requires');
+    expect(() => readConfig({ AI_PROVIDER: 'gemini', GEMINI_API_KEY: '  ', AI_ACCESS_SECRET: 's'.repeat(32) })).toThrow('requires');
+    expect(() => readConfig({ AI_PROVIDER: 'gemini', GEMINI_API_KEY: 'key', AI_ACCESS_SECRET: ' '.repeat(32) })).toThrow('requires');
   });
   it('doctor works with synthetic secrets while all outbound network primitives are blocked', () => {
     const cwd = temporary();
     const secret = 'synthetic-doctor-secret-not-a-live-value-';
     writeFileSync(join(cwd, 'network-guard.cjs'), "global.fetch=()=>{throw Error('NETWORK_FORBIDDEN')}; for(const name of ['node:http','node:https']) { const m=require(name); m.request=()=>{throw Error('NETWORK_FORBIDDEN')};m.get=m.request;} const net=require('node:net');net.connect=()=>{throw Error('NETWORK_FORBIDDEN')};net.createConnection=net.connect;");
-    writeFileSync(join(cwd, 'doctor.env'), `AI_ENABLED=true\nGEMINI_API_KEY=${secret}key\nAI_ACCESS_SECRET=${secret}access\nAI_MAX_INPUT_BYTES=8192\nAI_MAX_OUTPUT_TOKENS=512\n`);
+    writeFileSync(join(cwd, 'doctor.env'), `AI_PROVIDER=gemini\nGEMINI_API_KEY=${secret}key\nAI_ACCESS_SECRET=${secret}access\nAI_MAX_INPUT_BYTES=8192\nAI_MAX_OUTPUT_TOKENS=512\n`);
     const doctor = fileURLToPath(new URL('../../../scripts/doctor.mjs', import.meta.url));
     const result = spawnSync(process.execPath, ['--require', join(cwd, 'network-guard.cjs'), doctor], { cwd, env: { PATH: process.env.PATH, UGOKU_ENV_FILE: join(cwd, 'doctor.env') }, encoding: 'utf8' });
     expect(result.status).toBe(0);
