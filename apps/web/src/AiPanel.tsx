@@ -1,16 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { displayDimension, getKitSummary, interpretDesignRequest, parseDesignDocument, type DesignDocument } from '@ugoku/core';
+import { displayDimension, getKitSummary, interpretDesignRequest, parseDesignDocument, type DesignDocument, type InterpretationChanges, type InterpretationCorrection } from '@ugoku/core';
 import DesignComparison, { fieldNames } from './DesignComparison';
 import { designStamp, observeRun, publicRunSnapshot, usageLabel, type AiRun as Run, type AiEvidence } from './aiEvidence';
 import { downloadFile } from './project';
 import './AiPanel.css';
+import RequestInterpretation from './RequestInterpretation';
 
+type RunCorrection = {runId: string; requestId: string; changes: InterpretationCorrection};
+class ApiRequestError extends Error { constructor(message: string, readonly code?: string) {super(message);} }
 type Session = {sessionId: string; token: string; designId: string};
 type PollContext = {session: Session; runId: string; base: DesignDocument; ticket: number; prompt: string; requestedAt: string; access: string};
 async function request<T>(url: string, method: string, body?: unknown, token?: string, access?: string): Promise<T> {
   const response = await fetch(url, {method, headers: {'Content-Type': 'application/json', ...(token ? {Authorization: `Bearer ${token}`} : {}), ...(access ? {'X-AI-Access': access} : {})}, ...(body ? {body: JSON.stringify(body)} : {})});
-  const result = await response.json() as T & {error?: {message?: string} | string; message?: string};
-  if (!response.ok) throw new Error(typeof result.error === 'string' ? result.error : result.error?.message ?? result.message ?? '通信に失敗しました。接続を確認して再試行してください。');
+  const result = await response.json() as T & {error?: {message?: string; code?: string} | string; message?: string};
+  if (!response.ok) throw new ApiRequestError(typeof result.error === 'string' ? result.error : result.error?.message ?? result.message ?? '通信に失敗しました。接続を確認して再試行してください。', typeof result.error === 'object' ? result.error.code : undefined);
   return result;
 }
 
@@ -32,6 +35,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
   const busyRef = useRef(false);
   const setBusy = (value: boolean) => {busyRef.current = value; setBusyState(value);};
   const [message, setMessage] = useState('');
+  const [interpretationDraft, setInterpretationDraft] = useState(false);
   const [unsupported, setUnsupported] = useState(false);
   const [pollInterrupted, setPollInterrupted] = useState(false);
   const [evidence, setEvidence] = useState<AiEvidence[]>([]);
@@ -79,9 +83,9 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
   function discardCurrent(reason: string) {
     const current = runRef.current, session = sessionRef.current;
     endGeneration('stale');
-    if (current && ['running', 'awaiting_approval'].includes(current.status)) decide(current.id, 'stale', undefined, reason);
+    if (current && ['running', 'awaiting_approval', 'clarification_required'].includes(current.status)) decide(current.id, 'stale', undefined, reason);
     setRun(null); runRef.current = null;
-    if (current && session && ['running', 'awaiting_approval'].includes(current.status)) {
+    if (current && session && ['running', 'awaiting_approval', 'clarification_required'].includes(current.status)) {
       void cancelServerRun(session, current.id, access).catch(() => undefined);
     }
   }
@@ -119,9 +123,10 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     if (candidate.proposal) candidate = {...candidate, proposal: {...candidate.proposal, document: parseDesignDocument(candidate.proposal.document)}};
     observe(candidate, context);
     if (context.ticket !== generation.current || !isCurrent(context.base, context.prompt)) {
-      if (['running', 'awaiting_approval'].includes(candidate.status)) void cancelServerRun(context.session, candidate.id, context.access).catch(() => undefined);
+      if (['running', 'awaiting_approval', 'clarification_required'].includes(candidate.status)) void cancelServerRun(context.session, candidate.id, context.access).catch(() => undefined);
       return;
     }
+    setUnsupported(candidate.error?.code === 'unsupported_motion');
     setRun(candidate); runRef.current = candidate; setMessage(candidate.error?.message ?? candidate.message); setPollInterrupted(false);
     if (candidate.status === 'running') {
       pollContext.current = context;
@@ -145,15 +150,15 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     setBusy(true); setPollInterrupted(false); setMessage('同じ実行の状況を確認しています。新しいAI依頼は送信しません。');
     await poll(context);
   }
-  async function start() {
+  async function start(correction?: RunCorrection) {
     if (busyRef.current || !selectionReady || draftRef.current || pollContext.current) return;
-    if (!interpretDesignRequest(documentRef.current, prompt).supported) {
-      if (runRef.current) discardCurrent('新しい依頼は非対応のため、以前の候補を無効にしました。');
-      setUnsupported(true); setMessage('その動きは未対応です。引っぱりタブの直線運動だけを作れます。作品は変更していません。直線運動の依頼を選ぶか、手動で動きを決めてください。'); return;
-    }
     if (!connection.enabled) {setMessage('AIは未接続です。手動支援で希望を試し、保存・印刷まで進められます。'); return;}
     if (!access.trim()) {setMessage('「AIを利用する」を開き、アクセスコードを入力してください。'); return;}
-    if (runRef.current?.status === 'awaiting_approval') discardCurrent('新しい依頼を実行するため、以前の候補を無効にしました。');
+    if (correction) {
+      // The server replaces a live proposal atomically with its bound correction.
+      // A preceding DELETE would revoke that source before correction validation.
+      endGeneration('stale'); decide(correction.runId, 'stale', undefined, '解釈を訂正して検査し直しました。以前の候補は採用していません。');
+    } else if (runRef.current?.status === 'awaiting_approval') discardCurrent('新しい依頼を実行するため、以前の候補を無効にしました。');
     const ticket = ++generation.current, base = documentRef.current, submittedPrompt = prompt, requestedAt = new Date().toISOString(), submittedAccess = access;
     setBusy(true); setRun(null); runRef.current = null; setMessage('設計条件を読み取り、変更案を検査しています。'); setUnsupported(false); setPollInterrupted(false);
     try {
@@ -167,9 +172,18 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
         await request(`/api/sessions/${session.sessionId}/document`, 'PUT', {document: base}, session.token);
       }
       if (ticket !== generation.current || !isCurrent(base, submittedPrompt)) return;
-      const result = await request<{run: Run}>(`/api/sessions/${session.sessionId}/runs`, 'POST', {requestId: crypto.randomUUID(), prompt: submittedPrompt, baseRevision: base.revision, baseHash: base.designHash}, session.token, submittedAccess);
+      const result = await request<{run: Run}>(`/api/sessions/${session.sessionId}/runs`, 'POST', {requestId: crypto.randomUUID(), prompt: submittedPrompt, baseRevision: base.revision, baseHash: base.designHash, ...(correction ? {correction} : {})}, session.token, submittedAccess);
       await receive(result.run, {session, runId: result.run.id, base, ticket, prompt: submittedPrompt, requestedAt, access: submittedAccess});
-    } catch (error) {if (ticket === generation.current) {sessionRef.current = null; setMessage(error instanceof Error ? error.message : '実行に失敗しました。'); setBusy(false);}}
+    } catch (error) {if (ticket === generation.current) {sessionRef.current = null; setUnsupported(error instanceof ApiRequestError && error.code === 'unsupported_motion'); setMessage(error instanceof Error ? error.message : '実行に失敗しました。'); setBusy(false);}}
+  }
+  async function correctInterpretation(changes: InterpretationChanges) {
+    const current = runRef.current;
+    if (!current?.requestInterpretation || busyRef.current || draftRef.current) return;
+    const binding = current.requestInterpretation.binding;
+    if (binding.designId !== documentRef.current.designId || binding.baseHash !== documentRef.current.designHash || binding.baseRevision !== documentRef.current.revision) {
+      discardCurrent('解釈の基準となる作品が変わっています。'); setMessage('現在の作品から解釈し直してください。'); return;
+    }
+    await start({runId: current.id, requestId: current.requestId, changes: {...changes, binding}});
   }
   async function cancel() {
     const current = runRef.current, session = sessionRef.current;
@@ -184,7 +198,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
   }
   async function resolveProposal(accept: boolean) {
     const session = sessionRef.current;
-    if (!run?.proposal || !session || busyRef.current || draftRef.current) return;
+    if (!run?.proposal || !session || busyRef.current || draftRef.current || interpretationDraft) return;
     if (run.baseHash !== documentRef.current.designHash || run.baseRevision !== documentRef.current.revision) {discardCurrent('古い設計への変更案です。'); setMessage('古い設計への変更案です。新しい設計で再実行してください。'); return;}
     setBusy(true);
     const base = documentRef.current, ticket = generation.current, submittedPrompt = promptRef.current;
@@ -253,12 +267,14 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
       <p className="field-note">{connection.mode === 'injected-test' ? '模擬AIで操作を試します。実Geminiへの送信はありません。' : '実行すると希望・設計寸法・選択範囲がGeminiへ送られます。画像そのものは送信しません。'}</p>
       {inputDraftActive && <p className="field-note">入力中の数値を確定するか、元の値に戻してから変更案をつくれます。</p>}
       {connection.enabled && !access.trim() && <p className="field-note">はじめに「AIを利用する」でアクセスコードを入力してください。</p>}
-      <div className="button-row"><button data-design-action onClick={() => void start()} disabled={busy || pollInterrupted || !prompt.trim() || !selectionReady || inputDraftActive} className={connection.enabled ? 'primary' : 'secondary'}>{run?.status === 'failed' ? '再試行する' : busy ? '検査しています…' : '変更案をつくる'}</button></div>
+      <div className="button-row"><button data-design-action onClick={() => void start()} disabled={busy || pollInterrupted || interpretationDraft || !prompt.trim() || !selectionReady || inputDraftActive} className={connection.enabled ? 'primary' : 'secondary'}>{run?.status === 'failed' ? '再試行する' : busy ? '検査しています…' : '変更案をつくる'}</button></div>
     </details>
     {(busy || pollInterrupted) && <div className="ai-wait"><p>{pollInterrupted ? '通信の確認が必要です。現在の作品は変わっていません。' : run?.status === 'awaiting_approval' ? '採用の結果を確認しています。' : '候補を待っています。現在の作品は変わっていません。'}</p><div className="button-row">{pollInterrupted && <button className="secondary" onClick={() => void resumePolling()}>状況を確認する</button>}<button onClick={() => void cancel()} className="text-button">中断する</button></div></div>}
     {message && <p role="status" className={`notice ${unsupported || run?.status === 'failed' ? 'warning' : ''}`}>{message}</p>}
     {unsupported && <button className="text-button" onClick={() => { editPrompt('引っぱりタブでまっすぐ動く距離を調整したい'); setUnsupported(false); setMessage('代案を入力しました。実行するか、手動で調整してください。'); }}>代案「まっすぐ動かす」を選ぶ</button>}
-    {run?.proposal && run.status === 'awaiting_approval' && run.baseHash === document.designHash && run.baseRevision === document.revision && <div className="proposal"><h3>AIの変更案 · 採用待ち</h3>{run.proposal.fulfillsRequested === false && <p className="notice warning">希望の{run.proposal.requestedTravelMm}mmに対し、候補は{run.proposal.document.input.travelMm}mmです。希望と異なる距離であることを確認してから採用してください。</p>}<DesignComparison before={document} after={run.proposal.document} imageDataUrl={imageDataUrl} backgroundImageDataUrl={backgroundImageDataUrl} preserved={run.proposal.protectedConditions ?? run.intentSummary?.protections ?? document.input.locks.map(key => `${fieldNames[key] ?? key}を固定`)}><div className="button-row"><button className="primary" disabled={busy || inputDraftActive || getKitSummary(run.proposal.document).status === 'blocked'} data-design-action onClick={() => void resolveProposal(true)}>この案にする</button><button className="secondary" disabled={busy} onClick={() => void resolveProposal(false)}>この案を使わない</button></div></DesignComparison></div>}
+    {run?.requestInterpretation && !busy && run.baseHash === document.designHash && run.baseRevision === document.revision && run.status !== 'succeeded' && run.status !== 'cancelled' && <RequestInterpretation value={run.requestInterpretation} document={document} source="ai" disabled={busy || inputDraftActive || !selectionReady || !['awaiting_approval', 'clarification_required'].includes(run.status)} onCorrect={changes => void correctInterpretation(changes)} onDraftChange={setInterpretationDraft} />}
+    {run?.status === 'clarification_required' && !busy && <button className="text-button" onClick={() => void cancel()}>この依頼を取り消す</button>}
+    {run?.proposal && run.status === 'awaiting_approval' && run.baseHash === document.designHash && run.baseRevision === document.revision && <div className="proposal"><h3>AIの変更案 · 採用待ち</h3>{run.proposal.fulfillsRequested === false && <p className="notice warning">希望の{run.proposal.requestedTravelMm}mmに対し、候補は{run.proposal.document.input.travelMm}mmです。希望と異なる距離であることを確認してから採用してください。</p>}<DesignComparison before={document} after={run.proposal.document} imageDataUrl={imageDataUrl} backgroundImageDataUrl={backgroundImageDataUrl} preserved={run.proposal.protectedConditions ?? run.intentSummary?.protections ?? document.input.locks.map(key => `${fieldNames[key] ?? key}を固定`)}><div className="button-row"><button className="primary" disabled={busy || inputDraftActive || interpretationDraft || getKitSummary(run.proposal.document).status === 'blocked'} data-design-action onClick={() => void resolveProposal(true)}>この案にする</button><button className="secondary" disabled={busy} onClick={() => void resolveProposal(false)}>この案を使わない</button></div></DesignComparison></div>}
     {!busy && onManual && (!connection.enabled || unsupported || run?.status === 'failed') && <button className={connection.enabled ? 'secondary' : 'primary'} onClick={onManual}>手動支援を使う</button>}
     {!!run?.validationIssues?.length && <div className="notice warning"><h3>設計で見つかった問題</h3>{run.validationIssues.map(issue => <p key={issue.id}>{issue.partIds.join('・')}：{issue.message} {issue.suggestion}</p>)}</div>}
     {!!run?.constraintSuggestions?.length && <div className="notice"><h3>条件変更の提案</h3>{run.constraintSuggestions.map((item, index) => <p key={index}>{fieldNames[item.key] ?? item.key} → {String(item.value)}：{item.reason}（自動では変更しません）</p>)}</div>}

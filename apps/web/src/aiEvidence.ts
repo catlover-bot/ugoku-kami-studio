@@ -1,13 +1,14 @@
-import { type CheckResult, type DesignDocument, type DesignPatch } from '@ugoku/core';
+import { type CheckResult, type DesignDocument, type DesignPatch, type DesignIntent } from '@ugoku/core';
 import { designChanges } from './DesignComparison';
 
 export type AiRun = {
   id: string; requestId: string; baseRevision: number; baseHash: string;
   mode?: 'gemini' | 'injected-test'; model?: string;
-  status: 'running' | 'awaiting_approval' | 'succeeded' | 'failed' | 'cancelled';
+  status: 'running' | 'awaiting_approval' | 'clarification_required' | 'succeeded' | 'failed' | 'cancelled';
   message: string;
   events: { sequence?: number; type?: string; tool?: string; name?: string; message?: string; designHash?: string; patch?: DesignPatch; checkStatuses?: {id: string; status: string}[]; durationMs?: number }[];
   proposal?: { id: string; requestId?: string; baseRevision?: number; baseHash?: string; patch: DesignPatch; document: DesignDocument; addedLocks?: string[]; protectedConditions?: string[]; requestedTravelMm?: number; fulfillsRequested?: boolean };
+  requestInterpretation?: Pick<DesignIntent, 'binding' | 'interpretation' | 'clarifications' | 'summary' | 'approvalRequired'>;
   intentSummary?: {protections: string[]; notes: string[]};
   validationIssues?: CheckResult[];
   constraintSuggestions: {key: string; value: unknown; reason: string}[];
@@ -35,7 +36,7 @@ export function publicRunSnapshot(run: AiRun): AiRun {
     mode: run.mode, model: run.model, status: run.status, message: run.message,
     events: run.events.map(event => ({sequence: event.sequence, type: event.type, tool: event.tool, name: event.name, message: event.message, designHash: event.designHash, patch: event.patch, checkStatuses: event.checkStatuses, durationMs: event.durationMs})),
     proposal: run.proposal ? {id: run.proposal.id, requestId: run.proposal.requestId, baseRevision: run.proposal.baseRevision, baseHash: run.proposal.baseHash, patch: run.proposal.patch, document: run.proposal.document, addedLocks: run.proposal.addedLocks, protectedConditions: run.proposal.protectedConditions, requestedTravelMm: run.proposal.requestedTravelMm, fulfillsRequested: run.proposal.fulfillsRequested} : undefined,
-    intentSummary: run.intentSummary, validationIssues: run.validationIssues, constraintSuggestions: run.constraintSuggestions,
+    requestInterpretation: run.requestInterpretation, intentSummary: run.intentSummary, validationIssues: run.validationIssues, constraintSuggestions: run.constraintSuggestions,
     error: run.error, modelCalls: run.modelCalls, toolCalls: run.toolCalls, elapsedMs: run.elapsedMs, usage: run.usage, modelUsage: run.modelUsage,
   });
 }
