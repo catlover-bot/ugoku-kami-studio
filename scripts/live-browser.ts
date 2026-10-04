@@ -188,6 +188,11 @@ export async function runBrowserCase(options: { page: Page; origin: string; proj
         result.status = 'alternative-offered-original-preserved';
       } else {
         expect(run.constraintSuggestions.length).toBeGreaterThan(0);
+        for (const suggestion of run.constraintSuggestions) {
+          expect(suggestion.source).toBe('model');
+          expect(suggestion.verification).toMatchObject({ source: 'deterministic-core', geometry: 'pass', conditionsApproved: false, baseHash: base.designHash, baseRevision: base.revision });
+          expect(suggestion.verification.checks.some((check: {status: string}) => check.status === 'fail')).toBe(false);
+        }
         expect(run.validationIssues.length > 0 || run.error?.code === 'conditions_conflict').toBe(true);
         result.status = 'condition-change-offered-original-preserved';
       }
