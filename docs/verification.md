@@ -1,5 +1,20 @@
 # 検証記録
 
+## Goal008 — 提出準備中（公開・提出は未実施）
+
+2026-10-04、開始mainは `bc5042e30a243541ddeee616bfb45d489f579689`。同SHAのCheck/WebKit成功を確認しました。再提示されたGoal001は保存済み本文と一致し、基盤要件として維持します。本人確認ではZenn未提出。通常main統合・push・CIは継続許可、クラウド書込み・公開・YouTube投稿・Zenn提出は未許可です。
+
+不成立の50mm条件案は実コアで再現し、構造化助言も提示前に検査するよう修正しました。通る仮案も固定条件の変更承認ではなく、採用ボタンへ昇格させません。モデル案/決定的検査の出所と版を保存し、実物unknownを維持します。`artifacts/goal008/suggestion-review/`は追加推論0回のbefore/afterです。
+
+401/404で失われたAI実行の状況確認を繰り返す問題は、旧session/run/candidateのみ失効させるよう修正しました。原本・希望・保存画像・実物記録は維持し、本人が押すまで再推論しません。503は同じ実行の再確認へ進めます。待機中は実際の経過秒と中断を表示し、推定残時間や進捗率は出しません。証拠は `recovery-before/` と `recovery-after/`（PC/狭幅）。
+
+統合途中の `b9e571a` ではcheck209件とbuildが成功。全体Chromium E2Eは168成功/2失敗で、旧L2模擬モデルが実際には不成立の幅210mm案を通過する期待が原因でした。失敗証拠は `e2e-initial-test-results/` と `e2e-integrated.log` に保存し、fixtureは不成立案の拒否後に成立する条件案を再検査する往復へ変更しました。幾何pass・条件未承認・版一致のassertionを追加し、該当3経路×PC/狭幅6件が成功。失敗を削除して成功扱いしていません。最終対象SHAのCIを別途確認します。
+
+Cloud Runはapp/Ollama同一インスタンス、instance-based CPU、HTTP8/モデル1、min0/max1の計画を作成。モデル/ランタイムの全SHA、公式Node linux/amd64 manifestを固定しました。重み4,336,359,085 bytesとruntime70,751,265 bytesのstage照合は成功。モデル入りコンテナ・Cloud Run admission/性能・公開審査経路は未確認です。通常のapp-only CIと区別します。`deploy:plan -- --ollama`は不足設定を表示し、クラウド操作をしません。
+
+公開先候補は標準gcloud配置、関連環境変数、本リポジトリ設定の読み取りでは見つかりませんでした。その後、本人から既存projectと東京リージョンの候補指定を受け、非公開資料へ記録しました。ADCや関連認証環境変数も未設定で、IAM/請求先/クォータのクラウド読み取りは未完了です。費用・停止方法はGit対象外の `artifacts/submission/private/cost-plan.md`。このローカル準備をDEPLOYED_REVIEWABLEやREADY_TO_SUBMITとはしません。実Gemini・実物・初見の人・実スマートフォンも未確認です。
+
+
 ## Goal 006 — 希望の読み取りと訂正（実装・回帰確認済み）
 
 2026-10-04。[依頼全文](goals/006-request-understanding.md)。開始時は local/origin/main と GitHub main が `757837a236e152d9a539529886e3583f45e4a16f`、作業ツリーはクリーンだった。同SHAの [Check・コンテナ](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37176726708) と [WebKit](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37176726694) は成功。既存の保存データ・開発サーバーを保持し、分離した作業ブランチで修正する。
