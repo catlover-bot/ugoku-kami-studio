@@ -5,7 +5,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { args, folders, json, mergePublicManifest, readJson, sha256 } from './common.js';
 
-type Scene = { name: string; start: number; end: number; targetSeconds: number };
+type Scene = { name: string; start: number; actionEnd: number; end: number; targetSeconds: number };
 type Capture = { status: string; rawVideo: string; codeSha: string; scenes: Scene[]; ai: { actualWaitSeconds: number; started: number; finished: number; mode: string; model: string; runId: string } };
 const options = args(process.argv.slice(2), ['--capture', '--out', '--font']);
 if (!options['--capture']) throw new Error('--capture actual capture.json is required');
@@ -33,7 +33,7 @@ for (const scene of capture.scenes) {
   if (scene.name === 'request') {
     const start = scene.end + .1;
     if (capture.ai.finished - start < 3.5) throw new Error('Actual wait was too short for the planned disclosed wait cut; revise the edit explicitly.');
-    scenes.push({ name: 'wait', start, end: capture.ai.finished, targetSeconds: 3 });
+    scenes.push({ name: 'wait', start, actionEnd: start + 3, end: capture.ai.finished, targetSeconds: 3 });
   }
 }
 assert.equal(scenes.reduce((sum, scene) => sum + scene.targetSeconds, 0), 180);
@@ -44,6 +44,7 @@ for (let index = 0; index < scenes.length; index++) {
   const scene = scenes[index];
   assert.ok(scene.end - scene.start >= scene.targetSeconds + .15, `${scene.name} was not held long enough`);
   const start = scene.start + .1;
+  assert.ok(scene.actionEnd <= start + scene.targetSeconds, `${scene.name} action exceeds its allotted cut; revise the edit explicitly instead of truncating an action.`);
   decisions.push({ name: scene.name, sourceStart: start, sourceEnd: start + scene.targetSeconds, start: timeline, end: timeline + scene.targetSeconds });
   const lines = captionText[scene.name]; assert.ok(lines);
   if (scene.name === 'request' || scene.name === 'wait') captions.push({ start: timeline, end: timeline + scene.targetSeconds, text: lines.join('\n') });

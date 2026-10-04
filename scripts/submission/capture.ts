@@ -15,7 +15,7 @@ import { PROTOTYPE_SOURCE_SVG } from '../prepare-prototype.js';
 import { args, codeSha, folders, json, mergePublicManifest, sha256 } from './common.js';
 
 type Run = ReturnType<typeof publicRun>;
-type Scene = { name: string; start: number; end: number; targetSeconds: number };
+type Scene = { name: string; start: number; actionEnd: number; end: number; targetSeconds: number };
 const options = args(process.argv.slice(2), ['--out', '--mode', '--env', '--port', '--origin', '--source-sha']);
 const mode = options['--mode'];
 if (mode !== 'manual-rehearsal' && mode !== 'local-ai') throw new Error('Explicit --mode manual-rehearsal|local-ai is required');
@@ -54,9 +54,9 @@ const now = () => (performance.now() - clockStart) / 1000;
 const hold = (seconds: number) => page.waitForTimeout(seconds * 1000);
 async function scene(name: string, targetSeconds: number, action: () => Promise<void>) {
   const start = now(); await action();
-  const elapsed = now() - start;
+  const actionEnd = now(); const elapsed = actionEnd - start;
   if (elapsed < targetSeconds + .4) await hold(targetSeconds + .4 - elapsed);
-  scenes.push({ name, start, end: now(), targetSeconds });
+  scenes.push({ name, start, actionEnd, end: now(), targetSeconds });
 }
 async function stage(number: number) { await page.locator('.workflow').getByRole('button', { name: new RegExp(`${['絵を選ぶ', '動きをつける', '印刷して作る'][number - 1]}$`) }).click(); await page.evaluate(() => window.scrollTo(0, 0)); }
 async function number(label: string, value: number) { const field = page.getByLabel(label, { exact: true }); await field.fill(String(value)); await field.press('Enter'); }
@@ -121,6 +121,7 @@ try {
       await page.locator('.ai-panel').getByRole('button', { name: 'この案にする', exact: true }).click(); await expect(page.locator('main')).toHaveAttribute('data-design-hash', candidate.designHash); await page.getByRole('button', { name: '動かす', exact: true }).click(); await hold(5); await page.getByRole('button', { name: '動きを停止', exact: true }).click();
     });
     const adopted = await exportProject('adopted.ugoku.json'); assert.equal(adopted.designHash, candidate.designHash); assert.equal(adopted.revision, candidate.revision);
+    await page.getByRole('button', { name: '設定', exact: true }).click(); await details('.ai-evidence'); const evidence = JSON.parse((await download('AI実行記録を書き出す', 'ai-evidence.json')).toString()); assert.equal(evidence.format, 'ugoku-kami-ai-run'); assert.equal(evidence.records.length, 1); assert.equal(evidence.records[0].decision.status, 'accepted'); assert.equal(evidence.records[0].decision.adopted.designHash, adopted.designHash); assert.equal(evidence.records[0].decision.adopted.revision, adopted.revision); await page.getByRole('dialog', { name: '設定', exact: true }).getByRole('button', { name: '閉じる', exact: true }).click();
     await scene('print', 20, async () => { await stage(3); await hold(3); const bytes = await download('PDFをダウンロード', 'kit.pdf'); const pdf = await PDFDocument.load(bytes); assert.equal(pdf.getTitle(), `${adopted.designId} revision ${adopted.revision}`); assert.ok(pdf.getSubject()?.includes(adopted.designHash)); assert.equal(pdf.getPageCount(), adopted.layout.sheets + 4); for (const page of pdf.getPages()) { assert.ok(Math.abs(page.getWidth() - 210 * 72 / 25.4) < .001); assert.ok(Math.abs(page.getHeight() - 297 * 72 / 25.4) < .001); } await screenshot('03-print.png', adopted); await details('.split-options'); await download('型紙だけを保存', 'pattern.pdf'); await download('組み立て説明だけを保存', 'instructions.pdf'); });
     // Normal UI downloads the actual A4 SVG. There may be multiple pages; the
     // fish has exactly one and the event therefore has a single destination.
