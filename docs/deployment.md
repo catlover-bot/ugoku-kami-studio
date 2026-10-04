@@ -18,6 +18,8 @@ UIとAPIは同一オリジン。コンテナは非rootユーザー、`0.0.0.0:$P
 
 コンテナ起動後の画面検証は `npx playwright test --config playwright.container.config.ts`。既定の接続先は `http://127.0.0.1:8080` で、この設定はホスト側Webサーバーを代わりに起動しない。証拠には対象コミット・コンテナimage ID・設計版・PDF hashを残す。
 
+対象projectを指定して設定・課金関連付け・API・権限を変更せずに調べる手順は [Cloud候補の読み取り確認](cloud-inspection.md)。認証がない場合は本人の認証まで中止し、既定のhelperは通信しない。
+
 ## デプロイ計画（実行しない）
 
 ```sh
