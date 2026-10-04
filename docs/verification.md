@@ -10,6 +10,16 @@
 
 統合途中の `b9e571a` ではcheck209件とbuildが成功。全体Chromium E2Eは168成功/2失敗で、旧L2模擬モデルが実際には不成立の幅210mm案を通過する期待が原因でした。失敗証拠は `e2e-initial-test-results/` と `e2e-integrated.log` に保存し、fixtureは不成立案の拒否後に成立する条件案を再検査する往復へ変更しました。幾何pass・条件未承認・版一致のassertionを追加し、該当3経路×PC/狭幅6件が成功。失敗を削除して成功扱いしていません。最終対象SHAのCIを別途確認します。
 
+`358305a` の実Gemma収録では69.145秒・モデル3回/ツール2回で、25mm候補の検査通過後、同値の条件助言が実行全体を失敗にしました。run `5f35d92a-2d13-45b8-9a54-f05031ba5c3c` の元動画・原本・失敗結果を非公開に保存し、成功素材には使っていません。`da00d3f` は生成済み・検査通過候補と同値の補助助言のみを無変更として返します。候補未生成、不成立、引数不正は拒否し、別の未修正エラーや承認待ちを省略しません。元のtool引数は未保存のため、公開イベントと同じ版に基づく再構成fixtureで7条件・別エラー・22/30mm一般化を検証し、実応答の完全再現とは呼びません。
+
+修正版 `da00d3f` の統合checkは232件、lint/型検査/buildが成功（`check-final-product.log`）。収録アプリは同じbuildへ再起動し、ブラウザへ返るHTML/JS/CSSと出力ファイルのSHA一致を `local-app-final-build.json` に記録しました。収録中にbuildを差し替えません。保存専用29件も先行統合版で成功しています。
+
+同じ修正版の実Gemma run `53003fe3-036f-4c3c-8053-250876367734` は78.610秒・モデル3回/ツール2回で承認待ちに到達しました。通常UIで候補を採用し、公式AI記録と同版の全部入り/分割PDFを取得しています。Goal008の追加実推論はこの成功1回と先の失敗1回です。新規モデル、外部推論API、自動再試行は使っていません。後続の撮影スクリプト・紹介文・文書変更は製品ソースを変えません。
+
+撮影は実操作だけを記録し、私的な同期ページの実フレームでwall clockと動画PTSを校正します。編集は通常UIの区間だけを等速でつなぎ、待機省略、手動70mmの失敗例、実物/公開の未確認を字幕に残します。画像4枚・MP4・字幕・文字数・素材hash・動画レビューの実際の状態は `artifacts/submission/public/manifest.json`、未公開項目は `private/readiness.json`、実物用の同版キットは `private/physical-kit/` に記録します。ファイル生成と再生/目視/公開確認を別々に残します。
+
+製品固定SHA `da00d3f` の [Check（全体・保存・通常コンテナ）](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37192844917) と [WebKit](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37192844929) は成功しました。撮影補助を含む最終mainのSHAと同SHAのCI結果は、循環した自己参照を避け `artifacts/goal008/main-integration.json` に保持します。モデル入りコンテナの実起動やクラウド公開の成功とは区別します。
+
 Cloud Runはapp/Ollama同一インスタンス、instance-based CPU、HTTP8/モデル1、min0/max1の計画を作成。モデル/ランタイムの全SHA、公式Node linux/amd64 manifestを固定しました。重み4,336,359,085 bytesとruntime70,751,265 bytesのstage照合は成功。モデル入りコンテナ・Cloud Run admission/性能・公開審査経路は未確認です。通常のapp-only CIと区別します。`deploy:plan -- --ollama`は不足設定を表示し、クラウド操作をしません。
 
 公開先候補は標準gcloud配置、関連環境変数、本リポジトリ設定の読み取りでは見つかりませんでした。その後、本人から既存projectと東京リージョンの候補指定を受け、非公開資料へ記録しました。公式配布SHAを検証したgcloud 587.0.0を専用ユーザー領域へ導入し、指定projectだけのREST読み取りhelperを準備しました。専用configの認証は0件で、実行結果は `authentication_required` / cloudRequests 0 / cloudWrites 0。本人認証後に再開します。7件の模擬試験で通信範囲・秘密除外・権限不足・API未有効の扱いを検証しましたが、IAM/請求先/クォータの実確認は未完了です。費用・停止方法はGit対象外の `artifacts/submission/private/cost-plan.md`。このローカル準備をDEPLOYED_REVIEWABLEやREADY_TO_SUBMITとはしません。実Gemini・実物・初見の人・実スマートフォンも未確認です。

@@ -35,7 +35,9 @@
 `run.status`: `running / awaiting_approval / clarification_required / succeeded / failed / cancelled`。未実行状態はUIが管理する。
 `run.proposal`: `{id,requestId,baseRevision,baseHash,patch,document}`。
 `run.events`: `{sequence,type,tool?,message,designHash?,patch?,checkStatuses?,durationMs}`。
-`run.constraintSuggestions`: `{key,value,reason,source,verification}[]`。最新候補の指定条件1つだけを仮変更し、既存コアの幾何検査を通る案のみ提示する。`source:model` と `verification.source:deterministic-core`、基準版・比較候補・仮設計のハッシュ、検査結果を記録する。不成立はモデルへ実際の理由を返し、表示一覧に加えない。`conditionsApproved:false` の条件付き助言であり、固定条件の解除・原本変更・採用候補への昇格はしない。実物検査のunknownも維持する。利用者が手動で条件を見直す。候補や解釈の変更後は古い検査を破棄する。
+`run.constraintSuggestions`: `{key,value,reason,source,verification}[]`。原本へ信頼済みの希望・直近patchを重ね、指定条件1つだけを仮変更して、既存コアの幾何検査を通る案のみ提示する。`source:model` と `verification.source:deterministic-core`、基準版・比較候補・仮設計のハッシュ、`contextPatch`、検査結果を記録する。不成立はモデルへ実際の理由を返し、表示一覧に加えない。`conditionsApproved:false` の条件付き助言であり、固定条件の解除・原本変更・採用候補への昇格はしない。実物検査のunknownも維持する。利用者が手動で条件を見直す。候補や解釈の変更後は古い検査を破棄する。
+
+生成済み・幾何検査を通過した候補と同じ値の補助助言は `ignored:true` / `reason:unchanged_condition` として返し、候補を保持する。表示する助言や承認は追加せず、以前の別ツールエラーも解消しない。候補未生成、不成立候補、不正な引数に対する同値助言は引き続き拒否する。実行完了時の再検査と本人の採用操作は省略しない。
 `run.mode`: `gemini / injected-test`。本番アダプターか、テスト注入かを区別する。`run.model`は設定したモデル。
 `run.usage`: APIが取得できた `promptTokens/outputTokens/thinkingTokens/cachedInputTokens/toolPromptTokens/totalTokens` の合計と、`responsesWithUsage/responsesWithoutUsage`。不明を0円として扱わない。
 `run.modelUsage`: 呼出し別の `{call,inputBytes,outputTokenLimit,durationMs,received,finishReason,modelVersion,usage}`。未受信・使用量欠落は`usage:null`。設定上限超過による送信前拒否はmodelCallsを増やさない。
