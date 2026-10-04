@@ -75,6 +75,10 @@ export async function saveProject(page: Page) {
 export async function ai(page: Page) {
   await stage(page, 2);
   await page.getByRole('button', { name: 'Gemini', exact: true }).click();
+  const editor = page.locator('.ai-panel > .request-editor');
+  if (!(await editor.evaluate(element => (element as HTMLDetailsElement).open))) await editor.locator(':scope > summary').click();
+  const settings = page.locator('.ai-settings');
+  if (!(await settings.evaluate(element => (element as HTMLDetailsElement).open))) await settings.locator(':scope > summary').click();
 }
 
 export async function manual(page: Page) {

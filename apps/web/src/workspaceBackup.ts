@@ -10,6 +10,7 @@ export async function serializeWorkspaceBackup(project: Project, draft: Workspac
   const payload = JSON.parse(serializeProject(project)) as unknown;
   const safeDraft = await validateWorkspaceDraft(draft);
   if (safeDraft.recordDraft?.designId && safeDraft.recordDraft.designId !== project.document.designId) throw new Error('実物記録の下書きは元の作品から書き出してください。');
+  if (safeDraft.guide && safeDraft.guide.designId !== project.document.designId) throw new Error('組み立てガイドが別の作品のものです。');
   const text = JSON.stringify({ format: 'ugoku-kami-recovery', version: 1, project: payload, draft: safeDraft });
   withinLimit(text);
   return text;
@@ -23,5 +24,6 @@ export async function parseWorkspaceFile(text: string): Promise<{project: Projec
   const project = await parseProject(JSON.stringify(backup.project));
   const draft = await validateWorkspaceDraft(backup.draft);
   if (draft.recordDraft?.designId && draft.recordDraft.designId !== project.document.designId) throw new Error('復元用の下書きが別の作品のものです。');
+  if (draft.guide && draft.guide.designId !== project.document.designId) throw new Error('組み立てガイドが別の作品のものです。');
   return { project, draft };
 }

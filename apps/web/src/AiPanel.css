@@ -1,0 +1,17 @@
+.ai-panel .ai-introduction { font-size: 15px; color: var(--muted); margin-bottom: 10px; }
+.ai-panel .ai-availability { border-left: 3px solid var(--boundary); padding-left: 12px; margin: 14px 0; font-size: 15px; }
+.ai-request-conditions { margin-top: 18px; }
+.ai-request-conditions h3 { font-size: 15px; }
+.ai-request-conditions ul { padding-left: 21px; margin: 7px 0 0; font-size: 15px; }
+.ai-request-conditions li + li { margin-top: 3px; }
+.ai-settings { border-block: 1px solid var(--line); margin-top: 18px; }
+.ai-settings > summary { font-size: 14px; }
+.ai-settings[open] { padding-bottom: 14px; }
+.ai-settings p, .ai-settings small { font-size: 14px; }
+.ai-settings .field { display: block; margin-top: 12px; }
+.ai-settings .field input { max-width: 380px; }
+.ai-panel .ai-evidence, .ai-panel .execution-log { overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .ai-panel .section-top { flex-wrap: wrap; gap: 6px; }
+  .ai-settings .field input { max-width: none; }
+}

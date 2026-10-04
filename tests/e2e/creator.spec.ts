@@ -38,7 +38,9 @@ test.beforeEach(async ({ page }, info) => {
 
 test('S1/S4 sample: intuitive distance, protected proposal, rejection and a current prototype kit', async ({ page }, info) => {
   const stem = `${root}/${info.project.name}/sample`;
-  await expect(page.getByLabel('動く距離（mm）', { exact: true })).not.toBeVisible();
+  // Goal005 promotes distance to the primary settings; precision controls stay closed.
+  await expect(page.getByLabel('動く距離（mm）', { exact: true })).toBeVisible();
+  await expect(page.locator('.numeric-details')).not.toHaveAttribute('open');
   await page.screenshot({ path: `${stem}-start.png`, fullPage: false });
   const before = await saved(page);
   await page.getByRole('button', { name: '動かす', exact: true }).click();

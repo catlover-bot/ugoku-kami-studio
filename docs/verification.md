@@ -20,6 +20,14 @@ Bのrepository/hook/復元用ファイルは、実ChromiumのIndexedDBで25件�
 
 既存の手動保存試験は、UIで保存完了を待ち、IndexedDBの確定作品と復元draftを読み戻す方法へ改訂した。自動保存後の切替は確認なし、保存失敗時だけ保持・書出し・破棄の確認をする。古い写真形式の読込は新しいタブから実施し、現在作品の新しい記録を劣化させないことも確認する。旧回帰は初回104/106、その前提修正後の2/2が成功（単一120件実行とは区別）。理由と対象ファイルは `artifacts/goal005/phase-b-regression/migration-and-results.json`。
 
+Bは `1b7b066e0e2dfb49fd95f12618a67f6afba835da` をクリーンworktreeで npm ci / doctor / check（101件）/ 全E2E（120件）/ native保存（25件）/ examples（4例）に通した。[作業ブランチCI](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37175373759)もコンテナを含め成功し、mainへ通常fast-forward/push済み。[main CI](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37175644645)の結果は `phase-b-integration.json` に記録する。初回の2種の試験不安定性は、async作品読込前の旧ID比較と、全assert完了後のブラウザ接続を残したfixture終了待ちだった。厳密なID/版/hash比較を保って完了を待ち、接続を閉じてからサーバーを終了するよう修正した。timeout延長や寸法・記録assertion削除はしていない。
+
+Cでは距離・幅/高さの同時保護・A4上限を主設定へ移し、工程1は元画像と選択、工程2は再生と候補、工程3は印刷図と用紙・出力を中心にした。手動支援とAIの希望文を共有して復元draftへ保存し、アクセスコードは閉じた「AIを利用する」にまとめてメモリ内だけで扱う。紙の上限を省略した依頼でも現在の上限を守り、明示した新上限と承認なしにAIのpatchで増やせない。
+
+PDFは既存生成系の同じページから全部入り・型紙・説明を出し分ける。ガイドは取得したDesignDocumentの検証済みsnapshotを保存し、編集が進んでも旧版を保持する。閲覧工程だけの変更では確定作品・実物記録を書き換えない。不正なstamp・形状・別作品・null snapshotを拒否し、通常複製には取得版や実物記録を持ち込まない。C作業ツリーの check（108件）とnative IndexedDB（29件）が成功。新P1の自画像→2点選択→幅/高さ保護→希望→候補採用→分割PDF、旧ガイドの編集後/reload保持、320px/200%相当reflowも実ブラウザで確認中で、最終SHAの結果を以下へ追記する。
+
+Cの全体回帰は初回136/140で、通信失敗の個別案内が消えた2件と、再生を印刷工程に探す旧導線2件を検出した。通信失敗を一般のAI無効と区別して表示し、実際の再生は工程2、印刷画面は工程3で取得するよう確認手順を更新した。影響経路24件の再実行が成功。ガイド/PDF受入8件と共有希望・設定・遅延応答の模擬HTTP12件も実Appで成功しており、最終コミットではクリーン全体再実行を行う。分割PDFは実ダウンロード3種のA4寸法・頁数・頁描画を照合し、PC/mobileの回転配置6ページずつが全部入りと100dpi描画で一致した。全12頁を実際に開いて確認した所見は `printing-guide/visual-review.json`、数値結果は `printing-guide/split-render-comparison.json`。ダウンロードやガイド閲覧で実物確認済みを追加していない。
+
 変更前の同条件証跡は `artifacts/goal005/before/manifest.json`（自作絵/サンプル×PC/狭幅、36画面、実PDF4件）。実物・実Gemini・初見の人・実スマートフォン・Cloud Run公開は引き続き未実施。B〜DとP1/P4〜P8の新しい受入確認はこの段階では未完了。
 
 ## Goal 004-R — 現在の統合方針

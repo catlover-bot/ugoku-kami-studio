@@ -320,7 +320,7 @@ button[aria-pressed=true] { background: var(--accent-soft); border-color: var(--
   h1 { font-size: 21px; }
   .eyebrow { font-size: 13px; }
   .canvas-toolbar { padding-inline: 8px; }
-  .canvas-toolbar .segmented { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); width: 100%; gap: 2px; }
+  .canvas-toolbar .segmented { display: grid; grid-template-columns: repeat(auto-fit,minmax(64px,1fr)); width: 100%; gap: 2px; }
   .canvas-toolbar .segmented button { font-size: 14px; padding-inline: 5px; }
   .canvas-toolbar > .text-button { font-size: 14px; }
   .artwork-stage { padding: 5px; }
@@ -386,3 +386,14 @@ button[aria-pressed=true] { background: var(--accent-soft); border-color: var(--
 .image-failure > button { margin-top: 10px; }
 .record-photos label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
 .record-photos figcaption { font-size: 14px; color: var(--muted); }
+
+/* Current-stage controls keep important constraints outside the advanced drawer. */
+.primary-travel { margin: 12px 0 16px; }
+.primary-conditions .check-label { min-height: 44px; align-items: center; }
+.paper-limit { display: flex; gap: 10px; align-items: end; margin: 16px 0 8px; }
+.paper-limit label { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.paper-limit .draft-number { width: 78px; }
+.paper-limit > span { padding-bottom: 10px; white-space: nowrap; }
+.split-downloads { display: grid; gap: 8px; margin: 10px 0 16px; }
+.split-downloads button, #open-assembly-guide { width: 100%; min-height: 44px; }
+#assembly-guide { max-width: 1140px; margin: 0 auto; }

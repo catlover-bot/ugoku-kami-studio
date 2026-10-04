@@ -10,7 +10,8 @@ export { generateAssemblySvg } from './assembly-diagram.js';
 export const INSTRUCTION_PAGE_COUNT = 4;
 import { SAMPLE_PNG_DATA_URL } from './sample-artwork.js';
 export { ORIGINAL_SAMPLE_SVG, SAMPLE_PNG_DATA_URL } from './sample-artwork.js';
-export type ExportOptions = { imageDataUrl?: string; backgroundImageDataUrl?: string; fontBytes?: Uint8Array | ArrayBuffer };
+export type PdfMode = 'all' | 'pattern' | 'instructions';
+export type ExportOptions = { imageDataUrl?: string; backgroundImageDataUrl?: string; fontBytes?: Uint8Array | ArrayBuffer; mode?: PdfMode };
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]!);
 const num = (n: number) => Number(n.toFixed(4));
 const ink = rgb(0.13, 0.17, 0.16), pale = rgb(0.94, 0.94, 0.90), line = rgb(0.28, 0.33, 0.31);
@@ -167,6 +168,8 @@ const englishSteps = [
 ];
 export async function generatePdf(document: DesignDocument, options: ExportOptions = {}): Promise<Uint8Array> {
   const doc = verified(document); validateOptions(options, doc);
+  const mode = options.mode ?? 'all';
+  if (!['all', 'pattern', 'instructions'].includes(mode)) throw new Error('PDFの保存内容を選び直してください');
   const pdf = await PDFDocument.create();
   pdf.setTitle(`${doc.designId} revision ${doc.revision}`); pdf.setSubject(`PROTOTYPE - physically unverified single pull-tab; SHA-256 ${doc.designHash}; physically unverified`); pdf.setCreator('Ugoku Kami Studio');
   pdf.registerFontkit(fontkit);
@@ -261,5 +264,14 @@ export async function generatePdf(document: DesignDocument, options: ExportOptio
   textAt(reference, font, japanese ? '校正線の実測 ______ mm / 紙の種類・厚さ ____________________' : 'Measured calibration ______ mm / paper type and thickness ____________________', 10, 261, 2.9);
   textAt(reference, font, japanese ? '動作と修正内容 __________________________________________' : 'Motion and hand corrections ______________________________________________', 10, 273, 2.9);
   textAt(reference, font, `SHA-256 ${doc.designHash}`, 10, 290, 2.2);
-  return pdf.save();
+  if (mode === 'all') return pdf.save();
+  // Select from the completed shared generator: no second layout or scale. Copying
+  // referenced objects also excludes unused artwork from instructions-only files.
+  const selected = await PDFDocument.create();
+  selected.setTitle(pdf.getTitle()!);
+  selected.setSubject(`${pdf.getSubject()!}; PDF mode: ${mode}`);
+  selected.setCreator(pdf.getCreator()!);
+  const indices = pdf.getPageIndices().filter(index => mode === 'pattern' ? index < doc.layout.sheets : index >= doc.layout.sheets);
+  for (const page of await selected.copyPages(pdf, indices)) selected.addPage(page);
+  return selected.save();
 }

@@ -178,6 +178,8 @@ test('U5/U8 reduced motion and view-only controls preserve the design identity',
   await stage(page, 1);
   await page.getByLabel('表示倍率', { exact: true }).selectOption('2');
   await page.getByRole('button', { name: '全体を見る', exact: true }).click();
+  // Back mechanisms belong to the motion stage; view changes still preserve identity.
+  await stage(page, 2);
   await page.getByRole('button', { name: '裏のしくみ', exact: true }).click();
   await page.getByRole('button', { name: '正面', exact: true }).click();
   expect(await identity(page)).toEqual(original);

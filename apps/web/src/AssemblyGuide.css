@@ -1,0 +1,74 @@
+/* Guide only: inherit the workbench palette and keep the printable SVG unchanged. */
+.assembly-guide {
+  min-width: 0;
+  max-width: 100%;
+  padding: clamp(14px, 2vw, 28px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  overflow-wrap: anywhere;
+}
+.assembly-guide button, .assembly-guide summary { min-height: 44px; }
+.assembly-guide button { min-width: 44px; white-space: normal; }
+.assembly-guide-heading { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px 24px; }
+.assembly-guide-heading > div { flex: 1 1 20rem; min-width: 0; }
+.assembly-guide-heading h2 { font-size: 1.375rem; }
+.assembly-guide-heading p { margin-top: 6px; }
+.assembly-guide-materials { margin-block: 16px; border-block: 1px solid var(--line); }
+.assembly-guide-materials ul { margin-block: 0 16px; }
+.assembly-guide-materials li + li { margin-top: 12px; }
+.assembly-guide-materials li p { color: var(--muted); }
+.assembly-guide-view { display: flex; gap: 8px; }
+.assembly-guide-view button { font-size: 1rem; }
+.assembly-guide-reading { margin: 18px 0 12px; font-size: 1rem; font-weight: 600; }
+.assembly-guide-content, .assembly-guide-step { min-width: 0; max-width: 100%; }
+.assembly-guide-step h3 { font-size: 1.25rem; line-height: 1.6; }
+.assembly-guide-step > p { max-width: 75ch; margin-block: 18px; font-size: 1rem; }
+.assembly-guide-part-info { margin: 18px 0; }
+.assembly-guide-part-info > div { display: grid; grid-template-columns: minmax(8rem, 10rem) minmax(0, 1fr); gap: 6px 16px; padding-block: 10px; border-bottom: 1px solid var(--line); }
+.assembly-guide-part-info dt { font-size: .9375rem; font-weight: 600; }
+.assembly-guide-part-info dd { min-width: 0; margin: 0; font-size: 1rem; }
+.assembly-guide-figure { min-width: 0; max-width: 100%; margin-block: 20px; }
+.assembly-guide-figure figcaption { margin-bottom: 10px; font-size: .9375rem; color: var(--muted); }
+.assembly-guide-diagram {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  border: 1px solid var(--boundary);
+  border-radius: 6px;
+  background: var(--paper);
+  scrollbar-color: var(--boundary) var(--surface);
+  scrollbar-gutter: stable;
+}
+.assembly-guide-diagram:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.assembly-guide-diagram .assembly-illustration {
+  display: block;
+  width: 100%;
+  /* 190-unit SVG: its smallest 2-unit labels remain at least 12 CSS px.
+     Native horizontal scrolling preserves all existing parts and captions. */
+  min-width: 71.25rem;
+  max-width: none;
+  height: auto;
+  margin: 0;
+  border: 0;
+}
+.assembly-guide-glue, .assembly-guide-no-glue { margin-block: 16px; padding: 14px 18px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 4px; }
+.assembly-guide-no-glue { border-left-color: var(--ink); }
+.assembly-guide-glue h4, .assembly-guide-no-glue h4 { margin: 0 0 8px; font-size: 1.0625rem; line-height: 1.6; }
+.assembly-guide-glue ul, .assembly-guide-no-glue ul { margin-block: 0; }
+.assembly-guide-glue li + li, .assembly-guide-no-glue li + li { margin-top: 8px; }
+.assembly-guide-navigation { margin-top: 24px; justify-content: space-between; }
+.assembly-guide-navigation button { flex: 1 1 9rem; max-width: 20rem; font-size: 1rem; }
+.assembly-guide-identity { margin-top: 20px; border-top: 1px solid var(--line); }
+.assembly-guide-identity code { display: block; margin-top: 8px; overflow-wrap: anywhere; }
+.assembly-guide-content.all-steps .assembly-guide-step + .assembly-guide-step { margin-top: 36px; padding-top: 28px; border-top: 2px solid var(--line); }
+@media (max-width: 560px) {
+  .assembly-guide-part-info > div { grid-template-columns: minmax(0, 1fr); }
+  .assembly-guide-part-info dd { padding-left: 0; }
+  .assembly-guide-glue, .assembly-guide-no-glue { padding: 12px; }
+  .assembly-guide-navigation button { max-width: none; }
+}
+@media (forced-colors: active) {
+  .assembly-guide-diagram, .assembly-guide-glue, .assembly-guide-no-glue { border-color: CanvasText; }
+}

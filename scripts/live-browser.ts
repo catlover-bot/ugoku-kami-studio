@@ -113,6 +113,8 @@ export async function runBrowserCase(options: { page: Page; origin: string; proj
   try {
     await goStage(page, 2);
     await page.getByRole('button', { name: 'Gemini', exact: true }).click();
+    const aiSettings = page.locator('.ai-settings');
+    if (!(await aiSettings.evaluate(element => (element as HTMLDetailsElement).open))) await aiSettings.locator(':scope > summary').click();
     await page.getByLabel('AIアクセスコード').fill(accessSecret);
     await page.getByLabel('どんな動きにしたいですか？', { exact: true }).fill(result.prompt);
     await page.getByRole('button', { name: '変更案をつくる', exact: true }).click();
@@ -152,12 +154,15 @@ export async function runBrowserCase(options: { page: Page; origin: string; proj
       await json(join(outDir, 'checks.json'), validateDesign(result.adopted));
       result.pdf = await downloadKit(page, result.adopted, outDir);
       result.status = 'adopted-and-pdf-verified';
+      // Playback belongs to the motion stage; the print stage now opens the A4 preview.
+      await goStage(page, 2);
       for (const [label, name, phase] of [['はじめ', 'start', '0'], ['おわり', 'end', '1']] as const) {
         await page.getByRole('button', { name: label, exact: true }).click();
         await expect(page.locator('.workbench .artwork-svg')).toHaveAttribute('data-phase', phase);
         await expect(page.locator('main')).toHaveAttribute('data-design-hash', result.adopted.designHash);
         await page.locator('.workbench .preview-surface').screenshot({ path: join(outDir, `${name}.png`) });
       }
+      await goStage(page, 3);
       await page.screenshot({ path: join(outDir, 'print.png'), fullPage: true });
     } else {
       const proposal = run.proposal;

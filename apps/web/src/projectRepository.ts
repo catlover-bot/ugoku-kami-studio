@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { createDesign, type Rect } from '@ugoku/core';
+import { createDesign, parseDesignDocument, type DesignDocument, type Rect } from '@ugoku/core';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { STORAGE_KEY, MAX_PROJECT_BYTES, decodeImage, parseProject, serializeProject, physicalRecordSchema, verifyDataImage, type PhysicalRecord, type Project } from './project';
@@ -21,7 +21,7 @@ const draftSchema = z.object({
   selectionMode: z.enum(['drag', 'corners']).optional(),
   helper: z.enum(['manual', 'ai']).optional(),
   requestText: z.string().max(4000).optional(),
-  guide: stampSchema.extend({ step: z.number().int().min(1).max(100) }).optional(),
+  guide: stampSchema.extend({ step: z.number().int().min(1).max(100), document: z.unknown().optional() }).optional(),
 });
 /** Recovery only. These values are never added to a validated Project or sent to AI. */
 export type WorkspaceDraft = {
@@ -30,7 +30,7 @@ export type WorkspaceDraft = {
   numericBase?: { designId: string; revision: number; designHash: string };
   recordDraft?: PhysicalRecord; editing?: boolean; selectionReady?: boolean;
   selectionMode?: 'drag' | 'corners'; helper?: 'manual' | 'ai'; requestText?: string;
-  guide?: { designId: string; revision: number; designHash: string; step: number };
+  guide?: { designId: string; revision: number; designHash: string; step: number; document?: DesignDocument };
 };
 export const EMPTY_WORKSPACE_DRAFT: WorkspaceDraft = { stage: 1, zoom: 1, view: 'front', selection: null };
 const idSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
@@ -77,10 +77,16 @@ export async function validateWorkspaceDraft(value: unknown): Promise<WorkspaceD
   // Zod's object whitelist strips unknown fields at every level, including credentials.
   const draft = draftSchema.parse(value) as WorkspaceDraft;
   if (bytes(JSON.stringify(draft)) > MAX_PROJECT_BYTES) throw new Error('復元用の下書きは45MBまでです。写真を減らしてください。');
+  if (draft.guide && draft.guide.document !== undefined) {
+    const document = parseDesignDocument(draft.guide.document);
+    if (document.designId !== draft.guide.designId || document.revision !== draft.guide.revision || document.designHash !== draft.guide.designHash) throw new Error('組み立てガイドの設計版と保存情報が一致しません。');
+    draft.guide.document = document;
+  }
   for (const photo of draft.recordDraft?.photos ?? []) await verifyDataImage(photo);
   return draft;
 }
 function assertDraftOwner(draft: WorkspaceDraft, designId: string) {
+  if (draft.guide && draft.guide.designId !== designId) throw new StorageError('invalid', '組み立てガイドは対象の作品に保存してください。');
   if (draft.recordDraft?.designId && draft.recordDraft.designId !== designId) throw new StorageError('invalid', '実物記録の下書きは、元の作品に保存してください。');
 }
 async function thumbnail(dataUrl: string): Promise<string> {

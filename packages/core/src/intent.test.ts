@@ -2,6 +2,34 @@ import { describe, expect, it } from 'vitest';
 import { applyIntentPatch, buildDesignSuggestion, canExport, createDesign, createImageInput, getAssemblySteps, interpretDesignRequest, SAMPLE_INPUT } from './index.js';
 
 describe('request-derived constraints and manual assistance (no model)', () => {
+  it('preserves the existing paper budget by default without requiring the author to repeat it', () => {
+    for (const maxSheets of [1, 2, 7]) {
+      const base = createDesign({ ...SAMPLE_INPUT, maxSheets });
+      const intent = interpretDesignRequest(base, 'もう少し大きく動かしたい');
+      expect(intent.protections.maxSheets).toBe(maxSheets);
+      expect(intent.patch.maxSheets).toBeUndefined();
+      expect(() => applyIntentPatch(base, { travelMm: 25, maxSheets: maxSheets + 1 }, intent)).toThrow(`厚紙は${maxSheets}枚まで`);
+      const candidate = applyIntentPatch(base, { travelMm: 25 }, intent);
+      expect(candidate.input.maxSheets).toBe(maxSheets);
+      expect(candidate.input.locks).toEqual(base.input.locks);
+      expect(buildDesignSuggestion(base, 'もう少し大きく動かしたい').preserved.join(' ')).toContain(`A4 ${maxSheets}枚まで`);
+      expect(() => applyIntentPatch(base, { maxSheets: maxSheets + 1 }, { ...intent, protections: {} })).toThrow(`厚紙は${maxSheets}枚まで`);
+    }
+  });
+  it('allows an explicit new paper cap only when the existing budget is unlocked, preserving normal confirmation and tighter bounds', () => {
+    const base = createDesign(SAMPLE_INPUT), intent = interpretDesignRequest(base, 'もう少し大きく動かしたい。厚紙はA4で3枚まで');
+    expect(intent.conflicts).toEqual([]); expect(intent.protections.maxSheets).toBe(3);
+    const candidate = applyIntentPatch(base, {}, intent);
+    expect(candidate.input.maxSheets).toBe(3); expect(candidate.input.locks).toContain('maxSheets');
+    expect(base.input.maxSheets).toBe(2); expect(base.input.locks).toEqual([]);
+    expect(() => applyIntentPatch(base, { maxSheets: 4 }, intent)).toThrow('厚紙は3枚まで');
+    const locked = createDesign({ ...SAMPLE_INPUT, locks: ['maxSheets'] });
+    const blocked = interpretDesignRequest(locked, '厚紙はA4で3枚まで');
+    expect(blocked.conflicts.length).toBeGreaterThan(0); expect(() => applyIntentPatch(locked, {}, blocked)).toThrow();
+    const smaller = applyIntentPatch(locked, {}, interpretDesignRequest(locked, '厚紙はA4で1枚まで'));
+    expect(smaller.input.maxSheets).toBe(1); expect(smaller.input.locks).toContain('maxSheets');
+    expect(buildDesignSuggestion(base, 'もう少し大きく動かしたい。紙を増やして').status).toBe('clarify');
+  });
   it('keeps original image/selection/scale through A–F, persists protections, and revises every dependent output', () => {
     const original = createDesign(SAMPLE_INPUT);
     const first = buildDesignSuggestion(original, '首を右に出したい。絵の大きさは保って、厚紙はA4で2枚まで');

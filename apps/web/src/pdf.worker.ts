@@ -1,9 +1,9 @@
-import { generatePdf, type ExportOptions } from '@ugoku/export';
-import type { DesignDocument } from '@ugoku/core';
+import { generatePdf } from '@ugoku/export';
+import type { PdfWorkerRequest } from './pdf';
 
 // Font parsing, raster embedding and PDF serialization run away from UI input.
 const scope = self as unknown as {
-  onmessage: ((event: MessageEvent<{ document: DesignDocument; options: ExportOptions }>) => void) | null;
+  onmessage: ((event: MessageEvent<PdfWorkerRequest>) => void) | null;
   postMessage: (message: unknown, transfer?: Transferable[]) => void;
 };
 scope.onmessage = async event => {

@@ -56,6 +56,29 @@ async function setup(provider: ModelProvider, document = createDesign(SAMPLE_INP
 }
 
 describe('author intent through the actual server, core tools, approval and outputs (mock model communication)', () => {
+  it('exposes and enforces the default paper cap through inspection, model repair, final proposal and approval', async () => {
+    const provider = sequence([invoke('inspect_design'), invoke('propose_design_patch', { travelMm: 25, maxSheets: 3 }), invoke('propose_design_patch', { travelMm: 25 }), resultText]);
+    const s = await setup(provider), run = await s.start('もう少し大きく動かしたい');
+    expect(provider.histories[1]!.at(-1)!.parts![0]!.functionResponse!.response!.requestProtections).toMatchObject({ maxSheets: 2 });
+    expect(provider.histories[2]!.at(-1)!.parts![0]!.functionResponse!.response!.error).toMatchObject({ code: 'protected_condition' });
+    expect(run.status).toBe('awaiting_approval');
+    expect(run.proposal!.document.input.maxSheets).toBe(2);
+    expect(run.proposal!.protectedConditions.join(' ')).toContain('2枚以内');
+    expect(s.session.document).toEqual(s.document);
+    const approved = s.app.runs.approve(s.session, run.proposal!.id, { requestId: run.requestId, baseRevision: run.baseRevision, baseHash: run.baseHash }).document;
+    expect(approved.input.travelMm).toBe(25); expect(approved.input.maxSheets).toBe(2);
+  });
+
+  it('accepts an explicitly requested unlocked paper budget only after proposal approval', async () => {
+    const provider = sequence([invoke('propose_design_patch'), resultText]);
+    const s = await setup(provider), run = await s.start('動く距離を25mmにしたい。厚紙はA4で3枚まで');
+    expect(run.status).toBe('awaiting_approval');
+    expect(run.proposal!.protectedConditions.join(' ')).toContain('3枚以内');
+    expect(run.proposal!.document.input.maxSheets).toBe(3);
+    expect(s.session.document.input.maxSheets).toBe(2);
+    const approved = s.app.runs.approve(s.session, run.proposal!.id, { requestId: run.requestId, baseRevision: run.baseRevision, baseHash: run.baseHash }).document;
+    expect(approved.input.maxSheets).toBe(3); expect(approved.input.locks).toContain('maxSheets');
+  });
   it('keeps author-approved v2 artwork repair through the tool loop and rejects model repair edits', async () => {
     const original = applyArtworkRepair(createDesign(SAMPLE_INPUT), { mode: 'solid', color: '#e6cfaa' });
     const provider = sequence([invoke('propose_design_patch', { artworkRepair: { mode: 'white' } }), invoke('propose_design_patch', { travelMm: 15 }), resultText]);

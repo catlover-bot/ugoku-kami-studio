@@ -31,7 +31,7 @@ export function describeDesignChanges(before: DesignDocument, after: DesignDocum
 export function interpretDesignRequest(document: DesignDocument, request: string): DesignIntent {
   const doc = parseDesignDocument(document), input = doc.input;
   const text = request.normalize('NFKC').trim();
-  const intent: DesignIntent = { supported: true, patch: {}, addLocks: [], protections: {}, conflicts: [], notes: [], relativeTravel: null };
+  const intent: DesignIntent = { supported: true, patch: {}, addLocks: [], protections: { maxSheets: input.maxSheets }, conflicts: [], notes: [], relativeTravel: null };
   const addLock = (key: LockKey) => { if (!intent.addLocks.includes(key)) intent.addLocks.push(key); };
   // Negative motion clauses are removed only when their subject is explicit.
   const motionText = text.replace(/(?:回転|回す|揺らす|振る)(?:は)?(?:しない|させない|さない|不要|ではなく|じゃなく)/g, '');
@@ -54,8 +54,9 @@ export function interpretDesignRequest(document: DesignDocument, request: string
     intent.protections.maxSheets = cap; intent.patch.maxSheets = cap; addLock('maxSheets');
     intent.notes.push(`厚紙はA4 ${cap}枚まで。説明書は別です。${noMorePaper ? '現在使う型紙の枚数を増やしません。' : ''}`);
     if (input.locks.includes('maxSheets') && cap > input.maxSheets) intent.conflicts.push(`厚紙の上限${input.maxSheets}枚は固定中です。詳細設定で紙の上限の固定を解除し、変更を確認してください。`);
-  }
+  } else intent.notes.push(`現在の厚紙の上限、A4 ${input.maxSheets}枚までを保ちます。説明書は別です。`);
   if (morePaper && input.locks.includes('maxSheets')) intent.conflicts.push('紙枚数の上限は固定中です。増やす場合は詳細設定で固定を解除してから上限を変更してください。');
+  else if (morePaper && !caps.length && !noMorePaper) intent.conflicts.push('紙を増やす場合は「A4で3枚まで」のように、新しい上限を指定してください。');
   const found = (Object.entries({ right: /右(?:へ|に|方向)|\bright\b/i, left: /左(?:へ|に|方向)|\bleft\b/i, up: /上(?:へ|に|方向)|\bup(?:ward)?\b/i, down: /下(?:へ|に|方向)|\bdown(?:ward)?\b/i }) as [Direction, RegExp][]).filter(([, re]) => re.test(text)).map(([key]) => key);
   if (found.length > 1) intent.conflicts.push('動かす方向を1つ選んでください。複数方向の動きには対応していません。');
   if (found.length === 1) { intent.patch.direction = found[0]; intent.protections.direction = found[0]; }
@@ -88,7 +89,10 @@ export function applyIntentPatch(document: DesignDocument, patch: DesignPatch, i
   const merged = DesignPatchSchema.parse({ ...intent.patch, ...patch });
   const p = intent.protections;
   for (const key of ['widthMm', 'heightMm', 'direction'] as const) if (p[key] !== undefined && (merged[key] ?? base.input[key]) !== p[key]) throw new Error(`${names[key]}は依頼で保護されています。条件変更の提案と利用者の確認が必要です。`);
-  if (p.maxSheets !== undefined && (merged.maxSheets ?? base.input.maxSheets) > p.maxSheets) throw new Error(`厚紙は${p.maxSheets}枚までです。紙を増やす前に条件変更の確認が必要です。`);
+  // The current paper budget is always trusted, even when an older intent omits it.
+  // Only the parser's explicit author-specified cap can authorize a larger budget.
+  const maxSheets = p.maxSheets ?? base.input.maxSheets;
+  if ((merged.maxSheets ?? base.input.maxSheets) > maxSheets) throw new Error(`厚紙は${maxSheets}枚までです。紙を増やす前に条件変更の確認が必要です。`);
   const travel = merged.travelMm ?? base.input.travelMm;
   if (intent.relativeTravel === 'increase' && travel <= base.input.travelMm || intent.relativeTravel === 'decrease' && travel >= base.input.travelMm) throw new Error('候補の移動距離が「大きく／小さく」の希望と一致しません。実現できない場合は条件変更案を示してください。');
   // A direct request may tighten an existing upper bound, but never silently loosen it.
