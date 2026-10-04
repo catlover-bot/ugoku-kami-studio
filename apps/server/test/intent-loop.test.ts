@@ -209,6 +209,23 @@ describe('author intent through the actual server, core tools, approval and outp
     expect(run.message).toContain(run.validationIssues[0]!.message); expect(run.constraintSuggestions).toHaveLength(1); expect(s.session.document).toEqual(s.document);
   });
 
+  it('rejects the failing candidate value as a condition change while permitting a different explicit suggestion', async () => {
+    const changed = { key: 'widthMm', value: 180, reason: '作品の幅を変えることを許すか、手動で選択範囲を見直してください。' };
+    const provider = sequence([invoke('propose_design_patch'), invoke('propose_constraint_change', { key: 'travelMm', value: 70, reason: 'この距離では成立しません。' }), invoke('propose_constraint_change', changed), resultText]);
+    const s = await setup(provider); const run = await s.start('距離を70mmに。絵の大きさは変えない。紙は増やさない');
+    expect(toolResult(provider.histories[2]!).error).toMatchObject({ code: 'invalid_arguments' });
+    expect(run.constraintSuggestions).toEqual([changed]);
+    expect(run.error?.code).toBe('validation_failed'); expect(run.validationIssues.length).toBeGreaterThan(0);
+    expect(run.proposal).toBeUndefined(); expect(s.session.document).toEqual(s.document);
+  });
+
+  it.each(['direction', 'paperThicknessMm'] as const)('also rejects unchanged %s suggestions on the valid current design', async key => {
+    const provider = sequence([invoke('propose_constraint_change', { key, value: SAMPLE_INPUT[key], reason: '現在と同じ値の提案です。' }), resultText]);
+    const s = await setup(provider); const run = await s.start('右へ動かしたい');
+    expect(toolResult(provider.histories[1]!).error).toMatchObject({ code: 'invalid_arguments' });
+    expect(run.constraintSuggestions).toEqual([]); expect(run.proposal).toBeUndefined(); expect(s.session.document).toEqual(s.document);
+  });
+
   it('reject leaves newly requested protections unapplied; existing protected conditions cannot be unlocked by prose', async () => {
     const s = await setup(adjustingProvider()); const run = await s.start('少し大きく動かしたい。絵のサイズを保って、厚紙は2枚まで');
     expect(run.proposal).toBeDefined(); s.app.runs.reject(s.session, run.proposal!.id); expect(s.session.document).toEqual(s.document); expect(s.session.document.input.locks).toEqual([]);

@@ -22,7 +22,7 @@ export const declarations: ToolDeclaration[] = [
   } },
   { name: 'validate_design', description: '最新候補の全検査を再計算する。unknownをpassにしない。', parametersJsonSchema: noArgs },
   { name: 'arrange_pages', description: '最新候補の全機構部品をA4紙面へ決定的に配置する。縮小しない。', parametersJsonSchema: noArgs },
-  { name: 'propose_constraint_change', description: '固定条件を変える案を表示するだけ。実際の条件や設計は変更しない。', parametersJsonSchema: {
+  { name: 'propose_constraint_change', description: '固定条件を変える案を表示するだけ。最新候補と異なる具体値を指定する。同じ値や失敗した値の繰り返しは変更案にならない。実際の条件や設計は変更しない。', parametersJsonSchema: {
     type: 'object', properties: { key: { type: 'string', enum: ['travelMm', 'direction', 'widthMm', 'heightMm', 'maxSheets', 'paperThicknessMm', 'clearanceMm'] }, value: { anyOf: [number, direction] }, reason: { type: 'string' } }, required: ['key', 'value', 'reason'], additionalProperties: false,
   } },
 ];
@@ -92,6 +92,7 @@ export function executeTool(name: string, args: unknown, context: ToolContext): 
       const suggestion = Constraint.parse(args);
       if ((suggestion.key === 'direction') !== (typeof suggestion.value === 'string')) throw new AppError('invalid_arguments', '条件の値の型が一致しません。');
       DesignPatchSchema.parse({ [suggestion.key]: suggestion.value });
+      if (context.candidate.input[suggestion.key] === suggestion.value) throw new AppError('invalid_arguments', '最新候補と同じ値は条件変更案にできません。変更する具体値を指定してください。');
       context.constraintSuggestions.push(suggestion);
       return { suggestion, applied: false, nextStep: '利用者が手動で固定を解除・変更してから再実行してください。' };
     }
