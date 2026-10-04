@@ -10,7 +10,7 @@
 
 [Goal 007-R](docs/goals/007r-local-ai-clean-ui.md) では、既存OllamaとローカルGemmaを使う接続を追加し、希望入力と候補の採否を同じ作業領域へ整理しました。Geminiを含むホスト型推論APIはこのGoalでは実行しません。設定・実測・WSLの起動方法は [AI接続の説明](docs/live-gemini.md) を参照してください。
 
-[Goal 008](docs/goals/008-submission-ready.md)では、条件変更の助言も提示前にコアで検査し、公開に備えた接続復帰と提出素材を準備しています。Cloud Run書込み・公開・YouTube投稿・Zenn提出は未実施です。公開承認待ちとローカルで実行可能な作業を分けて進めます。
+[Goal 008](docs/goals/008-submission-ready.md)では、条件変更の助言も提示前にコアで検査し、公開に備えた接続復帰と提出素材を準備しています。2026-10-05 JSTに、本人の許可で非公開のCloud Run＋Gemma限定試験を行い、試験サービスは削除しました。初回AIは180秒で時間切れ、同一依頼のキャッシュが温まった状態では78.5秒で候補を作成し、採用した同じ版のPDF・保存再開まで確認しました。中断のHTTP400は修正してローカル回帰を確認しましたが、Cloud再試験はしていません。**公開運用・審査可能なURLの提供にはまだ進めません。** [限定試験の結果・費用・残存保管](docs/cloud-trial-008.md)を参照してください。YouTube投稿・Zenn提出は未実施です。
 
 ## 起動
 
@@ -118,6 +118,7 @@ AIの「実行の記録」から、モデル・実行ID・ツール・検査・�
 - [Goal 004の全文](docs/goals/004-live-gemini-and-prototype.md) / [実Gemini設定](docs/live-gemini.md) / [印刷する1作品](docs/prototype-004.md)
 - [Goal 005の全文](docs/goals/005-product-experience.md) / [Goal 006の全文](docs/goals/006-request-understanding.md)
 - [Goal 007-Rの全文と記録](docs/goals/007r-local-ai-clean-ui.md)
+- [Goal 008の非公開Cloud試験と残る課題](docs/cloud-trial-008.md)
 - [アーキテクチャ](docs/architecture.md) / [図](docs/architecture.svg)
 - [検証記録・既知の制約](docs/verification.md)
 - [公式資料・依存バージョン・素材の出典](docs/sources-and-versions.md)

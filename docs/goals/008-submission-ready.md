@@ -339,3 +339,13 @@ D. 最終版の紹介文・構成図・実画面・MP4をそろえ、フォー�
 - Spend capの対象・制限: https://docs.cloud.google.com/billing/docs/how-to/budgets-spend-caps
 
 参照日: 2026-10-04。実装・公開・提出を行う時点で必要な項目を再確認してください。
+
+## 2026-10-05 JST — 非公開の限定試験と片付けの記録
+
+上記のGoal本文を保持したまま、本人から追加された具体的な許可に基づく実行結果を追記する。一般公開・継続運用・YouTube投稿・Zenn提出は実施していない。
+
+`04138ab` を東京の非公開Cloud Runへ配置し、app 1 vCPU/1 GiB＋Ollama 4 vCPU/8 GiB、既存Gemmaで実AIを失敗・中断含め3回だけ実行した。初回は180秒で時間切れ、同一依頼のキャッシュが温まった状態では78.5秒で候補提示に到達し、第14版へ採用した同版PDF・ガイド・保存再開を確認した。3回目の中断DELETEはHTTP400で、Cloud中断成功とは扱わない。本文のない要求へJSON Content-Typeを付けない製品修正 `dcedf93` は、実Fastifyへ接続するPC/狭幅のローカル6ケースで成功したが、Cloud再試験はしていない。
+
+試験サービスと専用リソースは削除済み。概算約US$1.39には未測定予備US$1.20を含み、実請求額・クレジット消費額は未取得。ソース約3.34 GiBの7日soft deleteは残存があり、完全消去・費用ゼロを断言しない。初回AIの性能と修正版Cloud未検証が残るため、公開運用にはまだ進めず、審査用URLもない。`DEPLOYED_REVIEWABLE`／`READY_TO_SUBMIT`／`SUBMITTED`は未達成。
+
+実測・修正・残存保管・許可の範囲は [Cloud限定試験記録](../cloud-trial-008.md)、提出素材との区別は [デモと提出準備](../demo-and-submission.md) を参照する。既存MP4はWSL収録であり、今回のCloud成功映像へ付け替えない。

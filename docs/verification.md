@@ -1,8 +1,20 @@
 # 検証記録
 
-## Goal008 — 提出準備中（公開・提出は未実施）
+## Goal008 — 2026-10-05 JSTの非公開Cloud限定試験
 
-2026-10-04、開始mainは `bc5042e30a243541ddeee616bfb45d489f579689`。同SHAのCheck/WebKit成功を確認しました。再提示されたGoal001は保存済み本文と一致し、基盤要件として維持します。本人確認ではZenn未提出。通常main統合・push・CIは継続許可、クラウド書込み・公開・YouTube投稿・Zenn提出は未許可です。
+本人の明示許可で、東京のCloud Runにapp 1 vCPU/1 GiB＋Ollama 4 vCPU/8 GiBを配置し、同じGemmaを通常UIから3回だけ実行した。試験サービスと専用リソースは削除済みで、一般公開・提出・継続運用は行っていない。[試験結果・費用・残る課題](cloud-trial-008.md)を現在の記録とし、下の未認証・未実行記録は試験前の経過として残す。
+
+Cloud試験のソースは `04138abde3a3b975a1ec66e8b314f659bf9bd27b`。[Check（全体・保存・appコンテナ）](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37211727482)／[WebKit](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37211727416)は同SHAで成功した。モデル入りイメージは別途Cloud Buildでビルド・digest固定し、非公開Cloud Runで実起動した。通常CIのapp-only成功と混同しない。
+
+初回はモデル1回・ツール0回、180.003秒で時間切れとなり、第13版の原本を保持した。同一依頼をキャッシュが温まった状態で実行した次の1回は、78.514秒・モデル2回・ツール1回で候補提示に到達。20→25mmを比較して通常UIの操作で第14版へ採用し、同じdesignHashの5ページA4 PDF、組み立てガイド、保存再読込を確認した。この温状態の結果を、新しい依頼・新しいインスタンス・初回アクセスの速度へ一般化しない。
+
+3回目の中断操作はDELETEがHTTP400となり、原本保持は確認したがCloud上の中断成功とは扱わない。製品の共通送信処理が本文のないDELETEにもJSON Content-Typeを付け、Fastifyに拒否される問題だった。`dcedf932e271d2242280813c65cc8ed4056067c4` で本文がある時だけJSONヘッダーを付ける最小修正を行った。実ブラウザー→実Fastifyの回帰は修正前に中断・候補却下の400を再現し、修正後はPC/狭幅計6件成功。中断応答200・サーバー側cancel/abort・却下・session削除・既存の訂正/採用/PDFを確認した。モデル通信だけを注入しており、実AIは追加していない。修正版のCloud再デプロイ・中断再試験は未実施。
+
+削除時刻と割当指標等に基づく概算は約US$1.39で、うちUS$1.20は未測定項目の予備。請求額・クレジット消費額は未取得。約3.34 GiBのソースオブジェクトは7日soft deleteの残存があり、即時の完全消去や費用ゼロを保証しない。初回AIの時間切れと修正版Cloud未検証が残り、`DEPLOYED_REVIEWABLE`／`READY_TO_SUBMIT`は未達成。公開URLもない。
+
+## Goal008 — 2026-10-04の提出準備記録
+
+2026-10-04、開始mainは `bc5042e30a243541ddeee616bfb45d489f579689`。同SHAのCheck/WebKit成功を確認しました。再提示されたGoal001は保存済み本文と一致し、基盤要件として維持します。本人確認ではZenn未提出。開始時点では通常main統合・push・CIは継続許可、クラウド書込み・公開・YouTube投稿・Zenn提出は未許可でした。後の非公開限定試験は上記の別の明示許可に基づきます。
 
 不成立の50mm条件案は実コアで再現し、構造化助言も提示前に検査するよう修正しました。通る仮案も固定条件の変更承認ではなく、採用ボタンへ昇格させません。モデル案/決定的検査の出所と版を保存し、実物unknownを維持します。`artifacts/goal008/suggestion-review/`は追加推論0回のbefore/afterです。
 
@@ -22,9 +34,9 @@
 
 製品固定SHA `da00d3f` の [Check（全体・保存・通常コンテナ）](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37192844917) と [WebKit](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37192844929) は成功しました。撮影補助を含む最終mainのSHAと同SHAのCI結果は、循環した自己参照を避け `artifacts/goal008/main-integration.json` に保持します。モデル入りコンテナの実起動やクラウド公開の成功とは区別します。
 
-Cloud Runはapp/Ollama同一インスタンス、instance-based CPU、HTTP8/モデル1、min0/max1の計画を作成。モデル/ランタイムの全SHA、公式Node linux/amd64 manifestを固定しました。重み4,336,359,085 bytesとruntime70,751,265 bytesのstage照合は成功。モデル入りコンテナ・Cloud Run admission/性能・公開審査経路は未確認です。通常のapp-only CIと区別します。`deploy:plan -- --ollama`は不足設定を表示し、クラウド操作をしません。
+Cloud Runはapp/Ollama同一インスタンス、instance-based CPU、HTTP8/モデル1、min0/max1の計画を作成。モデル/ランタイムの全SHA、公式Node linux/amd64 manifestを固定しました。重み4,336,359,085 bytesとruntime70,751,265 bytesのstage照合は成功。この準備時点ではモデル入りコンテナ・Cloud Run admission/性能・公開審査経路は未確認でした。後の実試験は上記に分けて記録します。`deploy:plan -- --ollama`は現在も不足設定を表示するdry-runで、クラウド操作をしません。
 
-公開先候補は標準gcloud配置、関連環境変数、本リポジトリ設定の読み取りでは見つかりませんでした。その後、本人から既存projectと東京リージョンの候補指定を受け、非公開資料へ記録しました。公式配布SHAを検証したgcloud 587.0.0を専用ユーザー領域へ導入し、指定projectだけのREST読み取りhelperを準備しました。専用configの認証は0件で、実行結果は `authentication_required` / cloudRequests 0 / cloudWrites 0。本人認証後に再開します。7件の模擬試験で通信範囲・秘密除外・権限不足・API未有効の扱いを検証しましたが、IAM/請求先/クォータの実確認は未完了です。費用・停止方法はGit対象外の `artifacts/submission/private/cost-plan.md`。このローカル準備をDEPLOYED_REVIEWABLEやREADY_TO_SUBMITとはしません。実Gemini・実物・初見の人・実スマートフォンも未確認です。
+公開先候補は標準gcloud配置、関連環境変数、本リポジトリ設定の読み取りでは見つかりませんでした。その後、本人から候補指定を受け、非公開資料へ記録しました。公式配布SHAを検証したgcloud 587.0.0を専用ユーザー領域へ導入し、指定projectだけのREST読み取りhelperを準備しました。最初の実行は `authentication_required` / cloudRequests 0 / cloudWrites 0でした。その後の本人認証、対象の変更、IAM/請求先/クォータ確認、限定試験の承認は非公開記録へ追記し、当初の報告を上書きしていません。読み取りhelperの7件の模擬試験と実クラウド確認は別の証拠です。費用・停止方法はGit対象外の `artifacts/submission/private/cost-plan.md`。実Gemini・実物・初見の人・実スマートフォンは未確認のままです。
 
 
 ## Goal 006 — 希望の読み取りと訂正（実装・回帰確認済み）

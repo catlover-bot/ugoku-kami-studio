@@ -2,7 +2,7 @@
 
 ## 権限の境界
 
-2026-10-04現在、対象プロジェクト・期間・予算の承認は未確定で、クラウド書込み、IAM変更、公開デプロイは実施していない。以下は準備手順。現時点では公開URLはない。ローカルGemmaの通常UI実行と、Cloud Run上のAI実行は別の確認項目である。
+2026-10-05 JST、本人の明示許可に基づく非公開の限定試験と片付けを実施した。Cloud Build・Registry・Secret・専用IAM・Cloud Runを使用し、試験サービスと専用リソースは削除済み。審査用の公開URLはなく、一般公開・継続運用・YouTube投稿・提出は今回の許可に含めない。初回AIの時間切れと中断不具合が見つかり、公開運用にはまだ進めない。[限定試験記録](cloud-trial-008.md)に実測、修正した版、再試験の未実施、費用とsoft delete残存を記録した。以下は再利用可能な準備手順であり、新たな実行許可ではない。
 
 ## コンテナ
 
@@ -12,9 +12,9 @@ docker run --rm -p 8080:8080 --name ugoku-kami-studio ugoku-kami-studio:local
 curl --fail http://127.0.0.1:8080/api/health
 ```
 
-UIとAPIは同一オリジン。コンテナは非rootユーザー、`0.0.0.0:$PORT`、既定8080。コンテナのファイルシステムに利用者のプロジェクトを永続保存しない。WSLにはDockerがないため、標準GitHub Linuxランナーで検証した。[初回の実行結果](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37168807826)では、既存Dockerfileのビルド・実起動・healthに加え、PCと狭幅のChromiumで手動編集・保存復帰・同版の原寸PDF取得が成功した。実コンテナのAI無効状態と実行拒否も確認した。レジストリへのpush・Cloud Run公開は行っていない。
+UIとAPIは同一オリジン。コンテナは非rootユーザー、`0.0.0.0:$PORT`、既定8080。コンテナのファイルシステムに利用者のプロジェクトを永続保存しない。WSLにはDockerがないため、標準GitHub Linuxランナーで検証した。[初回の実行結果](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37168807826)では、既存Dockerfileのビルド・実起動・healthに加え、PCと狭幅のChromiumで手動編集・保存復帰・同版の原寸PDF取得が成功した。実コンテナのAI無効状態と実行拒否も確認した。この初回CIはレジストリへのpushやCloud Run実行を含まない。後の限定試験では両イメージをビルド・格納し、非公開Cloud Runで実行後に削除した。
 
-両DockerfileのNodeベースは `node:24.20.0-bookworm-slim@sha256:6642ef280aebc09c4541bee0b15c9f89f0f3f3c247ddee79ae1d37eddfdcbbaa` に固定した。これはmultiarch indexではなく **linux/amd64専用のOCI image manifest**。2026-10-04に公式Docker Hubのindexと該当manifestだけを匿名で取得し、各HTTP本文のSHA-256、レスポンスdigest、index内のplatform・サイズ・media typeを照合した。[照合記録](../deployment/node-base-image.json)と[Registry公式仕様](https://docs.docker.com/reference/api/registry/latest/)を参照。イメージ本体・config blobは取得しておらず、この固定後のappビルドはCIで、Ollamaモデルコンテナの実行・移植性は別途検証する。過去のコンテナ成功を新digestの実行結果とは扱わない。
+両DockerfileのNodeベースは `node:24.20.0-bookworm-slim@sha256:6642ef280aebc09c4541bee0b15c9f89f0f3f3c247ddee79ae1d37eddfdcbbaa` に固定した。これはmultiarch indexではなく **linux/amd64専用のOCI image manifest**。2026-10-04の匿名照合では公式Docker Hubのindexと該当manifestだけを取得し、各HTTP本文のSHA-256、レスポンスdigest、index内のplatform・サイズ・media typeを確認した。[照合記録](../deployment/node-base-image.json)と[Registry公式仕様](https://docs.docker.com/reference/api/registry/latest/)を参照。その後、この固定を使うappとモデルイメージのCloud Build・Cloud Run実起動を限定試験で確認した。arm64等への移植性や公開性能まで検証したものではない。
 
 コンテナ起動後の画面検証は `npx playwright test --config playwright.container.config.ts`。既定の接続先は `http://127.0.0.1:8080` で、この設定はホスト側Webサーバーを代わりに起動しない。証拠には対象コミット・コンテナimage ID・設計版・PDF hashを残す。
 
@@ -33,7 +33,7 @@ npm run deploy:plan
 
 実行許可後は、対象と費用上限を確定し、既存リソースを確認、コンテナをビルド・検査、承認したイメージを既存レジストリへ格納、認証必須でデプロイ、許可したアカウントからヘルス/UI/ダウンロードを確認する。IAM変更は必要な対象について別途明示許可を得る。計画は `--no-allow-unauthenticated` と `AI_PROVIDER=none` を初期設定にする。
 
-## 同一インスタンス内のGemma構成（準備済み・未公開）
+## 同一インスタンス内のGemma構成（限定試験後、未公開）
 
 `npm run deploy:plan -- --ollama` は、Cloud Runのapp＋Ollama構成をネットワークなしで検査・表示する。既定の手動版計画と同じく実行機能はなく、`--execute`を拒否する。対象が不足している間はmanifestを作らない。設定がそろった場合の `--output DIR` は、上書きを拒否してローカルへ `service.json`（YAMLとしても有効なJSON）と `plan.json` を出力する。
 
@@ -51,7 +51,7 @@ npm run deploy:plan
 
 HTTPの202応答後もRunManagerが推論を続けるため、短いpollの間だけCPUを与える設定は採用しない。[Cloud RunのCPU割当て](https://docs.cloud.google.com/run/docs/configuring/billing-settings)を使用する。appだけがingressを持ち、11434は共有ネットワーク内でstartup probeを受ける。Ollamaの汎用APIを外へ公開するポート・転送経路は作らない。[複数コンテナの通信](https://docs.cloud.google.com/run/docs/deploying#sidecars)と[startup依存関係](https://docs.cloud.google.com/run/docs/configuring/services/containers#container-startup-order)に基づく。
 
-この5 vCPU / 9 GiBは検証開始用の案で、公開性能・最小構成の保証ではない。既存WSLの16k実L1で観測したOllama＋子プロセスRSS最大は約4.965 GiB（500ms採取、共有ページの重複計上・短いピークの見逃しあり）。8 GiBは一時バッファ等への余裕を持つ。4 vCPUの速度、app 1 GiBでの画像処理、Cloud Runのモデル読み込みとメモリは未測定。最初のAI操作でモデルを読むため、TCP health成功をAI準備完了と呼ばない。
+この5 vCPU / 9 GiBは限定試験の構成で、公開性能・最小構成の保証ではない。既存WSLの16k実L1で観測したOllama＋子プロセスRSS最大は約4.965 GiB（500ms採取、共有ページの重複計上・短いピークの見逃しあり）。Cloud Runの60秒採取ではOllamaの最大観測値は約4.90 GiBだったが、瞬間ピークではない。初回はモデル読込みと約5.7k tokensの前処理が重く、180秒で時間切れ。同一依頼のキャッシュが温まった次の試行は78.5秒で候補提示に到達した。別の希望や新規インスタンスで同じ速さを保証しない。最初のAI操作でモデルを読むため、TCP health成功をAI準備完了と呼ばない。
 
 service-level max1に加えrevision max1を設定し、新revisionへ100%のトラフィックを送り、不要なタグや分割は使わない。[最大instance数](https://docs.cloud.google.com/run/docs/configuring/max-instances)には一時的な超過等の注意点があり、session affinityも永続化ではない。再起動・scale-to-zero・切替でセッション、未採用案、実行制限のカウンターは失われる。ブラウザのIndexedDB作品を残し、再接続後に本人が明示して再実行する。自動的な二重推論をしない。WSL originの保存作品は公開originへ自動移行しないため、必要な作品はファイルで持ち込む。
 
@@ -71,7 +71,7 @@ docker build --platform linux/amd64 -t ugoku-kami-app:review .
 docker build --platform linux/amd64 --network none -t ugoku-kami-ollama:review artifacts/goal008/model-context
 ```
 
-通常CIのモデルなしappコンテナ確認は維持する。4GBの重みを通常CIで新規取得しない。モデル入りイメージについては、同一network namespaceで起動した2コンテナの実ブラウザ確認が別途必要。最終的に検証したappとOllama双方のレジストリdigestを記録する。タグだけの画像指定は計画生成が拒否する。コンテナは非root、重みは読み取り専用であり、起動時にdownloadしない。
+通常CIのモデルなしappコンテナ確認は維持する。4GBの重みを通常CIで新規取得しない。モデル入りイメージは限定試験のCloud Buildで作り、同一Cloud Runインスタンス内の2コンテナを実ブラウザから確認した。検証・権限設定を中間build stageで済ませ、完成したbundleを最終imageへ一度だけCOPYし、chmodによる重みの重複レイヤーを避ける。試験したappとOllama双方のレジストリdigestは非公開の試験記録に保持した。タグだけの画像指定は計画生成が拒否する。コンテナは非root、重みは読み取り専用であり、起動時にdownloadしない。
 
 ### 対象と許可がそろってから行う操作
 
@@ -87,7 +87,7 @@ npm run deploy:plan -- --ollama --output artifacts/goal008/reviewed-deployment
 
 公開判定には、新規ブラウザで実Gemma→実検査→比較→本人採用→同版PDF/ガイド→保存再開をPCと狭幅で実行し、不成立・中断・session失効時の原本保持、冷間／温間時間も記録する。別端末からの確認は実施した場合だけ記録する。health、stage、YAML形状検査、既存WSL実行だけでは公開AI合格にならない。検証失敗時は公開URLを提出しない。停止・費用・12月1日までの保全は承認した運用計画に従い、公開撤回とinstance停止を別操作として確認する。
 
-公式参照は2026-10-04確認。Cloud Runの[コンテナ契約](https://docs.cloud.google.com/run/docs/container-contract)、[health check](https://docs.cloud.google.com/run/docs/configuring/healthchecks)の実際の環境への適用と、モデルコンテナのCloud Run admissionは未検証。
+公式参照は2026-10-04確認。Cloud Runの[コンテナ契約](https://docs.cloud.google.com/run/docs/container-contract)、[health check](https://docs.cloud.google.com/run/docs/configuring/healthchecks)に基づく構成は限定試験でadmission・実起動まで確認した。2026-10-05 JST時点の公開判定は不合格のままで、中断修正後のCloud再試験も未実施。[実測と片付け](cloud-trial-008.md)を過去の準備状態より優先して参照する。
 
 ## 有料AIを有効化する前に
 
