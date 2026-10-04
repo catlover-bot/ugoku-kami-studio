@@ -6,9 +6,48 @@
 
 GitHubの既存認証を読み取り、login `catlover-bot` / user ID `203637895` / 表示名 `m.hirotaka` が指定本人と一致することを確認した。既存のGit作成者設定が空だったため、このリポジトリだけに確認済み表示名とID付きnoreplyアドレスを設定した。global設定は変更していない。
 
-開始時はHEAD・remote mainとも `c7f1149508e0ef7a31d159f2e64450fceefbd3e0` で、旧Goalブランチにも追加コミットはなかった。最新実装はステージ済み62ファイル・未ステージ31ファイル・未追跡のソースに存在するため、現在の内容を確認して初回統合する。新作業ブランチは `feat/004r-main-integration`。差分・開始時hashはローカルの `artifacts/goal004r/baseline.json` に保全した。
+開始時はHEAD・remote mainとも `c7f1149508e0ef7a31d159f2e64450fceefbd3e0` で、旧Goalブランチにも追加コミットはなかった。最新実装はステージ済み62ファイル・未ステージ31ファイル・未追跡のソースに存在した。差分・開始時hashはローカルの `artifacts/goal004r/baseline.json` に保全し、indexと作業ファイルの両方を公開レビューした。確認済みの103パスを明示して最新版をステージし、同じ内容であることをhashで確認した。元の依頼文のCRLFは保持し、空白検査は `git -c core.whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol diff --cached --check` で実行した。
 
-進捗は A:ローカル実装・検証、B:コミット・main統合、C:GitHub CI・コンテナ、D:実Gemini、E:実物、F:初見の人・実スマートフォン、G:Cloud Run公開を分ける。A〜CをこのGoalで実行し、D〜Gは未確認のまま独立した残作業として扱う。下記Goal004の97/92/4件は引継ぎ結果で、今回の実行結果は統合後に追記する。
+### 初回統合と今回の実行結果
+
+初回コミットは [`65daa5bbc5a8fa8b57285803a88d8099dabc969b`](https://github.com/catlover-bot/ugoku-kami-studio/commit/65daa5bbc5a8fa8b57285803a88d8099dabc969b)、treeは `65d3acc91eb667f7383f73d3adf64160dd8a84ea`。`feat/004r-main-integration` をpushし、[統合前Check](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37168807826)の2ジョブ成功後、クリーンな別worktreeでmainへfast-forwardし通常pushした。[main統合後の同SHAのCheck](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37168984383)も2ジョブ成功した。保護ルールがないことを確認し、PRは作成していない。GitHub APIでremote mainのSHA・treeとローカルmain/origin/mainの一致を実確認した。旧ブランチは削除していない。
+
+コミット済みの状態を `/home/mhirotaka/workspace/ugoku-kami-studio-integration-check` に別worktreeとして展開し、元のnode_modules・未追跡ファイル・残存buildを使わず検証した。元の作業場所と開発サーバーは保持した。
+
+| 今回実行したコマンド | 結果 |
+| --- | --- |
+| `npm ci` / `npm run doctor` | lockfileからの新規導入と設定確認成功 |
+| `npm run check` | lint・型検査・単体/統合97件・本番ビルド成功 |
+| `npm run test:e2e -- --workers=2` | 92件成功（PC46、狭幅Chromium46） |
+| `npm run examples` | 4例成功、幾何pass・物理unknown |
+| `npm run smoke:live` | SKIPPED、実API呼出し0 |
+| GitHub `container` job | Docker build/run/health成功、PC/mobile手動フロー2件成功 |
+
+clean worktreeのPC・狭幅スクリーンショットも画像表示で確認し、文字欠け・重なり・横方向の切断は見られなかった。これは実スマートフォン・人による利用試験ではない。新規CIのコンテナ検査はサンプル20→18mm編集、ブラウザ保存・reload・同じ版/hashへの復帰、AI無効APIの503拒否、PDF内設計ID/版/hash・全ページA4・ページ数を実コンテナに対して照合する。ホスト側Nodeで行った事前2件はDocker成功とは数えていない。
+
+ローカル証拠は `artifacts/goal004r/` の `clean-verification.json`、`initial-branch-ci.json`、`initial-visual-review.json`、`*-publication-review.json` と `logs/clean-*.log`。Dockerの成果物はCIの `container-verification` artifact（保持7日）。生成物、node_modules、build、依頼の開始時差分、秘密用設定はGitへ含めない。自作画像とOFL同梱の公開フォントだけをソースへ含めた。
+
+### 初回main反映後の保存不具合修正
+
+初回mainを基点に `fix/004r-project-size` を作成した。個別には5MiB以下の合法PNGを12枚含む約50.4MBの作品が、書き出し成功・保存済み表示になった後、自分自身の45MB読込上限で復帰できない問題を再現した。`project.ts` で読込・書込を共通の45,000,000 UTF-8 bytesと同じ保存スキーマで検査し、100件の記録上限も対称にした。`App.tsx` は記録追加・読込時の既存記録統合を反映前に検査し、失敗時は作品・入力中の下書き・未保存表示を保持する。写真を自動削除・圧縮せず、本人が減らして追加し直せる。
+
+追加unit4件でbyte境界、日本語のUTF-8超過をJSON解析前に拒否、100/101記録、12枚の合法PNGによる合算超過を確認した。追加E2E4件（PC/mobile各2）では、超過拒否→下書き4写真を保持→2写真を削除→約42MBで追加・実ファイル出力→reload後そのファイルを再読込する操作が成功した。100件を超える追加・同一作品の101件への統合も、元記録と下書きを失わず拒否する。旧来の上限超過ファイルは引き続き読込不可だが、読込失敗で現在の作品を置き換えない。
+
+この修正の回帰は `tests/unit/project-size.test.ts` と `tests/e2e/project-size.spec.ts`。通常の `check` / `test:e2e` に含まれる。初回統合の97/92件と追加の部分実行は合算して一度の実行結果とはしていない。最新コミットの全体検証は各SHAのGitHub Checkと、ローカル `artifacts/goal004r/` の実行ログ・検証JSONに記録する。
+
+### 外部確認の個別状態
+
+| 区分 | 状態 |
+| --- | --- |
+| A ローカル実装・自動検証 | 上記のクリーン環境で成功 |
+| B コミット・main統合・push | 初回統合済み、remote SHA/tree確認済み |
+| C GitHub CI・コンテナ | 初回統合前・main統合後のCheck、実コンテナ検証成功 |
+| D 実Gemini | 未実行。キー・アクセスコード・明示実行許可なし |
+| E 印刷・組立・実物 | 未実施。手動設計の試作PDFと同版の記録票を保持 |
+| F 初見の人・実スマートフォン | 未実施。自動Chromiumの結果と区別 |
+| G Cloud Run公開 | 未実施。公開URLなし、dry-run準備のみ |
+
+本人の次の作業は [実Geminiの設定とL1](live-gemini.md)、[試作004の印刷・実測](prototype-004.md)、[人による確認手順](physical-validation.md) を参照。実Gemini・実物の未確認はA〜Cの統合を止める条件にしていない。以下のGoal001〜004は当時の記録として残す。
 
 ## Goal 004 — 実Geminiへの設定導線と、印刷する1作品
 

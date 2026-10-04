@@ -6,6 +6,8 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export const MAX_IMAGE_PIXELS = 12_000_000;
 export const MAX_RECORD_PHOTOS = 4;
+export const MAX_PROJECT_BYTES = 45_000_000;
+export const MAX_PHYSICAL_RECORDS = 100;
 export const photoViewLabels = {unspecified: '未指定', front: '正面', back: '裏面', start: '始点', end: '終点'} as const;
 export const STORAGE_KEY = 'ugoku-kami.project.v1';
 const imageData = z.string().max(8_000_000).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/);
@@ -24,11 +26,25 @@ export type Project = { document: DesignDocument; imageDataUrl: string; backgrou
 export function imageContentId(dataUrl: string): string {
   return bytesToHex(sha256(Uint8Array.from(atob(dataUrl.split(',')[1]!), character => character.charCodeAt(0))));
 }
-const sharedProject = { format: z.literal('ugoku-kami-project'), document: z.unknown(), imageDataUrl: imageData, records: z.array(physicalRecordSchema).max(100) };
+const sharedProject = { format: z.literal('ugoku-kami-project'), document: z.unknown(), imageDataUrl: imageData, records: z.array(physicalRecordSchema).max(MAX_PHYSICAL_RECORDS) };
 const projectSchema = z.discriminatedUnion('version', [
   z.object({ ...sharedProject, version: z.literal(1) }).strict(),
   z.object({ ...sharedProject, version: z.literal(2), backgroundImageDataUrl: imageData.optional() }).strict(),
 ]);
+
+export function assertProjectByteLength(bytes: number): void {
+  if (bytes > MAX_PROJECT_BYTES) throw new Error('プロジェクト全体は45MBまでです。写真の枚数を減らすか、小さい画像に選び直してください。');
+}
+
+function parseProjectPayload(value: unknown) {
+  try { return projectSchema.parse(value); }
+  catch (error) {
+    if (error instanceof z.ZodError && error.issues.some(issue => issue.code === 'too_big' && issue.path.length === 1 && issue.path[0] === 'records')) {
+      throw new Error(`実物記録は1作品につき${MAX_PHYSICAL_RECORDS}件までです。入力中の内容は別に控え、下書きを空欄にすると追加済みの作品を保存できます。`, { cause: error });
+    }
+    throw error;
+  }
+}
 
 export function imageMime(bytes: Uint8Array): 'image/png' | 'image/jpeg' | 'image/webp' {
   if (bytes.length >= 24 && bytes[0] === 137 && bytes[1] === 80 && bytes[2] === 78 && bytes[3] === 71 && bytes[4] === 13 && bytes[5] === 10 && bytes[6] === 26 && bytes[7] === 10) return 'image/png';
@@ -80,8 +96,8 @@ export async function verifyDataImage(dataUrl: string) {
 }
 
 export async function parseProject(text: string): Promise<Project> {
-  if (text.length > 45_000_000) throw new Error('プロジェクトファイルが大きすぎます（45MBまで）。');
-  const parsed = projectSchema.parse(JSON.parse(text));
+  assertProjectByteLength(new TextEncoder().encode(text).byteLength);
+  const parsed = parseProjectPayload(JSON.parse(text));
   const document = parseDesignDocument(parsed.document);
   const image = await verifyDataImage(parsed.imageDataUrl);
   if (!parsed.imageDataUrl.startsWith(`data:${document.input.image.mimeType};base64,`)) throw new Error('画像の種類と設計に保存された種類が一致しません。');
@@ -99,7 +115,11 @@ export async function parseProject(text: string): Promise<Project> {
 }
 
 export function serializeProject(project: Project): string {
-  return JSON.stringify({ format: 'ugoku-kami-project', version: 2, ...project });
+  const parsed = parseProjectPayload({ format: 'ugoku-kami-project', version: 2, ...project });
+  parseDesignDocument(parsed.document);
+  const text = JSON.stringify(parsed);
+  assertProjectByteLength(new TextEncoder().encode(text).byteLength);
+  return text;
 }
 
 export function downloadFile(content: BlobPart, mime: string, filename: string) {

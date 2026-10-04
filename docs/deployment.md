@@ -12,7 +12,9 @@ docker run --rm -p 8080:8080 --name ugoku-kami-studio ugoku-kami-studio:local
 curl --fail http://127.0.0.1:8080/api/health
 ```
 
-UIとAPIは同一オリジン。コンテナは非rootユーザー、`0.0.0.0:$PORT`、既定8080。コンテナのファイルシステムに利用者のプロジェクトを永続保存しない。ローカル検証環境にはDockerがないため、Dockerビルド・実起動は未実施。CIにビルド・ヘルスチェックを用意しているが、CI実行成功も別途確認が必要。
+UIとAPIは同一オリジン。コンテナは非rootユーザー、`0.0.0.0:$PORT`、既定8080。コンテナのファイルシステムに利用者のプロジェクトを永続保存しない。WSLにはDockerがないため、標準GitHub Linuxランナーで検証した。[初回の実行結果](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37168807826)では、既存Dockerfileのビルド・実起動・healthに加え、PCと狭幅のChromiumで手動編集・保存復帰・同版の原寸PDF取得が成功した。実コンテナのAI無効状態と実行拒否も確認した。レジストリへのpush・Cloud Run公開は行っていない。
+
+コンテナ起動後の画面検証は `npx playwright test --config playwright.container.config.ts`。既定の接続先は `http://127.0.0.1:8080` で、この設定はホスト側Webサーバーを代わりに起動しない。証拠には対象コミット・コンテナimage ID・設計版・PDF hashを残す。
 
 ## デプロイ計画（実行しない）
 

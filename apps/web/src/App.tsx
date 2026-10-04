@@ -7,7 +7,7 @@ import { generatePdfOffThread } from './pdf';
 import AiPanel from './AiPanel';
 import IntentPanel from './IntentPanel';
 import { designChanges } from './DesignComparison';
-import { STORAGE_KEY, MAX_RECORD_PHOTOS, photoViewLabels, verifyDataImage, decodeImage, downloadFile, imageContentId, parseProject, readRaster, serializeProject, type PhysicalRecord, type Project } from './project';
+import { STORAGE_KEY, MAX_RECORD_PHOTOS, assertProjectByteLength, photoViewLabels, verifyDataImage, decodeImage, downloadFile, imageContentId, parseProject, readRaster, serializeProject, type PhysicalRecord, type Project } from './project';
 
 const initialDocument = createDesign(SAMPLE_INPUT, { designId: 'turtle-sample', revision: 1 });
 const directionLabels = { right: '右へ', left: '左へ', up: '上へ', down: '下へ' };
@@ -129,6 +129,7 @@ export default function App() {
   const commit = useCallback((next: Project, text = '設計を更新しました。検査と型紙も同じ版に更新されます。') => {
     const current = projectRef.current;
     const records = current.document.designId === next.document.designId ? [...new Map([...next.records, ...current.records].map(record => [record.id, record])).values()] : next.records;
+    if (current.document.designId === next.document.designId && current.records !== next.records) serializeProject({ ...next, records });
     pending.current++; setHistory(list => [...list.slice(-19), current]); setProject({ ...next, records }); projectRef.current = { ...next, records }; setDirty(true); setSaveLabel('保存後に変更があります');
     setSelection(next.document.input.selection); setCompare(false); setPlaying(false); setPosition(0); setPrintPage(1); setBusy(null); setError(''); setMessage(text);
   }, []);
@@ -213,7 +214,10 @@ export default function App() {
   function save(): boolean {
     if (!selection) { setError('動かす部分を選んでから保存してください。選択をやり直すか、やり直しで戻れます。'); return false; }
     if (recordStarted) { setError('入力中の実物記録は、先に「この設計版に記録を追加」で確定してください。下書きはまだ作品に保存されていません。'); return false; }
-    try { localStorage.setItem(STORAGE_KEY, serializeProject(project)); setHasSaved(true); setDirty(false); setSaveLabel(`第${doc.revision}版をこのブラウザに保存済み`); setError(''); setMessage('画像・設計・実物の記録を、このブラウザだけに保存しました。'); return true; }
+    let serialized: string;
+    try { serialized = serializeProject(project); }
+    catch (issue) { setError(friendlyError(issue)); return false; }
+    try { localStorage.setItem(STORAGE_KEY, serialized); setHasSaved(true); setDirty(false); setSaveLabel(`第${doc.revision}版をこのブラウザに保存済み`); setError(''); setMessage('画像・設計・実物の記録を、このブラウザだけに保存しました。'); return true; }
     catch { setError('ブラウザに保存できませんでした。空き容量や設定を確認するか、プロジェクトを書き出してください。'); return false; }
   }
   function askReplace(action: () => void) {
@@ -246,7 +250,7 @@ export default function App() {
   async function importFile(file: File) {
     const ticket = ++pending.current;
     setBusy('プロジェクトを確認しています…');
-    try { if (file.size > 45_000_000) throw new Error('プロジェクトは45MB以下にしてください。'); const restored = await parseProject(await file.text()); if (ticket !== pending.current) return; const retainedRecords = projectRef.current.document.designId === restored.document.designId && projectRef.current.records.some(item => !restored.records.some(saved => saved.id === item.id)); commit(restored, retainedRecords ? 'ファイルを開きました。現在の作品に追加した実物記録も残っています。記録を含めて、もう一度保存してください。' : '画像を含むプロジェクトを開きました。'); setDirty(retainedRecords); setSaveLabel(retainedRecords ? '実物記録に未保存の変更があります' : 'ファイルから再開・ブラウザには未保存'); setRecord(blankRecord(restored.document)); setStage(1); }
+    try { assertProjectByteLength(file.size); const restored = await parseProject(await file.text()); if (ticket !== pending.current) return; const retainedRecords = projectRef.current.document.designId === restored.document.designId && projectRef.current.records.some(item => !restored.records.some(saved => saved.id === item.id)); commit(restored, retainedRecords ? 'ファイルを開きました。現在の作品に追加した実物記録も残っています。記録を含めて、もう一度保存してください。' : '画像を含むプロジェクトを開きました。'); setDirty(retainedRecords); setSaveLabel(retainedRecords ? '実物記録に未保存の変更があります' : 'ファイルから再開・ブラウザには未保存'); setRecord(blankRecord(restored.document)); setStage(1); }
     catch (issue) { if (ticket === pending.current) setError(friendlyError(issue)); } finally { if (ticket === pending.current) setBusy(null); }
   }
   function removeSaved() {
@@ -264,7 +268,10 @@ export default function App() {
   function saveRecord() {
     if (!hasRecordData(record)) { setError('実際に確認した材料・校正線・動作・手修正・写真などを1つ記入してください。未確認の欄は空欄のままで構いません。'); return; }
     if (record.designId && record.designId !== doc.designId) { setError('入力中の記録は別の作品のものです。その作品へ戻るか、下書きを破棄して現在の作品の記録を始めてください。'); return; }
-    setProject(existing => ({ ...existing, records: [...existing.records, record] })); setDirty(true); setSaveLabel('実物記録に未保存の変更があります');
+    const next = { ...projectRef.current, records: [...projectRef.current.records, record] };
+    try { serializeProject(next); }
+    catch (issue) { setError(`記録を追加できませんでした。${friendlyError(issue)} 下書きは残っています。`); return; }
+    setProject(next); projectRef.current = next; setDirty(true); setSaveLabel('実物記録に未保存の変更があります');
     setRecord(blankRecord(doc)); setError(''); setMessage(`入力を始めた第${record.revision}版に実物の記録を追加しました。記録を残すにはブラウザへ保存するか、プロジェクトを書き出してください。`);
   }
 
