@@ -101,7 +101,7 @@ export default function HomeLibrary({ entries, activeId, activeStatus, continueI
       <div className="library-start-actions">
         <button className="primary" disabled={disabled} onClick={() => void perform('画像を選びます…', onCreateOwn)}>自分の絵ではじめる</button>
         <button className="secondary" disabled={disabled} onClick={() => void perform('サンプルを開いています…', onTrySample)}>サンプルで試す</button>
-        <button className="secondary" disabled={disabled || (!onContinue && !recent)} onClick={() => { if (onContinue || recent) void perform('前の作品を開いています…', onContinue ?? (() => onOpen(recent!.id))); }}>前の作品を続ける</button>
+        {(onContinue || recent) && <button className="secondary" disabled={disabled} onClick={() => { if (onContinue || recent) void perform('前の作品を開いています…', onContinue ?? (() => onOpen(recent!.id))); }}>前の作品を続ける</button>}
       </div>
       {recent && !onContinue && <p className="library-recent">続きから：{displayName(recent)}</p>}
     </div>
@@ -110,7 +110,7 @@ export default function HomeLibrary({ entries, activeId, activeStatus, continueI
     <p className="library-live" role="status" aria-live="polite">{busy || (loading ? '保存した作品を確認しています…' : notice)}</p>
     {!dialog && (localError || error) && <div className="notice warning library-error" role="alert"><p>{localError || error}</p>{onRetry && <button className="secondary" disabled={disabled} onClick={() => void perform('作品一覧を読み直しています…', onRetry)}>一覧を読み直す</button>}</div>}
 
-    {!entries.length && !loading && <div className="library-empty"><p>{error ? '作品一覧を表示できませんでした。保存した作品は削除していません。' : '保存した作品はまだありません。'}</p><p>自分の絵やサンプルで始められます。持ち出した作品はファイルから開けます。</p></div>}
+    {!entries.length && !loading && <div className="library-empty"><p>{error ? '作品一覧を表示できませんでした。保存した作品は削除していません。' : '保存した作品はまだありません。'}</p></div>}
     {!!entries.length && <ul className="library-list" aria-labelledby={listId} aria-busy={loading}>{entries.map((entry, index) => {
       const titleId = `${listId}-${index}`, label = displayName(entry), date = updatedLabel(entry.updatedAt);
       const corrupt = entry.status === 'corrupt';
@@ -128,7 +128,7 @@ export default function HomeLibrary({ entries, activeId, activeStatus, continueI
         </div>
       </article></li>;
     })}</ul>}
-    <p className="library-backup-note">大切な作品は、作品の操作からファイルにも書き出しておけます。</p>
+    {!!entries.length && <p className="library-backup-note">作品の操作から、ファイルにも書き出せます。</p>}
 
     <dialog ref={dialogRef} className="library-dialog" aria-label={dialog?.kind === 'rename' ? '作品の名前を変更' : '作品の削除'} onCancel={event => { event.preventDefault(); closeDialog(); }}>
       {dialog?.kind === 'rename' ? <form onSubmit={rename}><h2>作品の名前を変更</h2><label htmlFor={renameId}>作品名<input ref={nameRef} id={renameId} value={name} maxLength={120} aria-invalid={!!localError} aria-describedby={localError ? renameErrorId : undefined} disabled={!!busy} onChange={event => { setName(event.target.value); setLocalError(''); }} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} onKeyDown={event => { if (event.key === 'Enter' && (composing.current || event.nativeEvent.isComposing || event.keyCode === 229)) event.preventDefault(); }} /></label>{localError && <p className="notice warning" id={renameErrorId} role="alert">{localError}</p>}<div className="library-dialog-actions"><button className="primary" type="submit" disabled={!!busy}>{busy || '名前を保存する'}</button><button className="secondary" type="button" disabled={!!busy} onClick={closeDialog}>キャンセル</button></div></form> : dialog ? <><h2>「{displayName(dialog.entry)}」を削除しますか？</h2><p>このブラウザ・このサイトから、この作品の保存データと下書きを削除します。書き出したファイルは残ります。</p>{dialog.entry.id === activeId && <p className="notice warning">いま編集中の作品です。未保存の編集や記録の下書きがある場合は、先に残してください。</p>}{localError && <p className="notice warning" role="alert">{localError}</p>}<div className="library-dialog-actions"><button className="secondary library-delete" disabled={!!busy} onClick={remove}>{busy || '削除する'}</button><button ref={cancelDeleteRef} className="secondary" disabled={!!busy} onClick={closeDialog}>キャンセル</button></div></> : null}

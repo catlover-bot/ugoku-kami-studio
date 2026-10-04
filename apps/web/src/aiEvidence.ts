@@ -3,7 +3,8 @@ import { designChanges } from './DesignComparison';
 
 export type AiRun = {
   id: string; requestId: string; baseRevision: number; baseHash: string;
-  mode?: 'gemini' | 'injected-test'; model?: string;
+  mode?: 'ollama' | 'gemini' | 'injected-test'; provider?: 'ollama' | 'gemini'; model?: string;
+  localModel?: {digest: string; quantization: string; contextLength: number; runtimeVersion: string; toolMode?: 'native' | 'json-actions'};
   status: 'running' | 'awaiting_approval' | 'clarification_required' | 'succeeded' | 'failed' | 'cancelled';
   message: string;
   events: { sequence?: number; type?: string; tool?: string; name?: string; message?: string; designHash?: string; patch?: DesignPatch; checkStatuses?: {id: string; status: string}[]; durationMs?: number }[];
@@ -15,12 +16,12 @@ export type AiRun = {
   error?: {code: string; message: string};
   modelCalls: number; toolCalls: number; elapsedMs: number;
   usage?: {promptTokens: number; outputTokens: number; totalTokens: number; thinkingTokens?: number; cachedInputTokens?: number; toolPromptTokens?: number; responsesWithUsage?: number; responsesWithoutUsage?: number};
-  modelUsage?: {call: number; inputBytes: number; outputTokenLimit: number; durationMs: number; received: boolean; finishReason: string | null; modelVersion: string | null; usage: {promptTokens: number; outputTokens: number; thinkingTokens: number; cachedInputTokens: number; toolPromptTokens: number; totalTokens: number} | null}[];
+  modelUsage?: {call: number; inputBytes: number; outputTokenLimit: number; durationMs: number; received: boolean; finishReason: string | null; modelVersion: string | null; localTiming?: {loadMs: number; promptEvalMs: number; evalMs: number; totalMs: number}; usage: {promptTokens: number; outputTokens: number; thinkingTokens: number; cachedInputTokens: number; toolPromptTokens: number; totalTokens: number} | null}[];
 };
 export type DesignStamp = {designId: string; revision: number; designHash: string};
 export type AiEvidence = {
   runId: string; requestedAt: string; observedAt: string; prompt: string;
-  execution: {mode: 'gemini' | 'injected-test' | 'unknown'; model: string | null};
+  execution: {mode: 'ollama' | 'gemini' | 'injected-test' | 'unknown'; model: string | null};
   base: DesignStamp & {checks: CheckResult[]};
   proposed?: DesignStamp & {checks: CheckResult[]; changes: ReturnType<typeof designChanges>};
   /** Last response actually received from the application server, independent of the UI decision. */
@@ -33,7 +34,7 @@ export const designStamp = (document: DesignDocument): DesignStamp => ({designId
 export function publicRunSnapshot(run: AiRun): AiRun {
   return structuredClone({
     id: run.id, requestId: run.requestId, baseRevision: run.baseRevision, baseHash: run.baseHash,
-    mode: run.mode, model: run.model, status: run.status, message: run.message,
+    mode: run.mode, provider: run.provider, model: run.model, localModel: run.localModel, status: run.status, message: run.message,
     events: run.events.map(event => ({sequence: event.sequence, type: event.type, tool: event.tool, name: event.name, message: event.message, designHash: event.designHash, patch: event.patch, checkStatuses: event.checkStatuses, durationMs: event.durationMs})),
     proposal: run.proposal ? {id: run.proposal.id, requestId: run.proposal.requestId, baseRevision: run.proposal.baseRevision, baseHash: run.proposal.baseHash, patch: run.proposal.patch, document: run.proposal.document, addedLocks: run.proposal.addedLocks, protectedConditions: run.proposal.protectedConditions, requestedTravelMm: run.proposal.requestedTravelMm, fulfillsRequested: run.proposal.fulfillsRequested} : undefined,
     requestInterpretation: run.requestInterpretation, intentSummary: run.intentSummary, validationIssues: run.validationIssues, constraintSuggestions: run.constraintSuggestions,

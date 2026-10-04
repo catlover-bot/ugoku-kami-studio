@@ -3,7 +3,7 @@ import { displayDimension, type DesignDocument, type DesignIntent, type Distance
 import './RequestInterpretation.css';
 
 export type InterpretationView = Pick<DesignIntent, 'binding' | 'interpretation' | 'clarifications' | 'summary' | 'approvalRequired'>;
-type Props = { value: InterpretationView; document: DesignDocument; disabled?: boolean; onCorrect: (changes: InterpretationChanges) => void; source?: 'manual' | 'ai'; onDraftChange?: (active: boolean) => void };
+type Props = { value: InterpretationView; document: DesignDocument; disabled?: boolean; onCorrect: (changes: InterpretationChanges) => void; source?: 'manual' | 'ai'; compact?: boolean; onDraftChange?: (active: boolean) => void };
 const directionNames = { right: '右へ', left: '左へ', up: '上へ', down: '下へ' };
 function initialDistance(operation: DistanceOperation): { mode: string; amount: string } {
   if (operation.kind === 'absolute') return {mode: 'absolute', amount: String(operation.value * (operation.unit === 'cm' ? 10 : 1))};
@@ -61,7 +61,10 @@ function InterpretationEditor({value, document, disabled, onCorrect, onDraftChan
 /** Displays only the actual core/server interpretation. It never fabricates a candidate or modifies the design. */
 export default function RequestInterpretation(props: Props) {
   const {value, document, disabled, onCorrect, source = 'manual'} = props;
-  return <section className="request-interpretation" aria-label="希望の受け取り方" data-base-hash={value.binding.baseHash} data-base-revision={value.binding.baseRevision}>
+  const [expanded, setExpanded] = useState(!props.compact);
+  useEffect(() => {setExpanded(!props.compact);}, [value.binding.requestHash]);
+  useEffect(() => {if (!props.compact || value.clarifications.length || value.approvalRequired) setExpanded(true);}, [props.compact, value.clarifications.length, value.approvalRequired]);
+  const contents = <section className="request-interpretation" aria-label="希望の受け取り方" data-base-hash={value.binding.baseHash} data-base-revision={value.binding.baseRevision}>
     <h4>希望をこう受け取りました</h4>
     <ul className="interpretation-summary">{value.summary.map((item,index) => <li key={index}>{item}</li>)}</ul>
     {source === 'ai' && <p className="field-note">この実行で使う解釈です。違うところは採用前に直せます。</p>}
@@ -69,4 +72,5 @@ export default function RequestInterpretation(props: Props) {
     {value.approvalRequired && <div className="interpretation-question"><p>紙の上限を {value.approvalRequired.from}枚 → {value.approvalRequired.to}枚 に緩める希望です。今の上限のままでは採用できません。</p><button type="button" className="secondary" data-design-action disabled={disabled} onClick={() => onCorrect({paperApproval:{from:value.approvalRequired!.from,to:value.approvalRequired!.to}})}>上限を{value.approvalRequired.from}枚から{value.approvalRequired.to}枚に変更して検査する</button></div>}
     <InterpretationEditor {...props} document={document} />
   </section>;
+  return <details className="interpretation-details" open={expanded} onToggle={event => setExpanded(event.currentTarget.open)}><summary>希望の受け取り方・訂正</summary>{contents}</details>;
 }

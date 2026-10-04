@@ -50,6 +50,7 @@ export async function stage(page: Page, number: 1 | 2 | 3) {
 
 export async function precision(page: Page) {
   await stage(page, 2);
+  await editCurrentSettings(page);
   const details = page.locator('.numeric-details');
   if (!(await details.evaluate(element => (element as HTMLDetailsElement).open))) await details.getByText('寸法・材料の詳細', { exact: true }).click();
   await expect(page.getByLabel('動く距離（mm）', { exact: true })).toBeVisible();
@@ -72,18 +73,36 @@ export async function saveProject(page: Page) {
   return result;
 }
 
+export async function openRequest(page: Page) {
+  const editor = page.locator('.motion-request > .request-editor');
+  if (!(await editor.evaluate(element => (element as HTMLDetailsElement).open))) await editor.locator(':scope > summary').click();
+}
+
 export async function ai(page: Page) {
   await stage(page, 2);
-  await page.getByRole('button', { name: 'Gemini', exact: true }).click();
-  const editor = page.locator('.ai-panel > .request-editor');
-  if (!(await editor.evaluate(element => (element as HTMLDetailsElement).open))) await editor.locator(':scope > summary').click();
-  const settings = page.locator('.ai-settings');
-  if (!(await settings.evaluate(element => (element as HTMLDetailsElement).open))) await settings.locator(':scope > summary').click();
+  await openRequest(page);
+  await page.getByRole('button', {name: '設定', exact: true}).click();
+  // Existing credentials remain in memory when another request is prepared.
+  if (!await page.getByLabel('AIアクセスコード').count() || await page.getByLabel('AIアクセスコード').inputValue()) await closeDialog(page);
 }
 
 export async function manual(page: Page) {
   await stage(page, 2);
-  await page.getByRole('button', { name: '手動支援', exact: true }).click();
+  await openRequest(page);
+}
+
+export async function editCurrentSettings(page: Page) {
+  if (!(await page.locator('.motion-settings').isVisible())) await page.getByRole('button', {name: '設定を編集する', exact: true}).click();
+}
+
+export async function interpretation(page: Page) {
+  const detail = page.locator('.interpretation-details:visible');
+  if (await detail.count() && !(await detail.evaluate(element => (element as HTMLDetailsElement).open))) await detail.locator(':scope > summary').click();
+}
+
+export async function splitPrint(page: Page) {
+  const detail = page.locator('.split-options');
+  if (!(await detail.evaluate(element => (element as HTMLDetailsElement).open))) await detail.locator(':scope > summary').click();
 }
 
 export async function physical(page: Page) {
@@ -100,3 +119,8 @@ export async function selectionNumbers(page: Page) {
 }
 
 export const pdfButton = (page: Page) => page.getByRole('button', { name: 'PDFをダウンロード', exact: true, includeHidden: true });
+
+export async function distanceIdeas(page: Page) {
+  const details = page.locator('.motion-alternatives');
+  if (!(await details.evaluate(element => (element as HTMLDetailsElement).open))) await details.locator(':scope > summary').click();
+}

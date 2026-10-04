@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { displayDimension, getKitSummary, interpretDesignRequest, parseDesignDocument, type DesignDocument, type InterpretationChanges, type InterpretationCorrection } from '@ugoku/core';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { getKitSummary, parseDesignDocument, type DesignDocument, type InterpretationChanges, type InterpretationCorrection } from '@ugoku/core';
 import DesignComparison, { fieldNames } from './DesignComparison';
 import { designStamp, observeRun, publicRunSnapshot, usageLabel, type AiRun as Run, type AiEvidence } from './aiEvidence';
 import { downloadFile } from './project';
@@ -21,10 +22,13 @@ type AiPanelProps = {
   document: DesignDocument; imageDataUrl: string; backgroundImageDataUrl?: string;
   onCandidateChange?: (active: boolean) => void; onAccept: (document: DesignDocument) => void;
   selectionReady?: boolean; inputDraftActive?: boolean; onManual?: () => void;
+  previewTarget?: HTMLElement | null; actionTarget?: HTMLElement | null; settingsTarget?: HTMLElement | null;
+  visible?: boolean; onActivate?: () => void; onOpenSettings?: () => void; onConnectionLabel?: (label: string) => void;
   requestText?: string; onRequestTextChange?: (value: string) => void;
 };
-export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl, onAccept, inputDraftActive = false, selectionReady = true, onCandidateChange, onManual, requestText, onRequestTextChange}: AiPanelProps) {
-  const [connection, setConnection] = useState<{enabled: boolean; reason?: string; mode: string; model?: string | null; unreachable?: boolean}>({enabled: false, mode: 'manual', reason: '接続を確認中です。'});
+export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl, onAccept, inputDraftActive = false, selectionReady = true, onCandidateChange, onManual, requestText, onRequestTextChange, previewTarget, actionTarget, settingsTarget, visible = true, onActivate, onOpenSettings, onConnectionLabel}: AiPanelProps) {
+  const [connection, setConnection] = useState<{enabled: boolean; reason?: string; mode: string; provider?: 'none' | 'ollama' | 'gemini'; model?: string | null; endpoint?: string | null; contextLength?: number; toolMode?: string; unreachable?: boolean}>({enabled: false, mode: 'manual', reason: '接続を確認中です。'});
+  const [limits, setLimits] = useState<{modelCalls: number; toolCalls: number; timeoutMs: number; inputBytes: number; outputTokens: number} | null>(null);
   const [localPrompt, setLocalPrompt] = useState('もう少し大きく動かしたい。絵の大きさは変えず、紙も増やさない');
   const prompt = requestText ?? localPrompt;
   const promptRef = useRef(prompt); promptRef.current = prompt;
@@ -91,7 +95,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
   }
   useEffect(() => {
     let current = true;
-    request<{ai: typeof connection}>('/api/status', 'GET').then(result => {if (current) setConnection(result.ai);}).catch(() => {if (current) setConnection({enabled: false, mode: 'manual', unreachable: true});});
+    request<{ai: typeof connection; limits?: typeof limits}>('/api/status', 'GET').then(result => {if (current) {setConnection(result.ai); setLimits(result.limits ?? null);}}).catch(() => {if (current) setConnection({enabled: false, mode: 'manual', unreachable: true});});
     return () => {current = false; generation.current++; clearTimeout(timer.current);};
   }, []);
   useEffect(() => {
@@ -153,7 +157,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
   async function start(correction?: RunCorrection) {
     if (busyRef.current || !selectionReady || draftRef.current || pollContext.current) return;
     if (!connection.enabled) {setMessage('AIは未接続です。手動支援で希望を試し、保存・印刷まで進められます。'); return;}
-    if (!access.trim()) {setMessage('「AIを利用する」を開き、アクセスコードを入力してください。'); return;}
+    if (!access.trim()) {setMessage('設定でAIアクセスコードを入力してから、案をつくってください。'); onOpenSettings?.(); return;}
     if (correction) {
       // The server replaces a live proposal atomically with its bound correction.
       // A preceding DELETE would revoke that source before correction validation.
@@ -188,13 +192,13 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
   async function cancel() {
     const current = runRef.current, session = sessionRef.current;
     endGeneration('cancelled'); const ticket = generation.current;
-    if (current) decide(current.id, 'cancelled', undefined, '画面で中断しました。送信済みの呼び出しの課金取消しは保証されません。');
+    if (current) decide(current.id, 'cancelled', undefined, '画面で中断しました。届いた結果は反映しません。送信済みの処理が止まったかは実行記録で確認します。');
     setRun(null); runRef.current = null;
     if (current && session) {
       try {await cancelServerRun(session, current.id, access);}
       catch {if (ticket === generation.current) setMessage('画面での待機を中断しました。サーバーへの中断要求は届きませんでした。送信済みの呼び出しは取り消せないことがあります。'); return;}
     }
-    if (ticket === generation.current) setMessage('中断しました。送信済みの呼び出しの課金取消しは保証されません。編集内容と実行記録は残っています。');
+    if (ticket === generation.current) setMessage('中断しました。届いた結果は反映しません。編集内容と実行記録は残っています。');
   }
   async function resolveProposal(accept: boolean) {
     const session = sessionRef.current;
@@ -224,61 +228,38 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     const latest = evidence.at(-1)!;
     downloadFile(JSON.stringify({format: 'ugoku-kami-ai-run', version: 1, exportedAt: new Date().toISOString(), records: evidence}, null, 2), 'application/json', `${latest.runId}.ai-run.json`);
   }
-  const requestIntent = useMemo(() => interpretDesignRequest(document, prompt), [document, prompt]);
-  const protections = useMemo(() => {
-    const values = new Map<string, unknown>(document.input.locks.map(key => [key, document.input[key]]));
-    for (const [key, value] of Object.entries(requestIntent.protections)) if (value !== undefined) values.set(key, value);
-    const labels: string[] = [];
-    if (values.has('widthMm') && values.has('heightMm')) {
-      labels.push(`絵の大きさ ${displayDimension(Number(values.get('widthMm')))} × ${displayDimension(Number(values.get('heightMm')))}mm を保つ`);
-      values.delete('widthMm'); values.delete('heightMm');
-    }
-    const directions: Record<string, string> = { right: '右', left: '左', up: '上', down: '下' };
-    for (const [key, value] of values) {
-      if (key === 'maxSheets') labels.push(`型紙はA4で${value}枚まで`);
-      else if (key === 'selection') labels.push('動かす部分を変えない');
-      else if (key === 'direction') labels.push(`動く方向は${directions[String(value)] ?? String(value)}`);
-      else labels.push(`${fieldNames[key] ?? key} ${String(value)}mm を保つ`);
-    }
-    return labels;
-  }, [document, requestIntent]);
+  const connectionLabel = connection.enabled ? connection.mode === 'injected-test' ? '模擬AI（テスト）' : connection.mode === 'ollama' ? 'ローカルAI' : 'Gemini（設定済み）' : '手動で編集中';
+  useEffect(() => {onConnectionLabel?.(connectionLabel);}, [connectionLabel, onConnectionLabel]);
   const awaitingProposal = !!run?.proposal && run.status === 'awaiting_approval';
-  const disconnectedMessage = connection.unreachable ? 'サーバーに接続できません。接続を確認してください。手動での編集と型紙出力は続けられます。' : 'AIは未接続です。手動支援で希望を試し、保存・印刷まで進められます。';
-  return <section className="ai-panel" aria-labelledby="ai-title">
-    <div className="section-top"><div><h2 id="ai-title">Geminiに相談する</h2></div><span className="connection"><span className={connection.enabled ? 'dot connected' : 'dot'} />{connection.enabled ? connection.mode === 'injected-test' ? '模擬接続（テスト）' : 'Gemini設定済み' : 'AI未接続'}</span></div>
-    <p className="ai-introduction">希望から変更案をつくり、今の作品と比べて選べます。作品が変わるのは、採用したときだけです。</p>
-    {!connection.enabled && <p className="ai-availability">{disconnectedMessage}</p>}
-    <details className="request-editor" open={!awaitingProposal}><summary>希望を編集する</summary>
-      <label htmlFor="ai-prompt">どんな動きにしたいですか？</label>
-      <textarea id="ai-prompt" value={prompt} onChange={event => editPrompt(event.target.value)} maxLength={2000} rows={3} placeholder="例：紙は2枚のまま、首をもう少し遠くまで動かしたい" aria-describedby="ai-request-example" />
-      <p className="field-note" id="ai-request-example">例：もう少し大きく動かしたい。絵の大きさは変えず、紙は2枚まで。</p>
-      <div className="ai-request-conditions" aria-labelledby="ai-conditions-title">
-        <h3 id="ai-conditions-title">今回守る条件</h3>
-        {protections.length ? <ul>{protections.map(item => <li key={item}>{item}</li>)}</ul> : <p className="field-note">大きさや紙の枚数など、変えたくないことも希望に書けます。</p>}
-        {!!requestIntent.conflicts.length && <p className="notice warning">{requestIntent.conflicts.join(' ')}</p>}
-      </div>
-      <details className="ai-settings"><summary>AIを利用する</summary>
-        {connection.enabled ? <>
-          <p>{connection.mode === 'injected-test' ? 'テスト用の模擬AIです。実Geminiには送信しません。' : 'Geminiを利用する設定があります。設定済みの表示だけでは、接続の成功は確認できません。'}</p>
-          <label className="field">AIアクセスコード<input type="password" value={access} onChange={event => setAccess(event.target.value)} autoComplete="off" spellCheck={false} placeholder="利用案内にあるコード" /><small>この画面のメモリだけで扱います。作品や実行記録には保存しません。</small></label>
-          {connection.model && <p className="field-note">利用するモデル：{connection.model}</p>}
-        </> : <p>現在このサイトではAIを利用できません。手動支援から、同じ作品を続けて編集できます。</p>}
-      </details>
-      <p className="field-note">{connection.mode === 'injected-test' ? '模擬AIで操作を試します。実Geminiへの送信はありません。' : '実行すると希望・設計寸法・選択範囲がGeminiへ送られます。画像そのものは送信しません。'}</p>
-      {inputDraftActive && <p className="field-note">入力中の数値を確定するか、元の値に戻してから変更案をつくれます。</p>}
-      {connection.enabled && !access.trim() && <p className="field-note">はじめに「AIを利用する」でアクセスコードを入力してください。</p>}
-      <div className="button-row"><button data-design-action onClick={() => void start()} disabled={busy || pollInterrupted || interpretationDraft || !prompt.trim() || !selectionReady || inputDraftActive} className={connection.enabled ? 'primary' : 'secondary'}>{run?.status === 'failed' ? '再試行する' : busy ? '検査しています…' : '変更案をつくる'}</button></div>
-    </details>
+  const settings = <section className="ai-settings" aria-label="AIの設定">
+    <h3>{connectionLabel}</h3>
+    {connection.enabled ? <>
+      <p>{connection.mode === 'injected-test' ? 'テスト用の模擬AIです。実モデルへの送信はありません。' : connection.mode === 'ollama' ? 'このコンピューターのOllamaを使う設定です。外部の推論APIへ自動で切り替えません。設定済みの表示だけでは、接続成功を確認していません。' : 'Geminiを使う設定です。設定済みの表示だけでは、接続成功を確認していません。'}</p>
+      <label className="field">AIアクセスコード<input type="password" value={access} onChange={event => setAccess(event.target.value)} autoComplete="off" spellCheck={false} /><small>この画面のメモリだけで扱い、作品には保存しません。</small></label>
+      {connection.model && <p className="field-note">モデル：{connection.model}</p>}{connection.endpoint && <p className="field-note">接続先：<code>{connection.endpoint}</code></p>}{connection.contextLength && <p className="field-note">コンテキスト上限：{connection.contextLength} / {connection.toolMode}</p>}{limits && <p className="field-note">1依頼の上限：モデル{limits.modelCalls}回・ツール{limits.toolCalls}回・{limits.timeoutMs / 1000}秒</p>}
+      <p className="field-note">{connection.mode === 'ollama' ? '推論にはこのコンピューターの計算資源と電力を使います。外部推論APIへの課金はありません。モデルの初回取得には外部通信が必要です。' : connection.mode === 'injected-test' ? '模擬実行の結果は、実モデルの性能確認にはなりません。' : '外部推論APIの利用料が発生する場合があります。'}</p>
+    </> : <p>{connection.unreachable ? 'サーバーの状態を確認できません。' : 'このサイトではAIは無効です。'} 方向・距離の操作や、寸法からの案づくりを続けられます。</p>}
+    <p className="field-note">案をつくる操作をしたときだけ、希望・寸法・選択範囲を送ります。画像そのものは送信しません。</p>
+  </section>;
+  const action = <button data-design-action onClick={() => {onActivate?.(); void start();}} disabled={busy || pollInterrupted || interpretationDraft || !prompt.trim() || !selectionReady || inputDraftActive} className="secondary">{run?.status === 'failed' ? 'AIを再試行する' : busy ? 'AIの案を待っています…' : 'AIで案をつくる'}</button>;
+  return <>
+    {actionTarget && createPortal(action, actionTarget)}
+    {settingsTarget && createPortal(<>{settings}
+    {!!evidence.length && <details className="ai-evidence"><summary>AI実行の記録（{evidence.length}件）</summary><p className="field-note">この画面で受け取った直近20件を保存できます。依頼文・モデル・ツール・検査・使用量・採用した版を含みます。画像やアクセスコードは含めません。</p><ul>{evidence.map(item => <li key={item.runId}><strong>{item.execution.mode === 'ollama' ? '実ローカルAI' : item.execution.mode === 'gemini' ? '実Gemini' : item.execution.mode === 'injected-test' ? '模擬実行' : '実行方式は未確認'}</strong> · {item.execution.model ?? 'モデル名未取得'}<br /><code>{item.runId}</code><br />{({pending:'候補待ち／未採用',accepted:'採用済み',rejected:'不採用',cancelled:'中断',stale:'依頼・設計が変わったため無効',failed:'失敗',completed:'応答完了'})[item.decision.status]}{item.decision.adopted ? ` · 第${item.decision.adopted.revision}版` : ''}<br />モデル {item.serverRun.modelCalls}回 / ツール {item.serverRun.toolCalls}回 / {usageLabel(item.serverRun)}</li>)}</ul><button className="secondary" onClick={exportEvidence}>AI実行記録を書き出す</button><p className="field-note">使用量未取得は0料金を意味しません。実物確認の記録は工程3で追加します。</p></details>}
+    {!!run?.events?.length && <details><summary>実際の操作ログ（{run.toolCalls}回）</summary><ol className="execution-log">{run.events.map((event, index) => <li key={index}>{event.tool ?? event.name ?? event.type} {event.message}</li>)}</ol><small>モデル {run.modelCalls}回 · ツール {run.toolCalls}回 · {(run.elapsedMs / 1000).toFixed(1)}秒</small></details>}</>, settingsTarget)}
+    <section className="ai-panel" aria-label="AIの調整結果" hidden={!visible}>
     {(busy || pollInterrupted) && <div className="ai-wait"><p>{pollInterrupted ? '通信の確認が必要です。現在の作品は変わっていません。' : run?.status === 'awaiting_approval' ? '採用の結果を確認しています。' : '候補を待っています。現在の作品は変わっていません。'}</p><div className="button-row">{pollInterrupted && <button className="secondary" onClick={() => void resumePolling()}>状況を確認する</button>}<button onClick={() => void cancel()} className="text-button">中断する</button></div></div>}
-    {message && <p role="status" className={`notice ${unsupported || run?.status === 'failed' ? 'warning' : ''}`}>{message}</p>}
+    {message && !busy && <p role="status" className={`notice ${unsupported || run?.status === 'failed' ? 'warning' : ''}`}>{message}</p>}
     {unsupported && <button className="text-button" onClick={() => { editPrompt('引っぱりタブでまっすぐ動く距離を調整したい'); setUnsupported(false); setMessage('代案を入力しました。実行するか、手動で調整してください。'); }}>代案「まっすぐ動かす」を選ぶ</button>}
-    {run?.requestInterpretation && !busy && run.baseHash === document.designHash && run.baseRevision === document.revision && run.status !== 'succeeded' && run.status !== 'cancelled' && <RequestInterpretation value={run.requestInterpretation} document={document} source="ai" disabled={busy || inputDraftActive || !selectionReady || !['awaiting_approval', 'clarification_required'].includes(run.status)} onCorrect={changes => void correctInterpretation(changes)} onDraftChange={setInterpretationDraft} />}
+
     {run?.status === 'clarification_required' && !busy && <button className="text-button" onClick={() => void cancel()}>この依頼を取り消す</button>}
-    {run?.proposal && run.status === 'awaiting_approval' && run.baseHash === document.designHash && run.baseRevision === document.revision && <div className="proposal"><h3>AIの変更案 · 採用待ち</h3>{run.proposal.fulfillsRequested === false && <p className="notice warning">希望の{run.proposal.requestedTravelMm}mmに対し、候補は{run.proposal.document.input.travelMm}mmです。希望と異なる距離であることを確認してから採用してください。</p>}<DesignComparison before={document} after={run.proposal.document} imageDataUrl={imageDataUrl} backgroundImageDataUrl={backgroundImageDataUrl} preserved={run.proposal.protectedConditions ?? run.intentSummary?.protections ?? document.input.locks.map(key => `${fieldNames[key] ?? key}を固定`)}><div className="button-row"><button className="primary" disabled={busy || inputDraftActive || interpretationDraft || getKitSummary(run.proposal.document).status === 'blocked'} data-design-action onClick={() => void resolveProposal(true)}>この案にする</button><button className="secondary" disabled={busy} onClick={() => void resolveProposal(false)}>この案を使わない</button></div></DesignComparison></div>}
-    {!busy && onManual && (!connection.enabled || unsupported || run?.status === 'failed') && <button className={connection.enabled ? 'secondary' : 'primary'} onClick={onManual}>手動支援を使う</button>}
+    {visible && run?.proposal && run.status === 'awaiting_approval' && run.baseHash === document.designHash && run.baseRevision === document.revision && <div className="proposal"><h3>AIの変更案 · 採用待ち</h3>{run.proposal.fulfillsRequested === false && <p className="notice warning">希望の{run.proposal.requestedTravelMm}mmに対し、候補は{run.proposal.document.input.travelMm}mmです。希望と異なる距離であることを確認してから採用してください。</p>}<DesignComparison previewTarget={visible ? previewTarget : null} before={document} after={run.proposal.document} imageDataUrl={imageDataUrl} backgroundImageDataUrl={backgroundImageDataUrl} preserved={run.proposal.protectedConditions ?? run.intentSummary?.protections ?? document.input.locks.map(key => `${fieldNames[key] ?? key}を固定`)}><div className="button-row"><button className="primary" disabled={busy || inputDraftActive || interpretationDraft || getKitSummary(run.proposal.document).status === 'blocked'} data-design-action onClick={() => void resolveProposal(true)}>この案にする</button><button className="secondary" disabled={busy} onClick={() => void resolveProposal(false)}>この案を使わない</button></div></DesignComparison></div>}
+    {!busy && onManual && (message || run) && (!connection.enabled || unsupported || run?.status === 'failed' || !run && !!message) && <button className="text-button" onClick={onManual}>手動の調整に戻る</button>}
+    {run?.requestInterpretation && !busy && run.baseHash === document.designHash && run.baseRevision === document.revision && run.status !== 'succeeded' && run.status !== 'cancelled' && <RequestInterpretation compact={awaitingProposal} value={run.requestInterpretation} document={document} source="ai" disabled={busy || inputDraftActive || !selectionReady || !['awaiting_approval', 'clarification_required'].includes(run.status)} onCorrect={changes => void correctInterpretation(changes)} onDraftChange={setInterpretationDraft} />}
+    {awaitingProposal && <button className="text-button" onClick={() => {void cancel(); onManual?.();}}>設定を編集する</button>}
     {!!run?.validationIssues?.length && <div className="notice warning"><h3>設計で見つかった問題</h3>{run.validationIssues.map(issue => <p key={issue.id}>{issue.partIds.join('・')}：{issue.message} {issue.suggestion}</p>)}</div>}
     {!!run?.constraintSuggestions?.length && <div className="notice"><h3>条件変更の提案</h3>{run.constraintSuggestions.map((item, index) => <p key={index}>{fieldNames[item.key] ?? item.key} → {String(item.value)}：{item.reason}（自動では変更しません）</p>)}</div>}
-    {!!evidence.length && <details className="ai-evidence"><summary>AI実行の記録（{evidence.length}件）</summary><p className="field-note">この画面で受け取った直近20件を保存できます。依頼文・モデル・ツール・検査・使用量・採用した版を含みます。画像やアクセスコードは含めません。</p><ul>{evidence.map(item => <li key={item.runId}><strong>{item.execution.mode === 'gemini' ? '実Gemini' : item.execution.mode === 'injected-test' ? '模擬実行' : '実行方式は未確認'}</strong> · {item.execution.model ?? 'モデル名未取得'}<br /><code>{item.runId}</code><br />{({pending:'候補待ち／未採用',accepted:'採用済み',rejected:'不採用',cancelled:'中断',stale:'依頼・設計が変わったため無効',failed:'失敗',completed:'応答完了'})[item.decision.status]}{item.decision.adopted ? ` · 第${item.decision.adopted.revision}版` : ''}<br />モデル {item.serverRun.modelCalls}回 / ツール {item.serverRun.toolCalls}回 / {usageLabel(item.serverRun)}</li>)}</ul><button className="secondary" onClick={exportEvidence}>AI実行記録を書き出す</button><p className="field-note">使用量未取得は0料金を意味しません。実物確認の記録は工程3で追加します。</p></details>}
-    {!!run?.events?.length && <details><summary>実際の操作ログ（{run.toolCalls}回）</summary><ol className="execution-log">{run.events.map((event, index) => <li key={index}>{event.tool ?? event.name ?? event.type} {event.message}</li>)}</ol><small>モデル {run.modelCalls}回 · ツール {run.toolCalls}回 · {(run.elapsedMs / 1000).toFixed(1)}秒</small></details>}
-  </section>;
+
+    </section>
+  </>;
 }
