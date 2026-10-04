@@ -180,6 +180,18 @@ describe('Goal006 actual API / RunManager / core tools with injected mock model,
     expect(run.status).toBe('cancelled'); expect(s.session.document).toEqual(newer);
   });
 
+  it('invalidates earlier clarification states when another proposal is approved', async () => {
+    const s = await setup(scripted([final, response([call('propose_design_patch')]), final]));
+    const earlier = await s.start('あと5mm動かして、3秒かけて戻す');
+    expect(earlier.status).toBe('clarification_required');
+    const next = await s.start('動く距離を15mmにしたい');
+    expect(next.status).toBe('awaiting_approval'); expect(earlier.status).toBe('clarification_required');
+    const adopted = s.approve(next);
+    expect(adopted.input.travelMm).toBe(15);
+    expect(earlier.status).toBe('cancelled'); expect(earlier.controller.signal.aborted).toBe(true);
+    expect(s.session.document).toEqual(adopted);
+  });
+
   it('rejects a delayed correction after explicit cancellation without starting another model call', async () => {
     const provider = scripted([response([call('propose_design_patch')]), final]);
     const s = await setup(provider), prompt = 'あと5mm動かして';

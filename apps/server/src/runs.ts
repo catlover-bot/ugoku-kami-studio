@@ -165,7 +165,7 @@ export class RunManager {
     catch { throw new AppError('protected_condition', '作者の保護条件に反するため、この変更案は採用できません。', 409); }
     if (document.designHash !== proposal.document.designHash || validateDesign(document).some(check => check.status === 'fail')) throw new AppError('validation_failed', '提案の再検査に失敗しました。', 409);
     session.document = structuredClone(document);
-    for (const other of session.runs.values()) if (other !== run && (other.status === 'running' || other.status === 'awaiting_approval')) this.cancel(other);
+    for (const other of session.runs.values()) if (other !== run && (other.status === 'running' || other.status === 'awaiting_approval' || other.status === 'clarification_required')) this.cancel(other);
     run.status = 'succeeded'; run.message = '提案を採用しました。実物の動作は未検証です。'; run.proposal = undefined;
     return { document: structuredClone(document) };
   }
