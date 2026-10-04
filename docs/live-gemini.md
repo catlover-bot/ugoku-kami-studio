@@ -55,7 +55,7 @@ L2/L3が必要になった場合も、L1の採用・PDF確認が成功した後�
 
 - **L1**: 「もう少し大きく動かしたい。絵の大きさは変えず、紙も増やさない」。現在値から増える余地のある固定サンプルを使い、ツール・候補・保護条件・採用版・PDFを照合する。固定の20→25mm回答では判定しない。
 - **L2**: サンプルの本当の幾何制約と両立しない希望を使う。failの実検査結果、代案または条件変更の説明、現在版の保持を確認する。失敗を演出しない。
-- **L3**: 「回転させたい」。既存の非対応判定が呼出し前に拒否し、設計を保つことを確認する。ここで0モデル呼出しになることを、実Gemini応答の成功に数えない。
+- **L3**: 「回転させたい」。通常の画面からサーバーへ依頼し、明確な非対応動作をHTTP 422 `unsupported_motion` でモデル呼出し前に拒否する。手動パーサーで画面からの送信を止める方式とは区別する。設計を保ち、0モデル呼出しであることを実Gemini応答の成功に数えない。
 
 各実行は最大モデル6回・ローカルtool12回・90秒・入力65536bytes/回・出力4096tokens/回。環境側が厳しければその値を使う。限定確認全体は**再試行を含め3実行・モデル18回・tool36回・AI処理270秒**まで。永続ローカル台帳で開始前に枠を予約し、停止・クラッシュでも自動で枠を復活させない。普通のWebサーバーの時間窓カウンターはプロセス内だけで、サービス全体の料金上限とは異なる。
 
@@ -77,7 +77,7 @@ SDKは`attempts:1`を明示して内部再試行を止める。中断はロー�
 
 `run.mode`は`gemini`または`injected-test`、`run.model`は設定モデル。各`modelUsage`に送信試行、入力byte数、出力上限、所要時間、受信有無、finishReason、返されたmodelVersion、使用量を残す。prompt/output/thinking/cached input/tool prompt/totalを区別する。使用量が返らない呼出しは`usage:null`と`responsesWithoutUsage`で不明として残し、0円とは扱わない。内部思考・thoughtSignature・認可トークン・アクセスコード・画像本体は公開記録へ含めない。
 
-モデルContent全体、functionCallのID、opaqueなthoughtSignatureはサーバー内で保持し、実行したtoolの結果を次の要求へ返す。返答だけで成功とせず、候補作成・最終候補・採用を決定的コアで検査する。未対応・矛盾は必要に応じてモデル呼出し前に止まる。[公式function calling](https://ai.google.dev/gemini-api/docs/function-calling)
+モデルContent全体、functionCallのID、opaqueなthoughtSignatureはサーバー内で保持し、実行したtoolの結果を次の要求へ返す。返答だけで成功とせず、候補作成・最終候補・採用を決定的コアで検査する。Goal006の構造化した解釈提案も同じツールループと上限を使う。手動で読み取れない言い方はAI経路へ渡せるが、固定条件や承認の保護は緩めない。未解決の重要条件は訂正待ちとし、明確な非対応動作だけはモデル呼出し前に拒否する。[公式function calling](https://ai.google.dev/gemini-api/docs/function-calling)
 
 - `provider_auth`: 既存キーの権限・制限・対象APIを所有者が確認する。エラーを直すためのIAM変更を自動実行しない。
 - `provider_rate_limit`: API側429。時間を置き、残る限定枠を確認してから手動再試行する。

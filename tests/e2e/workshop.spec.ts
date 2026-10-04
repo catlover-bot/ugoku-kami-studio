@@ -81,9 +81,13 @@ test('条件違反・未対応・AI未接続でも編集できる', async ({ pag
   await expect(page.getByText('AI未接続', { exact: true })).toBeVisible();
   await page.getByLabel('どんな動きにしたいですか？').fill('カメを回転させたい');
   await page.getByRole('button', { name: '変更案をつくる', exact: true }).click();
-  await expect(page.getByRole('status').filter({ hasText: /未対応/ })).toBeVisible();
-  await page.getByRole('button', { name: '代案「まっすぐ動かす」を選ぶ', exact: true }).click();
-  await expect(page.getByLabel('どんな動きにしたいですか？')).toHaveValue(/まっすぐ/);
+  await expect(page.getByRole('status').filter({ hasText: /AIは未接続/ })).toBeVisible();
+  await page.getByRole('button', { name: '手動支援を使う', exact: true }).click();
+  await expect(page.getByLabel('どう動かしたいですか？', { exact: true })).toHaveValue('カメを回転させたい');
+  await page.getByRole('button', { name: '手動支援で候補をつくる', exact: true }).click();
+  await expect(page.locator('.manual-result')).toContainText('この動きには対応していません');
+  await page.getByRole('button', { name: '直線運動の代案を選ぶ', exact: true }).click();
+  await expect(page.getByLabel('どう動かしたいですか？', { exact: true })).toHaveValue(/まっすぐ/);
   await expect(page.getByLabel('動く距離（mm）', { exact: true })).toHaveValue('20');
 });
 

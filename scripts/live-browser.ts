@@ -19,6 +19,7 @@ export type CaseResult = {
   base: DesignDocument; adopted?: DesignDocument; run?: PublicRun;
   basePdf?: { path: string; sha256: string; pages: number; designHash: string; revision: number };
   runRequests: number; pdf?: { path: string; sha256: string; pages: number; designHash: string; revision: number };
+  serverRejection?: { status: number; code: string };
   physicalValidation: 'unverified';
 };
 
@@ -106,7 +107,10 @@ export async function runBrowserCase(options: { page: Page; origin: string; proj
   const onResponse = (response: Response) => {
     if (new URL(response.url()).origin !== origin || !/\/runs(?:\/[^/]+)?$/.test(new URL(response.url()).pathname)) return;
     if (response.request().method() === 'POST') result.runRequests++;
-    const task = response.json().then(body => { if (body.run) result.run = body.run as PublicRun; }).catch(() => undefined);
+    const task = response.json().then(body => {
+      if (body.run) result.run = body.run as PublicRun;
+      if (response.status() >= 400 && typeof body.error?.code === 'string') result.serverRejection = { status: response.status(), code: body.error.code };
+    }).catch(() => undefined);
     pending.add(task); void task.finally(() => pending.delete(task));
   };
   page.on('response', onResponse);
@@ -119,10 +123,14 @@ export async function runBrowserCase(options: { page: Page; origin: string; proj
     await page.getByLabel('どんな動きにしたいですか？', { exact: true }).fill(result.prompt);
     await page.getByRole('button', { name: '変更案をつくる', exact: true }).click();
     if (caseId === 'L3') {
-      await expect(page.locator('.ai-panel').getByRole('status')).toContainText('未対応');
+      // The bounded manual parser no longer limits the AI entry point. The
+      // normal server rejects this definite unsupported request before dispatch.
+      await expect.poll(() => result.serverRejection).toEqual({ status: 422, code: 'unsupported_motion' });
+      await expect(page.locator('.ai-panel').getByRole('status')).toContainText(/直線運動|未対応/);
       await expect(page.locator('main')).toHaveAttribute('data-design-hash', base.designHash);
-      expect(result.runRequests).toBe(0);
-      result.status = 'unsupported-locally-no-model-call';
+      expect(result.runRequests).toBe(1);
+      expect(result.run).toBeUndefined();
+      result.status = 'unsupported-by-server-no-model-call';
       await page.screenshot({ path: join(outDir, 'unsupported.png'), fullPage: true });
       return result;
     }

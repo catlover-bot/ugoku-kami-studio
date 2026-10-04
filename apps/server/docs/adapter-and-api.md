@@ -26,13 +26,13 @@
 | セッション開始 | `POST /api/sessions` | `{document}` → `{sessionId,token,document}` |
 | 手動編集同期 | `PUT /api/sessions/:id/document` | `{document}` → `{document}`。同じIDの新しい版が必要 |
 | セッション削除 | `DELETE /api/sessions/:id` | `{deleted:true}` |
-| AI開始 | `POST /api/sessions/:id/runs` | `{requestId,prompt,baseRevision,baseHash}` → HTTP 202 `{run}` |
+| AI開始・解釈訂正 | `POST /api/sessions/:id/runs` | `{requestId,prompt,baseRevision,baseHash,correction?}` → HTTP 202 `{run}`。訂正は下記の元依頼・版との照合が必要 |
 | 実行取得 | `GET /api/sessions/:id/runs/:runId` | `{run}` |
 | 中断 | `DELETE /api/sessions/:id/runs/:runId` | `{run}` |
 | 候補採用 | `POST /api/sessions/:id/proposals/:proposalId/approve` | `{requestId,baseRevision,baseHash}` → `{document}` |
 | 候補却下 | `DELETE /api/sessions/:id/proposals/:proposalId` | `{run}` |
 
-`run.status`: `running / awaiting_approval / succeeded / failed / cancelled`。未実行状態はUIが管理する。
+`run.status`: `running / awaiting_approval / clarification_required / succeeded / failed / cancelled`。未実行状態はUIが管理する。
 `run.proposal`: `{id,requestId,baseRevision,baseHash,patch,document}`。
 `run.events`: `{sequence,type,tool?,message,designHash?,patch?,checkStatuses?,durationMs}`。
 `run.constraintSuggestions`: `{key,value,reason}[]`。条件案は採用APIでも変更しない。利用者が手動で条件を見直す。
@@ -50,7 +50,7 @@
 - セッションは最大200、非利用1時間で破棄。セッションごとに実行を100件まで保持し、ID重複検査を維持する。ランダム32バイトのBearerトークンをハッシュ化して照合する。アクセス秘密は一定時間比較する。自己申告IPを信用しない。
 - ストアと制限はインスタンス内メモリのみ。再起動でセッション・承認・カウンターは失われ、複数インスタンス間で共有されない。これはサービス全体の課金上限ではない。公開有効化前にCloud Runの認証・最大インスタンス・外部予算/制限等を別途検討する。無認証の有料エンドポイントを公開しない。
 - 設計はブラウザ内へ保存する。サーバーのセッションはクラウド保存ではない。AIに画像本体を送る機能は実装していない。
-- モデルは許可した5ツール以外を使えない。ファイル・シェル・HTTP・コード実行は提供しない。固定条件はサーバーの設計スナップショットから検査し、モデルがロックを上書きする引数は受け付けない。
+- モデルは宣言済みの6ツール以外を使えない。Goal006で追加した解釈提案も既存ループ内で数える。ファイル・シェル・HTTP・コード実行は提供しない。固定条件はサーバーの設計スナップショットから検査し、モデルがロックを上書きする引数は受け付けない。
 - 承認はセッション・requestId・元版・元ハッシュ・ランダム提案IDに結び付く。採用時にもサーバーの元設計から再生成・再検査する。手動変更と新規依頼は古い承認を失効させる。
 - 認証失敗、429、タイムアウト、拒否、不正出力、上限、中断を区別する。生のSDKエラーや秘密をレスポンスに出さない。候補にfailが残ればモデルの成功宣言を採用しない。unknownは実物未検証として維持する。
 
@@ -64,9 +64,9 @@
 
 サーバーが実行開始時に `interpretDesignRequest` で依頼文を解釈する。「絵のサイズはそのまま」は現在の幅・高さと画像配置倍率を保護し、「2枚まで」は型紙枚数の上限とする。「紙を増やさない」は現在実際に配置した型紙枚数と既存の上限の小さい方を使う。説明書の枚数は含めない。「もっと大きく」は現在の移動量から増やし、作品の拡大・縮小や速度変更では代用しない。
 
-この解釈は決定的な限定語彙の補助であり、自由な日本語すべての意味を理解するものではない。対応する言い換えを明示して扱い、否定・矛盾・既存固定条件の解除が必要な依頼は、課金呼び出しを始める前にHTTP 422 `clarification_required` と書き直す理由を返す。未対応の機構は `unsupported_motion` のまま。
+この解釈は決定的な限定語彙の補助であり、自由な日本語すべての意味を理解するものではない。Goal002時点では否定・矛盾を呼出し前のHTTP 422で返していた。Goal006では、その限定語彙をAIの受付上限にせず、下記の構造化解釈と訂正へ進める。明確な非対応機構だけはモデル呼出し前の `unsupported_motion` を維持する。
 
-解釈済みの条件はrun内部の信頼できるスナップショットに保存する。モデルが `intent` や `locks` をツール引数に渡しても拒否する。候補生成・最終候補確認・採用の3か所で同じ `applyIntentPatch` を使用する。自然語から追加した固定条件は候補の `input.locks` と `maxSheets` に入り、利用者が採用したときだけ現在のDesignDocumentへ保存される。却下では元の値・固定条件を保つ。既存の固定条件は文章だけで解除できない。紙枚数の既存上限を利用者が明示的に厳しくする操作だけは許可し、緩和しない。
+元の依頼と設計条件はrun内部のスナップショットに保存する。解釈案と本人の訂正はそれらと照合し、解釈自体を権限として扱わない。モデルが `intent` や `locks` をツール引数に渡しても拒否する。候補生成・最終候補確認・採用の3か所で同じ `applyIntentPatch` を使用する。自然語から追加した固定条件は候補の `input.locks` と `maxSheets` に入り、利用者が採用したときだけ現在のDesignDocumentへ保存される。却下では元の値・固定条件を保つ。既存の固定条件は文章だけで解除できない。固定中の紙上限は利用者が明示的に厳しくする操作だけ許可し、緩和しない。固定されていない上限の緩和にも、Goal006の具体的な差分確認が必要になる。
 
 公開する追加フィールド:
 
@@ -96,3 +96,15 @@
 GeminiProviderはDeveloper APIの公式URL・v1beta・`vertexai:false`を明示し、別のSDK環境変数で送信先や認証が変わらない。既存の完全なContent履歴・ID・thoughtSignature保持は維持する。公式SDK実体のfetchをテスト内だけで捕捉して、送信URL、ヘッダー、JSON Schema、署名、出力上限、429で内部再試行しないことを確認した。これは実API検証ではない。
 
 `config.test.ts`は一時ファイルと合成キーで共通読込を確認し、doctor子プロセスのfetch/http/netを遮断して、設定済みでも課金通信がなく秘密を出さないことを検査する。以降のコアtoolloop模擬資料の生成先は`artifacts/goal004/server-regression/`で、Geminiの証拠と混同しない。
+
+## Goal 006: 解釈案と作者の権限を分ける
+
+既存の `models.generateContent` とfunction callingを維持する。`propose_request_interpretation` は距離操作（絶対値・単位付き増減量・定性的増減・維持・未指定）、希望方向・禁止方向、絵の大きさ、紙、機構、未解釈の条件を提案する。JSON Schemaは共通のZodスキーマから生成する。単位換算と相対量の計算はコアが固定した元版から行う。明確な定型依頼は初期解釈から候補を作れるため、解釈専用の追加モデル呼出しを必須にはしない。
+
+`run.requestInterpretation` に `binding / interpretation / clarifications / summary / approvalRequired` を返す。構造が正しいだけで意味が正しいとせず、元の依頼・現在の固定条件と照合する。未解決の重要条件があれば `clarification_required` と訂正用の選択肢を返し、候補を採用可能にしない。解釈を変更した場合、以前の解釈で計算した候補は捨てて再計算する。
+
+訂正は同じ開始APIへ、新しい `requestId` と `correction: {runId, requestId, changes}` を送る。外側は新しい依頼ID、内側は訂正対象の実行と依頼ID。`changes.binding` は `{designId, baseRevision, baseHash, requestHash}` で、原文を勝手にtrimせず照合する。訂正した距離・方向等をサーバーで再解釈・検査し、表示だけを書き換えない。訂正元は同一セッションの承認待ちまたは解釈確認待ちの実行に限る。中断・失敗・完了後、設計版・依頼・セッションが違う訂正を拒否し、以前の候補の承認を再利用しない。
+
+既存の固定条件、選択領域、直線1機構、用紙上限はモデルの権限ではない。紙の上限緩和は具体的な変更前後を確認した作者の `paperApproval: {from,to}` が必要で、モデルのスキーマに承認フィールドはない。固定中の条件をこの操作で解除することもできない。候補への承認は引き続き別であり、訂正時点では確定作品を変更しない。
+
+解釈提案はツール回数に、解釈を求めるモデル呼出しは同じモデル回数・時間・入力容量に含める。訂正による新規実行も既存の回数制限に数える。画像本体の送信、別のAPI基盤、追加のライブ試験枠は導入しない。[generateContentの関数宣言](https://ai.google.dev/api/generate-content#FunctionDeclaration) と [署名を元のPartに保持する仕様](https://ai.google.dev/gemini-api/docs/generate-content/thought-signatures) を2026-10-04に再確認した。実モデル接続は未実施で、SDK通信を捕捉する検査と区別する。

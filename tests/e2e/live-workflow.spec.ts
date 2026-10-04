@@ -37,7 +37,7 @@ for (const caseId of ['L1', 'L2', 'L3'] as LiveCase[]) test(`Goal004 ${caseId}: 
     const origin = await app.listen({ port: 0, host: '127.0.0.1' });
     const result = await runBrowserCase({ page, origin, projectPath, accessSecret: access, caseId, outDir, timeoutMs: 15_000, mode: 'injected-test' });
     expect(result.mode).toBe('injected-test');
-    expect(result.status).toBe(caseId === 'L1' ? 'adopted-and-pdf-verified' : caseId === 'L2' ? 'condition-change-offered-original-preserved' : 'unsupported-locally-no-model-call');
+    expect(result.status).toBe(caseId === 'L1' ? 'adopted-and-pdf-verified' : caseId === 'L2' ? 'condition-change-offered-original-preserved' : 'unsupported-by-server-no-model-call');
     expect(calls).toBe(caseId === 'L1' ? 2 : caseId === 'L2' ? 3 : 0);
     expect(result.physicalValidation).toBe('unverified');
   } finally {

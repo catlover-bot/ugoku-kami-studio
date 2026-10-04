@@ -23,6 +23,10 @@ class OfflineAi {
       if (path.endsWith('/runs') && method === 'POST') {
         this.starts++;
         const body = route.request().postDataJSON();
+        // Goal006 sends requests through the normal server interpretation path.
+        // This HTTP fixture models its definite unsupported response; real
+        // RunManager + zero provider dispatch is covered by live-workflow.spec.
+        if (body.prompt === '回転させたい') return json({error: {code: 'unsupported_motion', message: 'その動きは未対応です。直線運動1か所に対応しています。'}}, 422);
         const candidate = applyDesignPatch(this.base, {travelMm: 15});
         this.current = {id: `offline-run-${this.starts}`, requestId: body.requestId, baseHash: this.base.designHash, baseRevision: this.base.revision, mode: 'injected-test', model: 'offline-fixture-model', status: 'awaiting_approval', message: '模擬応答：実API・実物確認ではありません。', events: [{sequence: 1, type: 'tool', tool: 'propose_design_patch', message: 'HTTPフィクスチャの候補', designHash: candidate.designHash, patch: {travelMm: 15}, checkStatuses: candidate.checks.map(({id,status}) => ({id,status})), durationMs: 0}], constraintSuggestions: [], validationIssues: [], modelCalls: 1, toolCalls: 1, elapsedMs: 30, usage: {promptTokens: 100, outputTokens: 20, totalTokens: 120, responsesWithUsage: 1, responsesWithoutUsage: 0}, modelUsage: [{call: 1, inputBytes: 100, outputTokenLimit: 1000, durationMs: 30, received: true, finishReason: 'STOP', modelVersion: 'offline-fixture-model', usage: {promptTokens: 100, outputTokens: 20, thinkingTokens: 0, cachedInputTokens: 0, toolPromptTokens: 0, totalTokens: 120}}], proposal: {id: `offline-proposal-${this.starts}`, patch: {travelMm: 15}, document: candidate}};
         if (this.mode === 'held') {this.held = route; return;}
@@ -65,7 +69,7 @@ test('G4 edited request invalidates a late proposal and retains honest stale evi
   await expect(page.locator('.ai-panel').getByRole('button', {name: 'この案にする', exact: true})).toHaveCount(0);
   await page.getByRole('button', {name: '変更案をつくる', exact: true}).click();
   await expect(page.locator('.ai-panel').getByRole('status')).toContainText('その動きは未対応');
-  expect(fixture.starts).toBe(1); expect(await mainHash(page)).toBe(before);
+  expect(fixture.starts).toBe(2); expect(await mainHash(page)).toBe(before);
   const exported = await recordDownload(page);
   expect(exported.format).toBe('ugoku-kami-ai-run'); expect(exported.records).toHaveLength(1);
   expect(exported.records[0].execution.mode).toBe('injected-test'); expect(exported.records[0].decision.status).toBe('stale');
