@@ -14,6 +14,8 @@ curl --fail http://127.0.0.1:8080/api/health
 
 UIとAPIは同一オリジン。コンテナは非rootユーザー、`0.0.0.0:$PORT`、既定8080。コンテナのファイルシステムに利用者のプロジェクトを永続保存しない。WSLにはDockerがないため、標準GitHub Linuxランナーで検証した。[初回の実行結果](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37168807826)では、既存Dockerfileのビルド・実起動・healthに加え、PCと狭幅のChromiumで手動編集・保存復帰・同版の原寸PDF取得が成功した。実コンテナのAI無効状態と実行拒否も確認した。レジストリへのpush・Cloud Run公開は行っていない。
 
+両DockerfileのNodeベースは `node:24.20.0-bookworm-slim@sha256:6642ef280aebc09c4541bee0b15c9f89f0f3f3c247ddee79ae1d37eddfdcbbaa` に固定した。これはmultiarch indexではなく **linux/amd64専用のOCI image manifest**。2026-10-04に公式Docker Hubのindexと該当manifestだけを匿名で取得し、各HTTP本文のSHA-256、レスポンスdigest、index内のplatform・サイズ・media typeを照合した。[照合記録](../deployment/node-base-image.json)と[Registry公式仕様](https://docs.docker.com/reference/api/registry/latest/)を参照。イメージ本体・config blobは取得しておらず、この固定後のappビルドはCIで、Ollamaモデルコンテナの実行・移植性は別途検証する。過去のコンテナ成功を新digestの実行結果とは扱わない。
+
 コンテナ起動後の画面検証は `npx playwright test --config playwright.container.config.ts`。既定の接続先は `http://127.0.0.1:8080` で、この設定はホスト側Webサーバーを代わりに起動しない。証拠には対象コミット・コンテナimage ID・設計版・PDF hashを残す。
 
 ## デプロイ計画（実行しない）

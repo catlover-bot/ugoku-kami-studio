@@ -1,0 +1,33 @@
+{
+  "checkedAt": "2026-10-04T09:19:42.491Z",
+  "registry": "Docker Official Image library/node",
+  "tag": "24.20.0-bookworm-slim",
+  "platform": {
+    "architecture": "amd64",
+    "os": "linux"
+  },
+  "index": {
+    "url": "https://registry-1.docker.io/v2/library/node/manifests/24.20.0-bookworm-slim",
+    "digest": "sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e",
+    "mediaType": "application/vnd.oci.image.index.v1+json",
+    "bytes": 3929
+  },
+  "image": {
+    "url": "https://registry-1.docker.io/v2/library/node/manifests/sha256:6642ef280aebc09c4541bee0b15c9f89f0f3f3c247ddee79ae1d37eddfdcbbaa",
+    "digest": "sha256:6642ef280aebc09c4541bee0b15c9f89f0f3f3c247ddee79ae1d37eddfdcbbaa",
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "bytes": 1929
+  },
+  "layerCount": 5,
+  "scope": {
+    "anonymousPublicManifestReads": true,
+    "accountCredentialsUsed": false,
+    "imageConfigDownloaded": false,
+    "imageLayersDownloaded": false,
+    "modelDownloaded": false,
+    "containerExecuted": false
+  },
+  "method": "SHA-256 of each original HTTP response body equals Docker-Content-Digest; selected linux/amd64 index descriptor digest, mediaType and size equal the image manifest response.",
+  "reference": "https://docs.docker.com/reference/api/registry/latest/",
+  "localEvidence": "artifacts/goal008/deployment/base-image/{index.json,linux-amd64.json,verification.json}"
+}
