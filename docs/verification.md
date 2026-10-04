@@ -18,6 +18,8 @@
 
 撮影は実操作だけを記録し、私的な同期ページの実フレームでwall clockと動画PTSを校正します。編集は通常UIの区間だけを等速でつなぎ、待機省略、手動70mmの失敗例、実物/公開の未確認を字幕に残します。画像4枚・MP4・字幕・文字数・素材hash・動画レビューの実際の状態は `artifacts/submission/public/manifest.json`、未公開項目は `private/readiness.json`、実物用の同版キットは `private/physical-kit/` に記録します。ファイル生成と再生/目視/公開確認を別々に残します。
 
+完成したローカル動画は180秒・1920×1080・25fps・字幕25区間です。同期の14.177秒の非線形ずれを自動ガードが検出し、再推論せず保存済み映像の実PTSで11区間を指定しました。元captureは不変、編集記録と再現スクリプトをprivateに保存しています。`review.ts` のブラウザ関数にtsxの補助関数が混ざる問題を修正し、文書化コマンド自身で全フレームdecodeと180秒等速再生を完遂しました（4,500 frames、欠落/破損0）。全9枚の1秒間隔シート・全字幕区間・要所の原寸フレームを目視し、全4,500フレームの一枚ずつの目視とは区別します。型紙は採用第14版、手動70mmとUndo後の画面は第16版で同じ設計hashです。実物キットは第14版のまま、全5頁の描画一致・A4・50mm線・8部品を確認し、実物記録は空欄です。
+
 製品固定SHA `da00d3f` の [Check（全体・保存・通常コンテナ）](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37192844917) と [WebKit](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37192844929) は成功しました。撮影補助を含む最終mainのSHAと同SHAのCI結果は、循環した自己参照を避け `artifacts/goal008/main-integration.json` に保持します。モデル入りコンテナの実起動やクラウド公開の成功とは区別します。
 
 Cloud Runはapp/Ollama同一インスタンス、instance-based CPU、HTTP8/モデル1、min0/max1の計画を作成。モデル/ランタイムの全SHA、公式Node linux/amd64 manifestを固定しました。重み4,336,359,085 bytesとruntime70,751,265 bytesのstage照合は成功。モデル入りコンテナ・Cloud Run admission/性能・公開審査経路は未確認です。通常のapp-only CIと区別します。`deploy:plan -- --ollama`は不足設定を表示し、クラウド操作をしません。
