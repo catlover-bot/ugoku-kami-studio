@@ -172,8 +172,18 @@ test('Injected AI: cancelling a delayed interpretation keeps design, selection a
     await ai(page);await page.getByLabel('AIアクセスコード').fill(accessCode); await page.getByRole('dialog', {name: '設定', exact: true}).getByRole('button', {name: '閉じる', exact: true}).click();
     await page.getByLabel('どう動かしたいですか？',{exact:true}).fill('首のストロークをひと伸び分足したい');
     const sent=page.waitForResponse(response=>response.request().method()==='POST' && /\/runs$/.test(new URL(response.url()).pathname));
-    await page.getByRole('button',{name:'AIで案をつくる',exact:true}).click();await sent;
+    await page.getByRole('button',{name:'AIで案をつくる',exact:true}).click();
+    const started = await (await sent).json() as {run: AiRun};
+    const cancelled = page.waitForResponse(response => response.request().method() === 'DELETE' && new URL(response.url()).pathname.endsWith(`/runs/${started.run.id}`));
     await page.getByRole('button',{name:'中断する',exact:true}).click();
+    const cancellation = await cancelled;
+    expect(cancellation.status()).toBe(200);
+    expect(cancellation.request().headers()['content-type']).toBeUndefined();
+    expect(cancellation.request().postData()).toBeNull();
+    expect((await cancellation.json()).run.status).toBe('cancelled');
+    const session = [...app.sessions.sessions.values()][0]!;
+    expect(session.runs.get(started.run.id)?.status).toBe('cancelled');
+    expect(session.runs.get(started.run.id)?.controller.signal.aborted).toBe(true);
     await expect(page.locator('.ai-panel').getByRole('status')).toContainText('中断');
     const distance=page.getByLabel('動く距離（mm）',{exact:true});await distance.fill('');
     release(modelReply([toolCall('propose_request_interpretation',{distance:{kind:'relative',delta:5,unit:'mm'},direction:{forbidden:[]},size:'unspecified',paper:{kind:'unspecified'},mechanism:'single-pull-tab',unresolved:[]}),toolCall('propose_design_patch')]));
@@ -186,6 +196,51 @@ test('Injected AI: cancelling a delayed interpretation keeps design, selection a
     expect(saved.document.input.selection).toEqual(base.document.input.selection);
     expect(saved.records).toEqual([]);
     expect(JSON.stringify(saved)).not.toContain(accessCode);
+  } finally {try {await page.context().close();} finally {await app.close();}}
+});
+
+test('Injected AI: bodyless proposal rejection and session deletion reach the actual Fastify handlers', async ({page}, info) => {
+  let calls = 0;
+  const provider: ModelProvider = {async generate() {
+    calls++;
+    return calls === 1 ? modelReply([toolCall('propose_design_patch')]) : finalReply();
+  }};
+  const app = await isolatedAi(provider);
+  try {
+    const origin = await app.listen({host: '127.0.0.1', port: 0});
+    const base = await openTwenty(page, info.outputPath('input.ugoku.json'), origin);
+    await ai(page);
+    await page.getByLabel('AIアクセスコード').fill(accessCode);
+    await page.getByRole('dialog', {name: '設定', exact: true}).getByRole('button', {name: '閉じる', exact: true}).click();
+    await page.getByLabel('どう動かしたいですか？', {exact: true}).fill('あと5mm動かして');
+    const created = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/sessions');
+    await page.getByRole('button', {name: 'AIで案をつくる', exact: true}).click();
+    const credentials = await (await created).json() as {sessionId: string; token: string};
+    const reject = page.locator('.ai-panel').getByRole('button', {name: 'この案を使わない', exact: true});
+    await expect(reject).toBeVisible();
+    const session = app.sessions.sessions.get(credentials.sessionId)!;
+    const run = [...session.runs.values()][0]!;
+    expect(run.status).toBe('awaiting_approval');
+    const rejected = page.waitForResponse(response => response.request().method() === 'DELETE' && new URL(response.url()).pathname.includes('/proposals/'));
+    await reject.click();
+    const response = await rejected;
+    expect(response.status()).toBe(200);
+    expect(response.request().headers()['content-type']).toBeUndefined();
+    expect(response.request().postData()).toBeNull();
+    expect((await response.json()).run.status).toBe('cancelled');
+    expect(run.status).toBe('cancelled');
+    expect(run.proposal).toBeUndefined();
+    expect(session.document).toEqual(base.document);
+    await expect(page.locator('main')).toHaveAttribute('data-design-hash', base.document.designHash);
+    // The UI has no session-close action. Exercise that existing bodyless API from
+    // the browser too, through real HTTP/Fastify parsing with the same session.
+    const deleted = await page.evaluate(async ({sessionId, token}) => {
+      const result = await fetch(`/api/sessions/${sessionId}`, {method: 'DELETE', headers: {Authorization: `Bearer ${token}`}});
+      return {status: result.status, body: await result.json()};
+    }, credentials);
+    expect(deleted).toEqual({status: 200, body: {deleted: true}});
+    expect(app.sessions.sessions.has(credentials.sessionId)).toBe(false);
+    expect(calls).toBe(2);
   } finally {try {await page.context().close();} finally {await app.close();}}
 });
 

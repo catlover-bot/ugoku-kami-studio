@@ -12,7 +12,8 @@ class ApiRequestError extends Error { constructor(message: string, readonly code
 type Session = {sessionId: string; token: string; designId: string};
 type PollContext = {session: Session; runId: string; base: DesignDocument; ticket: number; prompt: string; requestedAt: string; access: string};
 async function request<T>(url: string, method: string, body?: unknown, token?: string, access?: string): Promise<T> {
-  const response = await fetch(url, {method, headers: {'Content-Type': 'application/json', ...(token ? {Authorization: `Bearer ${token}`} : {}), ...(access ? {'X-AI-Access': access} : {})}, ...(body ? {body: JSON.stringify(body)} : {})});
+  const hasBody = body !== undefined;
+  const response = await fetch(url, {method, headers: {...(hasBody ? {'Content-Type': 'application/json'} : {}), ...(token ? {Authorization: `Bearer ${token}`} : {}), ...(access ? {'X-AI-Access': access} : {})}, ...(hasBody ? {body: JSON.stringify(body)} : {})});
   const result = await response.json() as T & {error?: {message?: string; code?: string} | string; message?: string};
   if (!response.ok) throw new ApiRequestError(typeof result.error === 'string' ? result.error : result.error?.message ?? result.message ?? '通信に失敗しました。接続を確認して再試行してください。', typeof result.error === 'object' ? result.error.code : undefined);
   return result;
