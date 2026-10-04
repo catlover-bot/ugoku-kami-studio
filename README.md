@@ -40,8 +40,10 @@ http://localhost:5173 を開きます。開発APIはポート3001、Viteが `/ap
 | `npm run dev` | React + APIの開発サーバー |
 | `npm run check` | ESLint・型検査・単体/統合テスト・本番ビルド |
 | `npm run test:e2e` | ChromiumでPC/狭い画面の主要操作を検証 |
+| `npx playwright test --config playwright.webkit.config.ts` | WebKitで自画像・保存再開・PDF3種・取得版ガイドの代表経路を検証 |
 | `npm run test:storage` | 実IndexedDBとReact StrictModeで保存・移行・競合・復元を検証 |
 | `npm run examples` | 同じ設計からサンプルPDF/SVG・検査結果を生成 |
+| `npx tsx scripts/check-product-zoom.ts` | ビルドをコピーした専用サーバーで実Chromium 200%拡大の制作・ガイド操作を確認 |
 | `npm run prototype` | 白背景の魚1作品の手動設計・材料・工程図・未記入の実物確認票を生成 |
 | `npm run prototype:capture` | ビルド済みの通常UIから手動試作PDFを取得し、PC・390px幅・全ページ描画を照合 |
 | `npm run smoke:live` | 既定はスキップ。二重の明示opt-inなしで実APIを呼ばない |
@@ -49,7 +51,7 @@ http://localhost:5173 を開きます。開発APIはポート3001、Viteが `/ap
 | `npm run build && npm start` | ビルド後、UI/APIを同一オリジンで提供（既定3001、`PORT`対応） |
 | `npm run deploy:plan` | Cloud Runの計画を表示するだけ。デプロイしない |
 
-E2Eの初回は `npx playwright install chromium`（Linuxのライブラリ不足時は `npx playwright install --with-deps chromium`）が必要です。PDFの目視確認には `pdftoppm`（poppler-utils）を使います。
+E2Eの初回は `npx playwright install chromium`（Linuxのライブラリ不足時は `npx playwright install --with-deps chromium`）が必要です。WebKitの代表試験は専用CIでブラウザとOS依存関係を導入します。ローカルで実行する場合はWebKitに必要なライブラリも必要です。PlaywrightのWebKit/タッチエミュレーションを実iPhone確認とは扱いません。PDFの目視確認には `pdftoppm`（poppler-utils）を使います。
 
 ```sh
 npm run examples

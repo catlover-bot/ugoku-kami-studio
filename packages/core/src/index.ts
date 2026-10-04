@@ -3,6 +3,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import type { ArtworkComposition, ArtworkRepair, AssemblyStep, CheckResult, DesignDocument, DesignInput, DesignPatch, Direction, Part, Point, Rect } from './types.js';
 export type * from './types.js';
+export { displayDimension } from './display.js';
 
 const finite = z.number().finite();
 export const RectSchema = z.object({ x: finite.min(0).max(100000), y: finite.min(0).max(100000), width: finite.positive().max(100000), height: finite.positive().max(100000) }).strict();

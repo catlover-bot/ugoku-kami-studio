@@ -1,5 +1,6 @@
 import { applyDesignPatch, createDesign, parseDesignDocument, canExport, DesignPatchSchema } from './index.js';
 import type { DesignDocument, DesignInput, DesignPatch, Direction, ImageSource, LockKey } from './types.js';
+import { displayDimension } from './display.js';
 
 /** A deliberately bounded Japanese/English helper, not an image recognizer or an AI substitute. */
 export type DesignIntent = {
@@ -41,7 +42,7 @@ export function interpretDesignRequest(document: DesignDocument, request: string
   const keepSize = /(?:絵|作品|画像)?(?:の)?(?:大きさ|サイズ|寸法).{0,10}(?:保[つっち]|固定(?!しない)|そのまま|維持|変え(?:ない|ず|たくない)|変[更化]しない)|(?:絵|画像|作品).{0,6}(?:縮小しない|縮め(?:ない|たくない)|小さくしない|そのまま|いじらず)|keep.{0,16}(?:art|image|size)|same size/i.test(text);
   const changeSize = /(?:絵|作品|画像)(?:の)?(?:大きさ|サイズ|寸法).{0,6}(?:変更して|変えて|小さくして|大きくして)|(?:絵|作品|画像)(?:は|を)(?:縮小して|小さくして|拡大して)|(?:サイズ|大きさ)(?:は|の)?(?:固定しない|変えてよい|変えていい)|(?:今度は|今は).{0,5}(?:変えてもよい|変えてもいい)/.test(text);
   if (keepSize && changeSize) intent.conflicts.push('絵の大きさを保つ希望と変更する希望が同時にあります。どちらを優先するか書き直してください。');
-  if (keepSize) { intent.protections.widthMm = input.widthMm; intent.protections.heightMm = input.heightMm; addLock('widthMm'); addLock('heightMm'); intent.notes.push(`絵の大きさを維持：台紙 ${input.widthMm} × ${input.heightMm} mm、画像の配置倍率も固定します。`); }
+  if (keepSize) { intent.protections.widthMm = input.widthMm; intent.protections.heightMm = input.heightMm; addLock('widthMm'); addLock('heightMm'); intent.notes.push(`絵の大きさを維持：台紙 ${displayDimension(input.widthMm)} × ${displayDimension(input.heightMm)} mm、画像の配置倍率も固定します。`); }
   if (changeSize && (input.locks.includes('widthMm') || input.locks.includes('heightMm'))) intent.conflicts.push('絵の大きさは固定中です。詳細設定で変更する条件の固定を解除してから、改めて依頼してください。');
   const noMorePaper = /(?:紙|枚数|厚紙).{0,10}(?:増や(?:さない|さず|したくない)|増加させない|追加しない|変更しない|変え(?:ない|ず)|そのまま|今のまま|維持)|no more (?:paper|sheets)|without (?:more|adding) (?:paper|sheets)/i.test(text);
   const morePaper = /(?:紙|枚数|厚紙).{0,8}(?:増やして|増や(?:せる|してよい|していい))/.test(text);

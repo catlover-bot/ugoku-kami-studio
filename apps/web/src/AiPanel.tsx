@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getKitSummary, interpretDesignRequest, parseDesignDocument, type DesignDocument } from '@ugoku/core';
+import { displayDimension, getKitSummary, interpretDesignRequest, parseDesignDocument, type DesignDocument } from '@ugoku/core';
 import DesignComparison, { fieldNames } from './DesignComparison';
 import { designStamp, observeRun, publicRunSnapshot, usageLabel, type AiRun as Run, type AiEvidence } from './aiEvidence';
 import { downloadFile } from './project';
@@ -216,7 +216,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     for (const [key, value] of Object.entries(requestIntent.protections)) if (value !== undefined) values.set(key, value);
     const labels: string[] = [];
     if (values.has('widthMm') && values.has('heightMm')) {
-      labels.push(`絵の大きさ ${values.get('widthMm')} × ${values.get('heightMm')}mm を保つ`);
+      labels.push(`絵の大きさ ${displayDimension(Number(values.get('widthMm')))} × ${displayDimension(Number(values.get('heightMm')))}mm を保つ`);
       values.delete('widthMm'); values.delete('heightMm');
     }
     const directions: Record<string, string> = { right: '右', left: '左', up: '上', down: '下' };

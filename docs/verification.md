@@ -28,7 +28,17 @@ PDFは既存生成系の同じページから全部入り・型紙・説明を�
 
 Cの全体回帰は初回136/140で、通信失敗の個別案内が消えた2件と、再生を印刷工程に探す旧導線2件を検出した。通信失敗を一般のAI無効と区別して表示し、実際の再生は工程2、印刷画面は工程3で取得するよう確認手順を更新した。影響経路24件の再実行が成功。ガイド/PDF受入8件と共有希望・設定・遅延応答の模擬HTTP12件も実Appで成功しており、最終コミットではクリーン全体再実行を行う。分割PDFは実ダウンロード3種のA4寸法・頁数・頁描画を照合し、PC/mobileの回転配置6ページずつが全部入りと100dpi描画で一致した。全12頁を実際に開いて確認した所見は `printing-guide/visual-review.json`、数値結果は `printing-guide/split-render-comparison.json`。ダウンロードやガイド閲覧で実物確認済みを追加していない。
 
-変更前の同条件証跡は `artifacts/goal005/before/manifest.json`（自作絵/サンプル×PC/狭幅、36画面、実PDF4件）。実物・実Gemini・初見の人・実スマートフォン・Cloud Run公開は引き続き未実施。B〜DとP1/P4〜P8の新しい受入確認はこの段階では未完了。
+変更前の同条件証跡は `artifacts/goal005/before/manifest.json`（自作絵/サンプル×PC/狭幅、36画面、実PDF4件）。実物・実Gemini・初見の人・実スマートフォン・Cloud Run公開は引き続き未実施。この段階の記録から続くC/Dの最終受入結果は以下に追記する。
+
+Cの固定コミット `cfb4a9b489b4a7c5abe823e674ae366949e0e159` は別worktreeで npm ci / doctor / check（108件）/ 全E2E（140件）/ native保存（29件）/ examples（4例）が成功した。CI・main統合の結果は `artifacts/goal005/phase-c-integration.json` に、実ダウンロード証拠は `phase-c-clean/printing-guide/` に残す。
+
+Dでは同じ自作PNG/サンプル・PC1440×1000/390×844で変更前後を操作して撮影し、入力SHAと開始設計hashの一致、数値draft中の版不変、slider/選択の一操作一版、出力/ガイドの記録0件を確認する。途中の目視で自画像の高さが長い小数になっていたため、希望・条件の表示だけを小数2桁へまとめ、丸めた表示に「約」を付けた。入力・保存・幾何・hash・PDFの精度は変えていない。工程UIでは旧保存の表示面も選択状態として見つけられるようにした。速度向上の定量的な主張はしていない。
+
+実Chromiumのブラウザ拡大は `scripts/check-product-zoom.ts` で `chrome.tabs.setZoom(2)` と `getZoom=2` を照合した。1440pxから720 CSS pxへ変化し、Home・3工程・実PDF・ガイドの7地点で横overflowなし、主要44px目標と覆われないフォーカス、キーボードの次工程、閉じた後のフォーカス復帰を確認した。取得版と編集後の版も分離した。CSSズームやviewportだけの200%相当試験とは区別する。出力は `artifacts/goal005/product-zoom/` の実行日時別manifest・7画面・実PDF・元画像で、ソースとbundleの全hash、入力と設計版を記録する。
+
+最終版の固定SHAごとのコマンド、通常CI・WebKit CI・コンテナ、統合後のremote main照合は `artifacts/goal005/final-verification.json` に記録する。`after-final/manifest.json` は変更前と同じ入力・環境の最終表示証拠である。これらの自動検証と開発者の画面/PDF確認を、初見の人・実スマートフォン・実OSの日本語IME・実Gemini・実物・Cloud Run公開の成功に置き換えない。外部6項目は未実施。利用者の画像や秘密をGit成果物へ含めていない。
+
+WebKitはローカルのOSライブラリ不足で実起動できず、OSへの追加は行わなかった。専用の使い捨てCI環境で依存関係を入れて代表経路を検証するworkflowを追加した。自作PNG→タッチ2点選択→native自動保存/reload→PDF3種（A4・頁順・設計版）→ガイド閲覧位置/reloadを確認する。`playwright.webkit.config.ts` と `tests/webkit/manual-production.spec.ts`。CIの最終runと結果は確定後に記録する。実iPhone/Safari実機とは区別する。
 
 ## Goal 004-R — 現在の統合方針
 

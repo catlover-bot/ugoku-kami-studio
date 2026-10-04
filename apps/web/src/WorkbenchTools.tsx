@@ -9,7 +9,7 @@ export function WorkbenchViews({ stage, view, onView, canCompare, comparing, onC
   stage: number; view: WorkbenchView; onView: (view: WorkbenchView) => void;
   canCompare: boolean; comparing: boolean; onCompare: () => void;
 }) {
-  const available = views.filter(item => stage === 1 ? item.key === 'front' || item.key === 'original' : stage === 3 ? item.key !== 'original' : true);
+  const available = views.filter(item => item.key === view || (stage === 1 ? item.key === 'front' || item.key === 'original' : stage === 3 ? item.key !== 'original' : true));
   return <div className="canvas-toolbar">
     <div className="segmented" role="group" aria-label="表示する面">{available.map(item => <button key={item.key} aria-pressed={view === item.key} onClick={() => onView(item.key)}>{item.label}</button>)}</div>
     {stage === 2 && canCompare && <button className="text-button" onClick={onCompare} aria-pressed={comparing}>変更前と比較</button>}
