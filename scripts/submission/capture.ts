@@ -139,8 +139,11 @@ try {
     await mergePublicManifest(paths.publicDir, { capture: { ...result, rawVideo: undefined, scenes: undefined, checks: undefined, requestFailures: undefined }, physicalKit: { location: 'Private handoff, separate from public screenshots', ...stamp(adopted), files: kit } });
     success = true;
   }
+} catch (error) {
+  await page.screenshot({ path: resolve(recordingDir, 'failed-screen.png'), fullPage: true }).catch(() => undefined);
+  throw error;
 } finally {
   await Promise.allSettled([...responseTasks]); await context.close(); await browser.close(); await app?.close();
-  await json(resolve(recordingDir, 'recording-status.json'), { success, mode, runPosts, pageErrors: requestFailures, video: relative(paths.privateDir, await page.video()!.path()), finishedAt: new Date().toISOString() });
+  await json(resolve(recordingDir, 'recording-status.json'), { success, mode, sourceSha: options['--source-sha'] ?? codeSha(), toolingSha: codeSha(), captureScriptSha256: sha256(await readFile(new URL(import.meta.url))), scenes, runId: latestRun?.id, serverStatus: latestRun?.status, runPosts, pageErrors: requestFailures, video: relative(paths.privateDir, await page.video()!.path()), finishedAt: new Date().toISOString() });
   console.log(JSON.stringify({ success, mode, recordingDir, runPosts }));
 }
