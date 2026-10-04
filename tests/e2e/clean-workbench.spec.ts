@@ -1,6 +1,7 @@
 import {expect, test} from '@playwright/test';
 import {PDFDocument} from 'pdf-lib';
 import {readFile} from 'node:fs/promises';
+import {createDesign, type DesignDocument} from '@ugoku/core';
 import {manual, stage, startSample, splitPrint} from './helpers';
 
 // Ordinary deterministic app path. No inference client is created by these tests.
@@ -37,6 +38,47 @@ test('one request field and review replace normal controls without changing the 
   const download=page.waitForEvent('download'); await page.getByRole('button',{name:'型紙だけを保存',exact:true}).click();
   const file=await download;const path=info.outputPath('adopted-pattern.pdf');await file.saveAs(path);
   const pdf=await PDFDocument.load(await readFile(path));expect(pdf.getSubject()).toContain(adopted);expect(pdf.getPages()[0]!.getWidth()).toBeCloseTo(595.276,2);
+});
+
+test('failed validation shows each geometry reason once and preserves errors without a detailed issue list', async({page})=>{
+  let base: DesignDocument;
+  let firstReason = '', firstSuggestion = '', starts = 0;
+  const noIssuesMessage = '検査の詳細を取得できませんでした。作品は変更していません。接続を確認して再試行してください。';
+  await page.route('**/api/status',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({ai:{enabled:true,mode:'injected-test',reason:'テスト専用の応答'},limits:{modelCalls:6,toolCalls:12,timeoutMs:90000,inputBytes:20000,outputTokens:1000}})}));
+  await page.route('**/api/sessions',async route=>{base=route.request().postDataJSON().document;await route.continue();});
+  await page.route('**/api/sessions/**/runs',route=>{
+    starts++;
+    const input=route.request().postDataJSON();
+    const invalid=createDesign({...base.input,travelMm:70},{designId:base.designId,revision:base.revision+1});
+    const issues=invalid.checks.filter(check=>check.status==='fail');
+    expect(issues.length).toBeGreaterThan(0);
+    firstReason=issues[0]!.message;firstSuggestion=issues[0]!.suggestion!;
+    const message=starts===1 ? `候補は条件を満たしません。${issues[0]!.partIds.join('・')}：${firstReason} ${firstSuggestion}` : noIssuesMessage;
+    const run={id:`validation-test-${starts}`,requestId:input.requestId,baseRevision:input.baseRevision,baseHash:input.baseHash,mode:'injected-test',status:'failed',message,error:{code:'validation_failed',message},validationIssues:starts===1?issues:[],constraintSuggestions:[],events:[],modelCalls:0,toolCalls:0,elapsedMs:0};
+    return route.fulfill({contentType:'application/json',body:JSON.stringify({run})});
+  });
+  await page.goto('/');await startSample(page);await manual(page);
+  const stamp=await page.locator('main').evaluate(element=>({hash:element.dataset.designHash,revision:element.dataset.designRevision}));
+  await page.getByRole('button',{name:'設定',exact:true}).click();
+  await page.getByLabel('AIアクセスコード').fill('synthetic-validation-access');
+  await page.getByRole('dialog',{name:'設定',exact:true}).getByRole('button',{name:'閉じる',exact:true}).click();
+  await page.getByRole('button',{name:'AIで案をつくる',exact:true}).click();
+  const panel=page.locator('.ai-panel');
+  await expect(panel.getByRole('status')).toHaveText('候補は条件を満たしません。作品は変更していません。下の理由を確認して調整してください。');
+  const text=await panel.innerText();
+  expect(text.split(firstReason)).toHaveLength(2);
+  expect(text.split(firstSuggestion)).toHaveLength(2);
+  await expect(panel.getByRole('heading',{name:'設計で見つかった問題'})).toBeVisible();
+  await expect(panel.getByRole('button',{name:'この案にする',exact:true})).toHaveCount(0);
+  await expect(page.locator('main')).toHaveAttribute('data-design-hash',stamp.hash!);
+  await expect(page.locator('main')).toHaveAttribute('data-design-revision',stamp.revision!);
+  await page.getByRole('button',{name:'AIを再試行する',exact:true}).click();
+  await expect(panel.getByRole('status')).toHaveText(noIssuesMessage);
+  await expect(panel.getByRole('heading',{name:'設計で見つかった問題'})).toHaveCount(0);
+  await panel.getByRole('button',{name:'手動の調整に戻る',exact:true}).click();
+  await expect(page.locator('.motion-settings')).toBeVisible();
+  await expect(page.locator('main')).toHaveAttribute('data-design-hash',stamp.hash!);
+  expect(starts).toBe(2);
 });
 
 test('local configuration is confined to Settings and no ordinary edit starts inference', async({page})=>{

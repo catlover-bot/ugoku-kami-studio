@@ -242,6 +242,10 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     <p className="field-note">案をつくる操作をしたときだけ、希望・寸法・選択範囲を送ります。画像そのものは送信しません。</p>
   </section>;
   const action = <button data-design-action onClick={() => {onActivate?.(); void start();}} disabled={busy || pollInterrupted || interpretationDraft || !prompt.trim() || !selectionReady || inputDraftActive} className="secondary">{run?.status === 'failed' ? 'AIを再試行する' : busy ? 'AIの案を待っています…' : 'AIで案をつくる'}</button>;
+  const repeatsValidationIssue = run?.status === 'failed' && run.error?.code === 'validation_failed'
+    && message === (run.error.message ?? run.message)
+    && run.validationIssues?.some(issue => issue.message && message.includes(issue.message));
+  const statusMessage = repeatsValidationIssue ? '候補は条件を満たしません。作品は変更していません。下の理由を確認して調整してください。' : message;
   return <>
     {actionTarget && createPortal(action, actionTarget)}
     {settingsTarget && createPortal(<>{settings}
@@ -249,7 +253,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     {!!run?.events?.length && <details><summary>実際の操作ログ（{run.toolCalls}回）</summary><ol className="execution-log">{run.events.map((event, index) => <li key={index}>{event.tool ?? event.name ?? event.type} {event.message}</li>)}</ol><small>モデル {run.modelCalls}回 · ツール {run.toolCalls}回 · {(run.elapsedMs / 1000).toFixed(1)}秒</small></details>}</>, settingsTarget)}
     <section className="ai-panel" aria-label="AIの調整結果" hidden={!visible}>
     {(busy || pollInterrupted) && <div className="ai-wait"><p>{pollInterrupted ? '通信の確認が必要です。現在の作品は変わっていません。' : run?.status === 'awaiting_approval' ? '採用の結果を確認しています。' : '候補を待っています。現在の作品は変わっていません。'}</p><div className="button-row">{pollInterrupted && <button className="secondary" onClick={() => void resumePolling()}>状況を確認する</button>}<button onClick={() => void cancel()} className="text-button">中断する</button></div></div>}
-    {message && !busy && <p role="status" className={`notice ${unsupported || run?.status === 'failed' ? 'warning' : ''}`}>{message}</p>}
+    {statusMessage && !busy && <p role="status" className={`notice ${unsupported || run?.status === 'failed' ? 'warning' : ''}`}>{statusMessage}</p>}
     {unsupported && <button className="text-button" onClick={() => { editPrompt('引っぱりタブでまっすぐ動く距離を調整したい'); setUnsupported(false); setMessage('代案を入力しました。実行するか、手動で調整してください。'); }}>代案「まっすぐ動かす」を選ぶ</button>}
 
     {run?.status === 'clarification_required' && !busy && <button className="text-button" onClick={() => void cancel()}>この依頼を取り消す</button>}
