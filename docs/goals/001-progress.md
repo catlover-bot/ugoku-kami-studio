@@ -2,6 +2,8 @@
 
 更新日: 2026-10-03。作業ブランチ: `feat/001-product-mvp`。
 
+2026-10-04追記: 再提示されたGoal001本文は保存済み`001-product-mvp.md`と一致します。以下は初回実装時の履歴です。その後のGoal004-Rで通常main統合・push・CIが許可され、Goal007-Rまで統合済みです。現在は[Goal008](008-submission-ready.md)として公開準備・素材制作・残る復帰修正を進めています。実ローカルGemmaは通常UIで確認済み、実Geminiと実物・Cloud Run公開は別々の未確認項目です。古いGit/CI保留の記述を現在の作業停止条件にはしません。
+
 開始時は `catlover-bot/ugoku-kami-studio` の `main`、管理対象はREADMEのみ、作業ツリーはクリーンだった。既存のAGENTS.mdや旧Goal文書は存在しなかった。旧方針「まず決定的な型紙生成」「最初は1機構」は以下Aを基盤サブタスクとして維持する。依頼全文は [001-product-mvp.md](001-product-mvp.md)。
 
 | 段階 | 状態 | 成果 / 境界 |

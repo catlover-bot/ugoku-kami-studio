@@ -25,7 +25,7 @@ export const PROTOTYPE_SOURCE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" wid
 </svg>`;
 
 export type PrototypeProject = { format: 'ugoku-kami-project'; version: 2; document: DesignDocument; imageDataUrl: string; records: [] };
-export type PrototypeBundleOptions = { outDir?: string; mode?: 'manual' | 'live-gemini'; liveRunId?: string };
+export type PrototypeBundleOptions = { outDir?: string; mode?: 'manual' | 'live-gemini' | 'live-ollama'; liveRunId?: string };
 
 /** Uses the production raster validator; no AI provider or paid request is constructed. */
 export async function createPrototypeProject(): Promise<PrototypeProject> {
@@ -53,7 +53,7 @@ function expectedFront(project: PrototypeProject, travel: number): string {
 /** Bundle this exact version. The browser-produced canonical kit.pdf is never overwritten. */
 export async function writePrototypeBundle(project: PrototypeProject, options: PrototypeBundleOptions = {}) {
   const doc = parseDesignDocument(project.document), kit = getKitSummary(doc), mode = options.mode ?? 'manual';
-  if (mode === 'live-gemini' && !options.liveRunId) throw new Error('実Gemini由来を記録するには実際のrunIdが必要です');
+  if (mode !== 'manual' && !options.liveRunId) throw new Error('実AI由来を記録するには実際のrunIdが必要です');
   if (kit.status === 'blocked') throw new Error('試作の幾何条件を満たしていません');
   if (doc.input.artworkRepair && doc.input.artworkRepair.mode !== 'white') throw new Error('この試作は白背景の元画像を使います。背景補正のある別設計とは分けてください');
   const checked = await validateImage({ dataUrl: project.imageDataUrl });
@@ -106,7 +106,7 @@ export async function writePrototypeBundle(project: PrototypeProject, options: P
     photos: { front: '', back: '', start: '', end: '', calibration: '' }, nextChanges: '',
   });
   const inventory = doc.parts.map(part => `| ${part.id} | ${part.label} | ${part.widthMm} × ${part.heightMm} mm |`).join('\n');
-  await output('assembly-and-record.md', `# 試作004・同じ版の組み立てと未記入の確認票\n\n${doc.designId} / 第${doc.revision}版 / SHA-256 ${doc.designHash}\n\n実行区分: ${mode === 'manual' ? '手動設計（実Geminiの成果ではありません）' : `実Geminiの採用版・runId ${options.liveRunId}`}。**実物未確認**。印刷対象は通常UIから得る [kit.pdf](kit.pdf)。準備用の同設計PDFは [core-kit.pdf](core-kit.pdf)。\n\nA4型紙 ${doc.layout.sheets}枚、説明書 ${INSTRUCTION_PAGE_COUNT}ページは別。想定紙厚 ${doc.input.paperThicknessMm} mm、片側すき間 ${doc.input.clearanceMm} mm。のり・定規・はさみ・カッター・カッターマット・先の丸い折り筋道具。\n\n| 部品 | 用途 | 切り出し寸法 |\n|---|---|---|\n${inventory}\n\n${getAssemblySteps(doc).map(step => `## ${step.number}. ${step.title}\n\n${step.description}\n\n${[...step.glueInstructions,...step.doNotGlue].map(text=>`- ${text}`).join('\n')}\n\n![工程${step.number}](assembly-${step.number}.svg)`).join('\n\n')}\n\n## 実物の記録（すべて未実施）\n\n1. 100%で印刷し、50mm校正線の実測値を記入する。用紙に合わせる縮小を無効にする。\n2. 工程外の切り直し・折り直し・接着位置変更があれば、部品IDと変更寸法を記録し元型紙を残す。\n3. 始点・途中・終点で引っかかり、G1/G2の保持、S2/G2とS1/G1の接触を確認する。\n4. 10往復程度を初期チェックとして記録する。耐久性保証とはしない。\n5. 正面・裏面・始点・終点・校正線を記録する。写真は本人が撮影したものだけを使う。\n\n| 項目 | 実測・観察（空欄は未実施） |\n|---|---|\n| 印刷日時・印刷機・倍率 | |\n| 50mm校正線の実測 | |\n| 紙の種類・厚さ・接着剤 | |\n| 工程外の変更（部品・寸法・理由） | |\n| 始点・途中・終点の引っかかり | |\n| 両ガイドの保持・止まり方・接着面 | |\n| 往復回数・10往復後の変化 | |\n| 正面・裏面・両端・校正線の写真 | |\n| 次の版で直すこと | |\n\n[空欄JSON](physical-record-blank.json)はアプリの実物記録へ自動登録しません。実測後はアプリでこの設計ID・版・hashへ記録してください。\n`);
+  await output('assembly-and-record.md', `# 同じ設計版の組み立てと未記入の確認票\n\n${doc.designId} / 第${doc.revision}版 / SHA-256 ${doc.designHash}\n\n実行区分: ${mode === 'manual' ? '手動設計（実Geminiの成果ではありません）' : `${mode === 'live-ollama' ? '実ローカルGemma' : '実Gemini'}の採用版・runId ${options.liveRunId}`}。**実物未確認**。印刷対象は通常UIから得る [kit.pdf](kit.pdf)。準備用の同設計PDFは [core-kit.pdf](core-kit.pdf)。\n\nA4型紙 ${doc.layout.sheets}枚、説明書 ${INSTRUCTION_PAGE_COUNT}ページは別。想定紙厚 ${doc.input.paperThicknessMm} mm、片側すき間 ${doc.input.clearanceMm} mm。のり・定規・はさみ・カッター・カッターマット・先の丸い折り筋道具。\n\n| 部品 | 用途 | 切り出し寸法 |\n|---|---|---|\n${inventory}\n\n${getAssemblySteps(doc).map(step => `## ${step.number}. ${step.title}\n\n${step.description}\n\n${[...step.glueInstructions,...step.doNotGlue].map(text=>`- ${text}`).join('\n')}\n\n![工程${step.number}](assembly-${step.number}.svg)`).join('\n\n')}\n\n## 実物の記録（すべて未実施）\n\n1. 100%で印刷し、50mm校正線の実測値を記入する。用紙に合わせる縮小を無効にする。\n2. 工程外の切り直し・折り直し・接着位置変更があれば、部品IDと変更寸法を記録し元型紙を残す。\n3. 始点・途中・終点で引っかかり、G1/G2の保持、S2/G2とS1/G1の接触を確認する。\n4. 10往復程度を初期チェックとして記録する。耐久性保証とはしない。\n5. 正面・裏面・始点・終点・校正線を記録する。写真は本人が撮影したものだけを使う。\n\n| 項目 | 実測・観察（空欄は未実施） |\n|---|---|\n| 印刷日時・印刷機・倍率 | |\n| 50mm校正線の実測 | |\n| 紙の種類・厚さ・接着剤 | |\n| 工程外の変更（部品・寸法・理由） | |\n| 始点・途中・終点の引っかかり | |\n| 両ガイドの保持・止まり方・接着面 | |\n| 往復回数・10往復後の変化 | |\n| 正面・裏面・両端・校正線の写真 | |\n| 次の版で直すこと | |\n\n[空欄JSON](physical-record-blank.json)はアプリの実物記録へ自動登録しません。実測後はアプリでこの設計ID・版・hashへ記録してください。\n`);
   return manifest;
 }
 

@@ -10,6 +10,8 @@
 
 [Goal 007-R](docs/goals/007r-local-ai-clean-ui.md) では、既存OllamaとローカルGemmaを使う接続を追加し、希望入力と候補の採否を同じ作業領域へ整理しました。Geminiを含むホスト型推論APIはこのGoalでは実行しません。設定・実測・WSLの起動方法は [AI接続の説明](docs/live-gemini.md) を参照してください。
 
+[Goal 008](docs/goals/008-submission-ready.md)では、条件変更の助言も提示前にコアで検査し、公開に備えた接続復帰と提出素材を準備しています。Cloud Run書込み・公開・YouTube投稿・Zenn提出は未実施です。公開承認待ちとローカルで実行可能な作業を分けて進めます。
+
 ## 起動
 
 Node **24.20.0**（`.nvmrc`）/ npm **11.19.0**で開発しています。
