@@ -8,6 +8,8 @@
 
 [Goal 005](docs/goals/005-product-experience.md) の入力・保存・工程・組立体験を維持し、[Goal 006](docs/goals/006-request-understanding.md) では希望の読み取りと訂正を改善しました。統合の許可は [Goal 004-R](docs/goals/004-resume-and-main.md) から継続しています。確認済み変更のコミット・mainへの通常統合・push・通常CIは許可されています。実Gemini、実物、初見の人、実スマートフォン、Cloud Run公開の未確認状態は、ソフトウェア統合と分けて管理します。過去Goalのpush保留や全体blockedの記録は当時の状態であり、現在の統合を止める指示ではありません。
 
+[Goal 007-R](docs/goals/007r-local-ai-clean-ui.md) では、既存OllamaとローカルGemmaを使う接続を追加し、希望入力と候補の採否を同じ作業領域へ整理しました。Geminiを含むホスト型推論APIはこのGoalでは実行しません。設定・実測・WSLの起動方法は [AI接続の説明](docs/live-gemini.md) を参照してください。
+
 ## 起動
 
 Node **24.20.0**（`.nvmrc`）/ npm **11.19.0**で開発しています。
@@ -48,6 +50,8 @@ http://localhost:5173 を開きます。開発APIはポート3001、Viteが `/ap
 | `npm run prototype:capture` | ビルド済みの通常UIから手動試作PDFを取得し、PC・390px幅・全ページ描画を照合 |
 | `npm run smoke:live` | 既定はスキップ。二重の明示opt-inなしで実APIを呼ばない |
 | `npm run smoke:live -- --plan` | 同じ設定読込でモデル・送信内容・全試行上限を確認。通信・課金なし |
+| `npm run smoke:local -- --plan` | 明示したOllama設定の確認。通信・モデル取得・推論なし |
+| `npm run smoke:local -- --case all` | 通常UIから実ローカルモデル3依頼と手動支援を比較。明示Ollama設定と起動済みモデルが必要 |
 | `npm run build && npm start` | ビルド後、UI/APIを同一オリジンで提供（既定3001、`PORT`対応） |
 | `npm run deploy:plan` | Cloud Runの計画を表示するだけ。デプロイしない |
 
@@ -81,11 +85,12 @@ AIに送るのは入力文・設計寸法・選択座標・検査結果です。
 |---|---|
 | 手動 | APIキー不要。コアの決定的な検査を利用 |
 | 模擬プロバイダー | テストだけで依存注入。本番の代替成功応答には利用しない |
+| 実ローカルAI | 明示`AI_PROVIDER=ollama`。loopback・クラウド無効のOllamaへ接続。別モードへの自動切替なし |
 | 実Gemini | 公式SDKアダプター実装。初期状態は無効。実API確認は明示許可・認証待ち |
 
-手動支援とGeminiを切り替えても希望文を引き継ぎます。AIアクセスコードは「AIを利用する」に入力し、画面のメモリだけで扱います。設定を入力しただけでは接続成功と表示しません。希望・設計・未確定入力が変われば、以前の候補や遅れて届く応答を反映しません。
+希望入力は一つで、「寸法から案をつくる」「AIで案をつくる」を選べます。AIアクセスコード・モデル情報・実行記録は上部の「設定」にあり、コードは画面のメモリだけで扱います。`AI_PROVIDER`未設定は`none`で、保存済みGoogleキーや旧`AI_ENABLED=true`だけでは有効になりません。設定を入力しただけでは接続成功と表示しません。希望・設計・未確定入力が変われば、以前の候補や遅れて届く応答を反映しません。
 
-AIは1機構の適用判断と寸法調整を行います。実ツールで候補を生成・検査し、元の設計版とセッションにひも付いた利用者の承認を経て反映します。固定条件やfail判定はモデルの文章で変更できません。[実Geminiの設定と限定確認](docs/live-gemini.md) に設定場所・モデル・料金根拠・正確なコマンドをまとめています。公開時の境界は [デプロイ手順](docs/deployment.md) を参照してください。
+AIは1機構の適用判断と寸法調整を行います。実ツールで候補を生成・検査し、元の設計版とセッションにひも付いた利用者の承認を経て反映します。固定条件やfail判定はモデルの文章で変更できません。[AI接続の設定と限定確認](docs/live-gemini.md) に設定場所・モデル・実測・正確なコマンドをまとめています。公開時の境界は [デプロイ手順](docs/deployment.md) を参照してください。
 
 Goal 004のライブ確認は、通常の画面から比較・採用・同じ版のPDF取得まで進むL1を最初に1件だけ実行します。既定は実APIを呼びません。許可後の全試行は失敗・再試行を含め3件、モデル18回・ツール36回・AI処理270秒までで、台帳に開始前の枠を残します。通常のE2Eは専用ポート4183のAI無効サーバーを使い、起動済みの実AIサーバーを再利用しません。
 
@@ -110,6 +115,7 @@ AIの「実行の記録」から、モデル・実行ID・ツール・検査・�
 - [Goal 003の全文](docs/goals/003-design-and-usability.md) / [紙の編集机の基準・初見の成人による確認手順](docs/design-and-usability.md)
 - [Goal 004の全文](docs/goals/004-live-gemini-and-prototype.md) / [実Gemini設定](docs/live-gemini.md) / [印刷する1作品](docs/prototype-004.md)
 - [Goal 005の全文](docs/goals/005-product-experience.md) / [Goal 006の全文](docs/goals/006-request-understanding.md)
+- [Goal 007-Rの全文と記録](docs/goals/007r-local-ai-clean-ui.md)
 - [アーキテクチャ](docs/architecture.md) / [図](docs/architecture.svg)
 - [検証記録・既知の制約](docs/verification.md)
 - [公式資料・依存バージョン・素材の出典](docs/sources-and-versions.md)
