@@ -240,6 +240,41 @@ describe('author intent through the actual server, core tools, approval and outp
     expect(run.constraintSuggestions).toEqual([]); expect(run.proposal).toBeUndefined(); expect(s.session.document).toEqual(s.document);
   });
 
+  // Reconstructed from the 2026-10-04 recording's saved base, patch and public
+  // event order. The redundant advice arguments and final model text were not
+  // saved, so these variants are not claimed to replay the exact raw response.
+  const recordedPatch = { maxSheets: 1, travelMm: 25, direction: 'right', widthMm: 160, heightMm: 110, paperThicknessMm: 0.25, clearanceMm: 0.8 } as const;
+  const recordedBase = () => createDesign({ ...SAMPLE_INPUT, title: 'fish', image: { id: 'a32fa7b1fd681c4a8220f23486fa682efea5c73ad205969623ec376fc36c355f', widthPx: 800, heightPx: 550, mimeType: 'image/png' }, selection: { x: 350, y: 170, width: 300, height: 210 }, maxSheets: 1, locks: ['clearanceMm', 'heightMm', 'maxSheets', 'paperThicknessMm', 'widthMm'] }, { designId: 'recorded-noop-regression', revision: 13 });
+  it.each(Object.keys(recordedPatch) as (keyof typeof recordedPatch)[])('retains a verified candidate after redundant %s advice, with approval still required', async key => {
+    const provider = sequence([invoke('propose_design_patch', recordedPatch), invoke('propose_constraint_change', { key, value: recordedPatch[key], reason: '直近候補と同じ条件の補助助言です。' }), resultText]);
+    const base = recordedBase(), s = await setup(provider, base), run = await s.start('もう少し大きく動かしたい。絵の大きさは変えず、紙も増やさない');
+    expect(base.designHash).toBe('9f36b8ebbe37da6f12ea0b9395d294d5a1bd52c352126ea8d61e55115dd6f188');
+    const candidateHash = toolResult(provider.histories[1]!).designHash;
+    expect(candidateHash).toBe('fd7edae90a73fd226f7c9f7d3490cbac8034844e0d7296a913dd42c6c43d4a2e');
+    expect(toolResult(provider.histories[2]!)).toMatchObject({ ignored: true, reason: 'unchanged_condition', applied: false, conditionsApproved: false, designHash: candidateHash });
+    expect(toolResult(provider.histories[2]!).nextStep).toContain('候補を要約して完了できます');
+    expect(run.status).toBe('awaiting_approval'); expect(run.constraintSuggestions).toEqual([]);
+    expect(run.proposal!.document.designHash).toBe(candidateHash); expect(run.proposal!.document.input.locks).toEqual(base.input.locks);
+    expect(run.proposal!.document.checks.find(check => check.id === 'physical-operation')?.status).toBe('unknown');
+    expect(run.events.find(event => event.tool === 'propose_constraint_change')?.message).toContain('助言を追加せず');
+    expect(s.session.document).toEqual(base);
+    expect(() => s.app.runs.approve(s.session, run.proposal!.id, { requestId: 'wrong-request-id', baseRevision: run.baseRevision, baseHash: run.baseHash })).toThrow();
+    expect(s.session.document).toEqual(base);
+    const approved = s.app.runs.approve(s.session, run.proposal!.id, { requestId: run.requestId, baseRevision: run.baseRevision, baseHash: run.baseHash }).document;
+    expect(approved.designHash).toBe(candidateHash); expect(approved.input.locks).toEqual(base.input.locks);
+  });
+
+  it.each(['protected_condition', 'unknown_tool'] as const)('redundant valid-candidate advice does not clear an earlier %s failure', async code => {
+    const failure = code === 'protected_condition' ? invoke('propose_design_patch', { widthMm: 100 }) : invoke('unlisted_tool');
+    const provider = sequence([invoke('propose_design_patch', recordedPatch), failure, invoke('propose_constraint_change', { key: 'travelMm', value: recordedPatch.travelMm, reason: '直近候補と同じ値です。' }), resultText]);
+    const s = await setup(provider, recordedBase()), run = await s.start('もう少し大きく動かしたい。絵の大きさは変えず、紙も増やさない');
+    expect(toolResult(provider.histories[2]!).error).toMatchObject({ code });
+    expect(toolResult(provider.histories[3]!)).toMatchObject({ ignored: true, applied: false, conditionsApproved: false });
+    expect(toolResult(provider.histories[3]!).nextStep).toContain('以前の別のツールエラーが未修正');
+    expect(run.status).toBe('failed'); expect(run.error?.code).toBe('invalid_output'); expect(run.proposal).toBeUndefined();
+    expect(run.constraintSuggestions).toEqual([]); expect(s.session.document).toEqual(s.document);
+  });
+
   it('reject leaves newly requested protections unapplied; existing protected conditions cannot be unlocked by prose', async () => {
     const s = await setup(adjustingProvider()); const run = await s.start('少し大きく動かしたい。絵のサイズを保って、厚紙は2枚まで');
     expect(run.proposal).toBeDefined(); s.app.runs.reject(s.session, run.proposal!.id); expect(s.session.document).toEqual(s.document); expect(s.session.document.input.locks).toEqual([]);

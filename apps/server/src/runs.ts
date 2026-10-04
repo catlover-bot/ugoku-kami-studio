@@ -271,7 +271,11 @@ export class RunManager {
               unresolvedToolFailure = false;
             }
             if (call.name === 'propose_design_patch' || call.name === 'validate_design') run.validationIssues = context.candidate.checks.filter(check => check.status === 'fail');
-            if (call.name === 'propose_design_patch' || call.name === 'propose_constraint_change') unresolvedToolFailure = false;
+            if (call.name === 'propose_design_patch' || call.name === 'propose_constraint_change' && result.ignored !== true) unresolvedToolFailure = false;
+            if (call.name === 'propose_constraint_change' && result.ignored === true) {
+              message = '直近候補と同じ条件のため助言を追加せず、検査済み候補を保持しました。';
+              if (unresolvedToolFailure) result = { ...result, nextStep: '同じ条件の助言は追加していません。以前の別のツールエラーが未修正です。そのエラーを修正するまで完了できません。' };
+            }
           } catch (error) {
             const info = error instanceof AppError ? publicError(error) : { code: 'invalid_arguments', message: '値が不正、または固定条件の変更に当たるため拒否しました。' };
             message = info.message;

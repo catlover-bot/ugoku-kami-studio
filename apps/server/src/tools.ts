@@ -102,7 +102,16 @@ export function executeTool(name: string, args: unknown, context: ToolContext): 
       if ((suggestion.key === 'direction') !== (typeof suggestion.value === 'string')) throw new AppError('invalid_arguments', '条件の値の型が一致しません。');
       DesignPatchSchema.parse({ [suggestion.key]: suggestion.value });
       const referenceInput = { ...context.base.input, ...context.patch };
-      if (referenceInput[suggestion.key] === suggestion.value) throw new AppError('invalid_arguments', '希望・直近の変更内容と同じ値は条件変更案にできません。変更する具体値を指定してください。');
+      if (referenceInput[suggestion.key] === suggestion.value) {
+        // A redundant auxiliary hint cannot invalidate an already generated,
+        // passing candidate. It grants no approval and adds no advice. Before
+        // generation, or while the candidate fails, the same value is no remedy.
+        const checks = validateDesign(context.candidate);
+        if (context.candidate.designHash !== context.base.designHash && context.candidate.input[suggestion.key] === suggestion.value && !checks.some(check => check.status === 'fail')) {
+          return { ignored: true, reason: 'unchanged_condition', applied: false, conditionsApproved: false, designHash: context.candidate.designHash, checks, nextStep: 'その条件は直近候補と同じなので、新しい助言として扱いません。検査済み候補は保持しています。候補を要約して完了できます。採用は利用者の操作が必要で、実物の動作は未確認です。' };
+        }
+        throw new AppError('invalid_arguments', '希望・直近の変更内容と同じ値は条件変更案にできません。変更する具体値を指定してください。');
+      }
       // A conditional geometry calculation, never an authorized patch: the one
       // named condition may be locked. No lock, intent, candidate or seen-state
       // is changed, and no adoptable proposal is created from this calculation.

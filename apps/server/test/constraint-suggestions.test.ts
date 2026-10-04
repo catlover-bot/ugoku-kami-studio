@@ -57,6 +57,17 @@ describe('constraint suggestions use existing core without authorizing changes',
     expect(() => suggest(context, 'travelMm', 25)).toThrow('同じ値');
   });
 
+  it.each([22, 30])('ignores redundant %smm advice only after a passing candidate exists, without mutating trusted state', travelMm => {
+    const context = contextFor(fish(), `動く距離を${travelMm}mmにしたい。絵の大きさと紙の枚数は変えない`);
+    expect(() => suggest(context, 'travelMm', travelMm)).toThrow('同じ値');
+    executeTool('propose_design_patch', {}, context);
+    expect(context.candidate.checks.some(check => check.status === 'fail')).toBe(false);
+    const before = protectedState(context);
+    expect(suggest(context, 'travelMm', travelMm)).toMatchObject({ ignored: true, reason: 'unchanged_condition', applied: false, conditionsApproved: false, designHash: context.candidate.designHash });
+    expect(context.constraintSuggestions).toEqual([]);
+    expect(protectedState(context)).toEqual(before);
+  });
+
   it.each([['right', 300], ['right', 350], ['left', 350]] as const)('checks varying %s/%s geometry without a fixed42mm fallback', (direction, x) => {
     const original = fish();
     const base = createDesign({ ...original.input, direction, selection: { ...original.input.selection, x } });
