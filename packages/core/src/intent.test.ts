@@ -16,8 +16,14 @@ describe('request-derived constraints and manual assistance (no model)', () => {
       expect(() => applyIntentPatch(base, { maxSheets: maxSheets + 1 }, { ...intent, protections: {} })).toThrow(`厚紙は${maxSheets}枚まで`);
     }
   });
-  it('allows an explicit new paper cap only when the existing budget is unlocked, preserving normal confirmation and tighter bounds', () => {
-    const base = createDesign(SAMPLE_INPUT), intent = interpretDesignRequest(base, 'もう少し大きく動かしたい。厚紙はA4で3枚まで');
+  it('requires concrete bound author approval before loosening an unlocked paper cap, preserving tighter bounds', () => {
+    // Goal006: a parsed request alone was previously treated as cap approval.
+    // The author must now confirm this exact difference; model output is not authority.
+    const base = createDesign(SAMPLE_INPUT), request = 'もう少し大きく動かしたい。厚紙はA4で3枚まで';
+    const pending = interpretDesignRequest(base, request);
+    expect(pending.approvalRequired).toEqual({ key: 'maxSheets', from: 2, to: 3 });
+    expect(() => applyIntentPatch(base, {}, pending)).toThrow();
+    const intent = interpretDesignRequest(base, request, { binding: pending.binding, paperApproval: { from: 2, to: 3 } });
     expect(intent.conflicts).toEqual([]); expect(intent.protections.maxSheets).toBe(3);
     const candidate = applyIntentPatch(base, {}, intent);
     expect(candidate.input.maxSheets).toBe(3); expect(candidate.input.locks).toContain('maxSheets');

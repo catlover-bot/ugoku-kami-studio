@@ -1,26 +1,25 @@
 import { applyDesignPatch, createDesign, parseDesignDocument, canExport, DesignPatchSchema } from './index.js';
 import type { DesignDocument, DesignInput, DesignPatch, Direction, ImageSource, LockKey } from './types.js';
 import { displayDimension } from './display.js';
+import { assertRequestBinding, distanceTargetMm, getRequestBinding, InterpretationCorrectionSchema, RequestInterpretationSchema, type RequestBinding, type RequestInterpretation, type InterpretationCorrection, type InterpretationClarification } from './interpretation.js';
+import { importantUnrepresented, readManualRequest } from './manualInterpretation.js';
+export * from './interpretation.js';
 
-/** A deliberately bounded Japanese/English helper, not an image recognizer or an AI substitute. */
+/** A bounded interpretation proposal, separate from the immutable author conditions. */
 export type DesignIntent = {
-  supported: boolean;
-  patch: DesignPatch;
-  addLocks: LockKey[];
+  supported: boolean; patch: DesignPatch; addLocks: LockKey[];
   protections: { widthMm?: number; heightMm?: number; maxSheets?: number; direction?: Direction };
-  conflicts: string[];
-  notes: string[];
-  relativeTravel: 'increase' | 'decrease' | null;
-  explicitTravelMm?: number;
+  conflicts: string[]; notes: string[]; relativeTravel: 'increase' | 'decrease' | null; explicitTravelMm?: number;
+  binding: RequestBinding; request: string; interpretation: RequestInterpretation;
+  clarifications: InterpretationClarification[]; summary: string[];
+  approvalRequired?: { key: 'maxSheets'; from: number; to: number };
+  correction?: InterpretationCorrection;
 };
 export type DesignSuggestion = {
   baseHash: string; baseRevision: number;
   status: 'ready' | 'alternative' | 'blocked' | 'unsupported' | 'clarify';
-  intent: DesignIntent; requestedPatch: DesignPatch; patch: DesignPatch;
-  document?: DesignDocument;
-  messages: string[];
-  changes: { key: string; label: string; before: string; after: string }[];
-  preserved: string[]; remaining: string[];
+  intent: DesignIntent; requestedPatch: DesignPatch; patch: DesignPatch; document?: DesignDocument;
+  messages: string[]; changes: { key: string; label: string; before: string; after: string }[]; preserved: string[]; remaining: string[];
 };
 const names: Record<string, string> = { direction: '方向', travelMm: '動く距離', widthMm: '作品の幅', heightMm: '作品の高さ', maxSheets: '厚紙の上限', paperThicknessMm: '紙の厚さ', clearanceMm: 'すき間', selection: '選択範囲', title: '作品名', locks: '固定する条件' };
 const directions = { right: '右', left: '左', up: '上', down: '下' };
@@ -29,105 +28,158 @@ export function describeDesignChanges(before: DesignDocument, after: DesignDocum
   return Object.keys(names).filter(key => JSON.stringify(before.input[key as keyof DesignInput]) !== JSON.stringify(after.input[key as keyof DesignInput])).map(key => ({ key, label: names[key]!, before: shown(key, before.input[key as keyof DesignInput]), after: shown(key, after.input[key as keyof DesignInput]) }));
 }
 
-export function interpretDesignRequest(document: DesignDocument, request: string): DesignIntent {
+function deriveIntent(document: DesignDocument, request: string, proposed: RequestInterpretation, correction?: InterpretationCorrection, issues = readManualRequest(request).issues): DesignIntent {
   const doc = parseDesignDocument(document), input = doc.input;
-  const text = request.normalize('NFKC').trim();
-  const intent: DesignIntent = { supported: true, patch: {}, addLocks: [], protections: { maxSheets: input.maxSheets }, conflicts: [], notes: [], relativeTravel: null };
+  const interpretation = RequestInterpretationSchema.parse(proposed);
+  const binding = getRequestBinding(doc, request);
+  const trustedCorrection = correction === undefined ? undefined : InterpretationCorrectionSchema.parse(correction);
+  if (trustedCorrection) assertRequestBinding(doc, request, trustedCorrection.binding);
+  const intent: DesignIntent = { supported: interpretation.mechanism !== 'unsupported', patch: {}, addLocks: [], protections: { maxSheets: input.maxSheets }, conflicts: [], notes: [], relativeTravel: null, binding, request, interpretation, clarifications: [], summary: [], ...(trustedCorrection ? { correction: trustedCorrection } : {}) };
+  const addIssue = (field: InterpretationClarification['field'], message: string, choices: InterpretationClarification['choices'] = []) => {
+    if (intent.conflicts.includes(message)) return;
+    intent.conflicts.push(message); intent.clarifications.push({ id: `${field}-${intent.clarifications.length + 1}`, field, message, choices });
+  };
+  if (trustedCorrection) {
+    for (const key of ['distance', 'direction', 'size', 'paper'] as const) if (trustedCorrection[key] !== undefined) Object.assign(interpretation, { [key]: trustedCorrection[key] });
+    for (const clause of trustedCorrection.ignoredClauses ?? []) if (!proposed.unresolved.includes(clause)) throw new Error('訂正対象の未解釈の節が依頼と一致しません。');
+  }
+  const ignored = trustedCorrection?.ignoredClauses ?? [];
+  interpretation.unresolved = interpretation.unresolved.filter(clause => !ignored.includes(clause) && !issues.some(issue => issue.text === clause && issue.field !== 'other' && trustedCorrection?.[issue.field] !== undefined));
+  for (const clause of interpretation.unresolved) {
+    const issue = issues.find(item => item.text === clause), field = issue?.field ?? 'other';
+    const numeric = clause.normalize('NFKC').match(/(-?\d+(?:\.\d+)?)\s*(cm|センチ(?:メートル)?|mm|ミリ(?:メートル)?)?/i);
+    const amount = numeric ? Number(numeric[1]) * (/cm|センチ/i.test(numeric[2] ?? '') ? 10 : 1) : 5;
+    const changes: InterpretationClarification['choices'] = field === 'distance' ? [
+      { label: `${displayDimension(amount)}mm増やす`, changes: { distance: { kind: 'relative', delta: amount, unit: 'mm' } } },
+      { label: `距離を${displayDimension(amount)}mmにする`, changes: { distance: { kind: 'absolute', value: amount, unit: 'mm' } } },
+      { label: '現在の距離を保つ', changes: { distance: { kind: 'maintain' } } },
+    ] : field === 'direction' ? (Object.entries(directions) as [Direction, string][]).map(([desired, name]) => ({ label: `${name}へ`, changes: { direction: { desired, forbidden: [] } } })) : [{ label: 'この未解釈の条件は今回使わない', changes: { ignoredClauses: [...ignored, clause] } }];
+    addIssue(field, issue?.message ?? `「${clause}」をまだ解釈できません。`, changes);
+  }
+  if (!intent.supported) {
+    intent.notes.push('直線運動1か所だけに対応しています。回転などへは変換できません。否定ではなく回転等を求める場合は対象外です。'); return intent;
+  }
+  if (interpretation.mechanism === 'uncertain') addIssue('other', '今回の動きが直線1か所の範囲に収まるか確認してください。');
   const addLock = (key: LockKey) => { if (!intent.addLocks.includes(key)) intent.addLocks.push(key); };
-  // Negative motion clauses are removed only when their subject is explicit.
-  const motionText = text.replace(/(?:回転|回す|揺らす|振る)(?:は)?(?:しない|させない|さない|不要|ではなく|じゃなく)/g, '');
-  if (/回転|回す|ぐるぐる|揺|手を振|歩[く行]|歯車|立体|モーター|電子|複数(?:の)?(?:部分|可動部|箇所)|[2-9二三](?:か所|箇所|ヶ所)|両(?:手|腕)|手と足|rotate|rotation|swing|oscillat|walk|gear|motor|3d/i.test(motionText)) {
-    intent.supported = false; intent.notes.push('直線運動1か所だけに対応しています。回転などへは変換できません。「まっすぐ動かす」を選ぶか希望を書き直してください。'); return intent;
+  if (interpretation.size === 'maintain') {
+    intent.protections.widthMm = input.widthMm; intent.protections.heightMm = input.heightMm; addLock('widthMm'); addLock('heightMm');
+    intent.notes.push(`絵の大きさを維持：台紙 ${displayDimension(input.widthMm)} × ${displayDimension(input.heightMm)} mm、画像の配置倍率も固定します。`);
+    intent.summary.push('絵の大きさを維持');
   }
-  const keepSize = /(?:絵|作品|画像)?(?:の)?(?:大きさ|サイズ|寸法).{0,10}(?:保[つっち]|固定(?!しない)|そのまま|維持|変え(?:ない|ず|たくない)|変[更化]しない)|(?:絵|画像|作品).{0,6}(?:縮小しない|縮め(?:ない|たくない)|小さくしない|そのまま|いじらず)|keep.{0,16}(?:art|image|size)|same size/i.test(text);
-  const changeSize = /(?:絵|作品|画像)(?:の)?(?:大きさ|サイズ|寸法).{0,6}(?:変更して|変えて|小さくして|大きくして)|(?:絵|作品|画像)(?:は|を)(?:縮小して|小さくして|拡大して)|(?:サイズ|大きさ)(?:は|の)?(?:固定しない|変えてよい|変えていい)|(?:今度は|今は).{0,5}(?:変えてもよい|変えてもいい)/.test(text);
-  if (keepSize && changeSize) intent.conflicts.push('絵の大きさを保つ希望と変更する希望が同時にあります。どちらを優先するか書き直してください。');
-  if (keepSize) { intent.protections.widthMm = input.widthMm; intent.protections.heightMm = input.heightMm; addLock('widthMm'); addLock('heightMm'); intent.notes.push(`絵の大きさを維持：台紙 ${displayDimension(input.widthMm)} × ${displayDimension(input.heightMm)} mm、画像の配置倍率も固定します。`); }
-  if (changeSize && (input.locks.includes('widthMm') || input.locks.includes('heightMm'))) intent.conflicts.push('絵の大きさは固定中です。詳細設定で変更する条件の固定を解除してから、改めて依頼してください。');
-  const noMorePaper = /(?:紙|枚数|厚紙).{0,10}(?:増や(?:さない|さず|したくない)|増加させない|追加しない|変更しない|変え(?:ない|ず)|そのまま|今のまま|維持)|no more (?:paper|sheets)|without (?:more|adding) (?:paper|sheets)/i.test(text);
-  const morePaper = /(?:紙|枚数|厚紙).{0,8}(?:増やして|増や(?:せる|してよい|していい))/.test(text);
-  const caps = [...text.matchAll(/(?:A4\s*(?:で|は|を)?\s*)?(\d+|[一二三四五六七八九十]+)\s*枚(?:まで|以内|以下|のまま|に収め|を上限)/g)].map(m => /^[一二三四五六七八]$/.test(m[1]!) ? '一二三四五六七八'.indexOf(m[1]!) + 1 : Number(m[1]));
-  if (caps.some(cap => !Number.isInteger(cap) || cap < 1 || cap > 8)) { intent.conflicts.push('紙の上限は1〜8枚で指定してください。枚数を読み替えることはしません。'); return intent; }
-  if (new Set(caps).size > 1) intent.conflicts.push('紙枚数の上限が複数指定されています。上限を1つにしてください。');
-  if (noMorePaper && morePaper) intent.conflicts.push('紙を増やさない希望と増やす希望が同時にあります。どちらを優先するか書き直してください。');
-  if (noMorePaper || caps.length) {
-    const cap = Math.min(caps[0] ?? Infinity, noMorePaper ? Math.min(input.maxSheets, Math.max(1, doc.layout.sheets)) : Infinity);
-    intent.protections.maxSheets = cap; intent.patch.maxSheets = cap; addLock('maxSheets');
-    intent.notes.push(`厚紙はA4 ${cap}枚まで。説明書は別です。${noMorePaper ? '現在使う型紙の枚数を増やしません。' : ''}`);
-    if (input.locks.includes('maxSheets') && cap > input.maxSheets) intent.conflicts.push(`厚紙の上限${input.maxSheets}枚は固定中です。詳細設定で紙の上限の固定を解除し、変更を確認してください。`);
-  } else intent.notes.push(`現在の厚紙の上限、A4 ${input.maxSheets}枚までを保ちます。説明書は別です。`);
-  if (morePaper && input.locks.includes('maxSheets')) intent.conflicts.push('紙枚数の上限は固定中です。増やす場合は詳細設定で固定を解除してから上限を変更してください。');
-  else if (morePaper && !caps.length && !noMorePaper) intent.conflicts.push('紙を増やす場合は「A4で3枚まで」のように、新しい上限を指定してください。');
-  const found = (Object.entries({ right: /右(?:へ|に|方向)|\bright\b/i, left: /左(?:へ|に|方向)|\bleft\b/i, up: /上(?:へ|に|方向)|\bup(?:ward)?\b/i, down: /下(?:へ|に|方向)|\bdown(?:ward)?\b/i }) as [Direction, RegExp][]).filter(([, re]) => re.test(text)).map(([key]) => key);
-  if (found.length > 1) intent.conflicts.push('動かす方向を1つ選んでください。複数方向の動きには対応していません。');
-  if (found.length === 1) { intent.patch.direction = found[0]; intent.protections.direction = found[0]; }
-  if (/わけ(?:じゃ|では)ない|とは言って(?:い)?ない/.test(text)) intent.conflicts.push('否定を含む条件の優先順位を確定できません。「絵の大きさを保つ」「紙は増やさない」など、守る条件を直接指定してください。');
-  const travelText = text.replace(/(?:絵|画像|作品)(?:の大きさ|のサイズ)?(?:は|を|も)?(?:小さくしない|大きくしない|縮めない|縮めたくない)/g, '');
-  if (/(?:大きく|小さく|遠く|長く|短く).{0,5}(?:動かさない|しない|したくない)|(?:動き|距離|移動量).{0,8}(?:増やさない|減らさない|変えない)/.test(travelText)) intent.conflicts.push('動かす距離を変えない希望として受け取りました。現在値を固定する場合は詳細設定で「動く距離を固定」を選んでください。');
-  const larger = /(?:もっと|もう少し|少し|さらに).{0,5}(?:大きく|遠く|長く)|(?:大きく|遠く|長く)(?:動か|移動)|(?:動き|距離|移動量)(?:を|は)?.{0,4}(?:増や|大きく|長く)|(?:move|travel).{0,8}(?:more|further|larger|longer)|(?:more|larger|longer)\s+(?:motion|travel|movement)/i.test(text);
-  const smaller = /(?:もっと|もう少し|少し).{0,5}(?:小さく|短く)|(?:小さく|短く)(?:動か|移動)|(?:動き|距離|移動量)(?:を|は)?.{0,4}(?:減ら|小さく|短く)|(?:move|travel).{0,8}(?:less|shorter|smaller)|(?:less|smaller|shorter)\s+(?:motion|travel|movement)/i.test(text);
-  if (larger && smaller) intent.conflicts.push('動く距離を増やす希望と減らす希望が同時にあります。どちらかにしてください。');
-  if (larger || smaller) { intent.relativeTravel = larger ? 'increase' : 'decrease'; const delta = Math.max(2, Math.round(input.travelMm * .25)); intent.patch.travelMm = Math.max(2, Math.min(70, input.travelMm + (larger ? delta : -delta))); }
-  const distances = [...text.matchAll(/(\d+(?:\.\d+)?)\s*(mm|ミリ(?:メートル)?|cm|センチ(?:メートル)?)\s*(?:動か|移動|引く|出す)|(?:移動距離|動く距離|移動量|距離)(?:を|は)?\s*(\d+(?:\.\d+)?)\s*(mm|ミリ(?:メートル)?|cm|センチ(?:メートル)?)/gi)];
-  if (distances.length) {
-    const amounts = distances.map(m => Number(m[1] ?? m[3]) * (/cm|センチ/i.test(m[2] ?? m[4]!) ? 10 : 1));
-    if (new Set(amounts).size > 1) intent.conflicts.push('動く距離が複数指定されています。距離を1つにしてください。');
-    const amount = amounts[0]!;
-    if (amount < 2 || amount > 70) intent.conflicts.push('この機構で指定できる移動量は2〜70 mmです。距離を書き直してください。');
-    else { intent.patch.travelMm = amount; intent.explicitTravelMm = amount; }
-  }
-  if (intent.relativeTravel === 'increase' && intent.explicitTravelMm !== undefined && intent.explicitTravelMm <= input.travelMm || intent.relativeTravel === 'decrease' && intent.explicitTravelMm !== undefined && intent.explicitTravelMm >= input.travelMm) intent.conflicts.push('指定した距離と「大きく／小さく」の希望が一致しません。現在の距離を確認してください。');
-  // Do not quietly interpret an unrecognized size operation as fulfilled.
-  if (changeSize && !intent.conflicts.length) intent.conflicts.push('絵の大きさを変える場合は、詳細設定で幅・高さを指定し、完成予定を確認してください。');
-  for (const key of input.locks) if (key in intent.patch && JSON.stringify(intent.patch[key]) !== JSON.stringify(input[key]) && !(key === 'maxSheets' && Number(intent.patch.maxSheets) < input.maxSheets)) intent.conflicts.push(`${names[key]}は固定中です。詳細設定で固定を解除するか、現在の条件を保つ希望にしてください。`);
+  if (interpretation.size === 'change') addIssue('size', '絵の大きさの変更は幅・高さを手動で指定してください。固定中の条件は解釈で解除できません。');
+  const paper = interpretation.paper;
+  let cap = input.maxSheets;
+  if (paper.kind === 'maintain') cap = Math.min(input.maxSheets, Math.max(1, doc.layout.sheets));
+  if (paper.kind === 'cap') cap = paper.maxSheets;
+  if (cap < 1 || cap > 8 || !Number.isInteger(cap)) addIssue('paper', '紙の上限は1〜8枚で指定してください。枚数を読み替えることはしません。');
+  else if (cap > input.maxSheets) {
+    const approval = trustedCorrection?.paperApproval;
+    const approved = approval?.from === input.maxSheets && approval.to === cap;
+    if (!approved) {
+      intent.approvalRequired = { key: 'maxSheets', from: input.maxSheets, to: cap };
+      addIssue('paper', `厚紙の上限を${input.maxSheets}→${cap}枚に緩めるには、この具体的な変更の確認が必要です。`, [{ label: `上限を${input.maxSheets}→${cap}枚に変更する`, changes: { paperApproval: { from: input.maxSheets, to: cap } } }, { label: `現在の上限${input.maxSheets}枚を保つ`, changes: { paper: { kind: 'cap', maxSheets: input.maxSheets } } }]);
+    }
+    if (input.locks.includes('maxSheets')) addIssue('paper', `厚紙の上限${input.maxSheets}枚は固定中です。解釈や承認では固定を解除できません。`);
+    if (approved && !input.locks.includes('maxSheets')) intent.protections.maxSheets = cap;
+    intent.patch.maxSheets = cap;
+  } else intent.protections.maxSheets = cap;
+  if (trustedCorrection?.paperApproval && (trustedCorrection.paperApproval.from !== input.maxSheets || trustedCorrection.paperApproval.to !== cap || cap <= input.maxSheets)) addIssue('paper', '紙上限の承認と今回の具体的な変更が一致しません。');
+  if (paper.kind !== 'unspecified' && cap >= 1 && cap <= 8) { intent.patch.maxSheets = cap; addLock('maxSheets'); }
+  intent.notes.push(`現在の厚紙の上限、A4 ${intent.protections.maxSheets}枚までを保ちます。説明書は別です。${paper.kind === 'maintain' ? '現在使う型紙の枚数を増やしません。' : ''}`);
+  intent.summary.push(intent.approvalRequired ? `厚紙の上限 ${input.maxSheets}→${cap}枚（確認待ち）` : paper.kind === 'maintain' ? `型紙の使用枚数を増やさない（現在${doc.layout.sheets}枚）` : `型紙は上限${intent.protections.maxSheets}枚以内（説明書は別）`);
+  const direction = interpretation.direction.desired ?? input.direction;
+  if (interpretation.direction.forbidden.includes(direction)) addIssue('direction', `${directions[direction]}への動きは禁止されています。動かす方向を選んでください。`, (Object.entries(directions) as [Direction,string][]).filter(([key]) => !interpretation.direction.forbidden.includes(key)).map(([desired,label]) => ({label:`${label}へ`, changes:{direction:{...interpretation.direction,desired}}})));
+  if (interpretation.direction.desired) { intent.patch.direction = direction; intent.protections.direction = direction; }
+  intent.summary.unshift(`${directions[direction]}へ${interpretation.direction.desired ? '' : '（現在の方向）'}${interpretation.direction.forbidden.length ? `／${interpretation.direction.forbidden.map(d=>directions[d]).join('・')}は禁止` : ''}`);
+  const operation = interpretation.distance, target = distanceTargetMm(input.travelMm, operation);
+  if (operation.kind === 'relative') intent.relativeTravel = operation.delta > 0 ? 'increase' : operation.delta < 0 ? 'decrease' : null;
+  if (operation.kind === 'qualitative') intent.relativeTravel = operation.change;
+  if (operation.kind !== 'unspecified' && operation.kind !== 'maintain') { intent.patch.travelMm = target; intent.explicitTravelMm = target; }
+  if (target < 2 || target > 70) addIssue('distance', `希望の移動量は${displayDimension(target)}mmです。この機構の範囲2〜70mmを外れます。上限・下限へ読み替えません。`, [{label:'現在の距離を保つ',changes:{distance:{kind:'maintain'}}}]);
+  if (readManualRequest(request).forbiddenDistancesMm.includes(target)) addIssue('distance', `指定しない希望だった${displayDimension(target)}mmと計算結果が重なっています。`);
+  intent.summary.splice(1, 0, target === input.travelMm ? `動く距離 ${displayDimension(input.travelMm)}mmを維持${operation.kind === 'unspecified' ? '（未指定）' : ''}` : `動く距離 ${displayDimension(input.travelMm)}→${displayDimension(target)}mm${operation.kind === 'relative' ? `（${operation.delta > 0 ? '+' : ''}${displayDimension(operation.delta * (operation.unit === 'cm' ? 10 : 1))}mm）` : operation.kind === 'qualitative' ? '（定性的な希望への目安）' : ''}`);
+  for (const key of input.locks) if (key in intent.patch && JSON.stringify(intent.patch[key]) !== JSON.stringify(input[key]) && !(key === 'maxSheets' && Number(intent.patch.maxSheets) < input.maxSheets)) addIssue(key === 'direction' ? 'direction' : key === 'maxSheets' ? 'paper' : 'distance', `${names[key]}は固定中です。解釈では固定を解除できません。`);
   return intent;
 }
 
-/** Enforces request-derived protections on the server and in the manual helper. */
+export function interpretDesignRequest(document: DesignDocument, request: string, correction?: InterpretationCorrection): DesignIntent {
+  const reading = readManualRequest(request);
+  return deriveIntent(document, request, reading.interpretation, correction, reading.issues);
+}
+
+/** A model may resolve vocabulary uncertainty; it cannot erase clear author conditions. */
+export function interpretModelRequest(document: DesignDocument, request: string, proposal: RequestInterpretation, correction?: InterpretationCorrection): DesignIntent {
+  const reading = readManualRequest(request), manual = reading.interpretation, model = RequestInterpretationSchema.parse(proposal);
+  const contradictions: InterpretationClarification[] = [];
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  for (const field of ['distance', 'direction', 'size', 'paper'] as const) {
+    const certain = !reading.issues.some(issue => issue.field === field);
+    const explicit = field === 'direction' ? !!manual.direction.desired || !!manual.direction.forbidden.length : field === 'size' ? manual.size !== 'unspecified' : manual[field].kind !== 'unspecified';
+    if (certain && (explicit || manual.unresolved.length === 0) && !correction?.[field]) {
+      const agrees = field === 'direction' ? (!manual.direction.desired && !explicit ? model.direction.desired === undefined : !manual.direction.desired || manual.direction.desired === model.direction.desired) && manual.direction.forbidden.every(d => model.direction.forbidden.includes(d)) : field === 'distance' ? distanceTargetMm(document.input.travelMm, manual.distance) === distanceTargetMm(document.input.travelMm, model.distance) && manual.distance.kind === model.distance.kind : same(manual[field], model[field]);
+      if (!agrees) contradictions.push({ id: `model-${field}`, field, message: `モデルの${field === 'distance' ? '距離' : field === 'direction' ? '方向' : field === 'paper' ? '紙上限' : '絵の大きさ'}の解釈が明示された希望と一致しません。訂正して再検査してください。`, choices: [{ label: '原文の明確な条件を使う', changes: { [field]: manual[field] } }] });
+      Object.assign(model, { [field]: manual[field] });
+    }
+  }
+  // For completely understood clauses, a model cannot reintroduce the old
+  // false rejection of explicitly negated rotation. Unknown wording still uses
+  // the model's mechanism interpretation and remains visible to the author.
+  if (manual.mechanism === 'unsupported' || manual.unresolved.length === 0) model.mechanism = manual.mechanism;
+  for (const issue of reading.issues) if ((importantUnrepresented.test(issue.text) || issue.field === 'distance' && /\d/.test(issue.text) && !/mm|cm|ミリ|センチ/i.test(issue.text)) && !model.unresolved.includes(issue.text)) model.unresolved.push(issue.text);
+  const intent = deriveIntent(document, request, model, correction, reading.issues);
+  for (const question of contradictions) { intent.conflicts.push(question.message); intent.clarifications.push(question); }
+  return intent;
+}
+
+/** Immutable baseline, locks and concrete author approval are rechecked at application. */
 export function applyIntentPatch(document: DesignDocument, patch: DesignPatch, intent: DesignIntent): DesignDocument {
   const base = parseDesignDocument(document);
-  if (!intent.supported || intent.conflicts.length) throw new Error(intent.conflicts.join(' ') || intent.notes.join(' '));
-  const merged = DesignPatchSchema.parse({ ...intent.patch, ...patch });
-  const p = intent.protections;
+  assertRequestBinding(base, intent.request, intent.binding);
+  if (intent.correction) assertRequestBinding(base, intent.request, intent.correction.binding);
+  if (!intent.supported || intent.conflicts.length || intent.approvalRequired) throw new Error(intent.conflicts.join(' ') || intent.notes.join(' '));
+  const merged = DesignPatchSchema.parse({ ...intent.patch, ...patch }), p = intent.protections;
+  if (intent.interpretation.size === 'maintain') for (const key of ['widthMm','heightMm'] as const) if ((merged[key] ?? base.input[key]) !== base.input[key]) throw new Error(`${names[key]}は依頼で保護されています。`);
+  if (intent.interpretation.direction.desired && (merged.direction ?? base.input.direction) !== intent.interpretation.direction.desired) throw new Error('希望された方向と候補が一致しません。');
+  if (!intent.interpretation.direction.desired && (merged.direction ?? base.input.direction) !== base.input.direction) throw new Error('方向は未指定のため現在の方向を維持します。');
   for (const key of ['widthMm', 'heightMm', 'direction'] as const) if (p[key] !== undefined && (merged[key] ?? base.input[key]) !== p[key]) throw new Error(`${names[key]}は依頼で保護されています。条件変更の提案と利用者の確認が必要です。`);
-  // The current paper budget is always trusted, even when an older intent omits it.
-  // Only the parser's explicit author-specified cap can authorize a larger budget.
-  const maxSheets = p.maxSheets ?? base.input.maxSheets;
-  if ((merged.maxSheets ?? base.input.maxSheets) > maxSheets) throw new Error(`厚紙は${maxSheets}枚までです。紙を増やす前に条件変更の確認が必要です。`);
+  for (const key of ['selection'] as const) if (merged[key] !== undefined && JSON.stringify(merged[key]) !== JSON.stringify(base.input[key])) throw new Error('依頼の解釈で選択範囲を変更できません。');
+  let maxSheets = Math.min(p.maxSheets ?? base.input.maxSheets, base.input.maxSheets);
+  const approval = intent.correction?.paperApproval;
+  if (approval && approval.from === base.input.maxSheets && approval.to === p.maxSheets && intent.interpretation.paper.kind === 'cap' && approval.to === intent.interpretation.paper.maxSheets && !base.input.locks.includes('maxSheets')) maxSheets = approval.to;
+  if ((merged.maxSheets ?? base.input.maxSheets) > maxSheets) throw new Error(`厚紙は${maxSheets}枚までです。紙を増やす前に具体的な条件変更の確認が必要です。`);
   const travel = merged.travelMm ?? base.input.travelMm;
+  if (['unspecified','maintain'].includes(intent.interpretation.distance.kind) && travel !== base.input.travelMm) throw new Error('動く距離は現在値を維持する解釈です。距離の変更には解釈の訂正が必要です。');
+  if (intent.interpretation.direction.forbidden.includes(merged.direction ?? base.input.direction)) throw new Error('禁止された方向へは変更できません。');
   if (intent.relativeTravel === 'increase' && travel <= base.input.travelMm || intent.relativeTravel === 'decrease' && travel >= base.input.travelMm) throw new Error('候補の移動距離が「大きく／小さく」の希望と一致しません。実現できない場合は条件変更案を示してください。');
-  // A direct request may tighten an existing upper bound, but never silently loosen it.
-  const tightening = p.maxSheets !== undefined && p.maxSheets < base.input.maxSheets && base.input.locks.includes('maxSheets');
+  const tightening = maxSheets < base.input.maxSheets && base.input.locks.includes('maxSheets');
   const applied = applyDesignPatch(base, tightening ? { ...merged, maxSheets: base.input.maxSheets } : merged);
-  const input = { ...applied.input, ...(tightening ? { maxSheets: merged.maxSheets ?? p.maxSheets } : {}), locks: [...new Set([...base.input.locks, ...intent.addLocks])] };
+  const input = { ...applied.input, ...(tightening ? { maxSheets: merged.maxSheets ?? maxSheets } : {}), locks: [...new Set([...base.input.locks, ...intent.addLocks])] };
   const candidate = createDesign(input, { designId: base.designId, revision: base.revision + 1 });
   return candidate.designHash === base.designHash ? base : candidate;
 }
 
-export function buildDesignSuggestion(document: DesignDocument, request: string): DesignSuggestion {
-  const base = parseDesignDocument(document), intent = interpretDesignRequest(base, request);
+export function buildDesignSuggestion(document: DesignDocument, request: string, correction?: InterpretationCorrection): DesignSuggestion {
+  const base = parseDesignDocument(document), intent = interpretDesignRequest(base, request, correction);
   const result: DesignSuggestion = { baseHash: base.designHash, baseRevision: base.revision, status: 'blocked', intent, requestedPatch: intent.patch, patch: intent.patch, messages: [], changes: [], preserved: [...intent.notes], remaining: ['紙厚・摩擦・折り精度・接着・耐久性は実物未確認です。'] };
   if (!intent.supported) return { ...result, status: 'unsupported', messages: intent.notes };
   if (intent.conflicts.length) return { ...result, status: 'clarify', messages: intent.conflicts };
-  if (!Object.keys(intent.patch).length && !intent.addLocks.length) return { ...result, status: 'clarify', messages: ['手動支援では「右へ」「もう少し大きく動かす」「距離を15mm」「絵の大きさを保つ」「紙は2枚まで」などを指定できます。方向か動く距離を具体的にしてください。'] };
+  if (!Object.keys(intent.patch).length && !intent.addLocks.length) return { ...result, status: 'clarify', messages: ['方向や距離が未指定です。動かす方向または距離の操作を指定してください。'] };
   let candidate: DesignDocument;
   try { candidate = applyIntentPatch(base, intent.patch, intent); }
   catch (error) { return { ...result, messages: [error instanceof Error ? error.message : '固定条件を確認してください。'] }; }
   if (canExport(candidate)) {
-    if (candidate.designHash === base.designHash) return { ...result, messages: ['現在の設計が指定条件と同じです。変更する方向や距離を指定してください。'] };
+    if (candidate.designHash === base.designHash) return { ...result, messages: ['現在の設計が指定条件と同じです。距離や方向は変更していません。'] };
     return { ...result, document: candidate, status: 'ready', changes: describeDesignChanges(base, candidate), messages: [`移動 ${base.input.travelMm} → ${candidate.input.travelMm} mm、${directions[candidate.input.direction]}へ。型紙${candidate.layout.sheets}枚です。採用するまで元の設計を保ちます。`] };
   }
-  const failures = candidate.checks.filter(c => c.status === 'fail');
-  result.messages = failures.map(c => `${c.partIds.join('・')}: ${c.message} ${c.suggestion ?? ''}`);
-  // Search only travel, with image scale, selection, direction and all locked fields intact.
-  // A 1-mm bounded search is a helpful alternative, never an impossibility proof.
+  result.messages = candidate.checks.filter(c => c.status === 'fail').map(c => `${c.partIds.join('・')}: ${c.message} ${c.suggestion ?? ''}`);
+  if (['unspecified','maintain'].includes(intent.interpretation.distance.kind)) return { ...result, messages: [...result.messages, '距離は現在値を維持します。距離を変える代案には、希望の訂正が必要です。'] };
   const target = candidate.input.travelMm;
   const candidates = Array.from({ length: 69 }, (_, i) => i + 2).filter(value => value <= target && (!intent.relativeTravel || (intent.relativeTravel === 'increase' ? value > base.input.travelMm : value < base.input.travelMm))).sort((a, b) => b - a);
   for (const travelMm of candidates) {
     try {
       const alternative = applyIntentPatch(base, { ...intent.patch, travelMm }, intent);
       if (canExport(alternative)) return { ...result, status: 'alternative', patch: { ...intent.patch, travelMm }, document: alternative, changes: describeDesignChanges(base, alternative), messages: [`希望の${target} mmでは条件違反があります。絵・選択・紙の上限を保つ代案は${travelMm} mmです。希望との差を確認して選んでください。`, ...result.messages] };
-    } catch { /* A locked or contradictory distance is not an admissible candidate. */ }
+    } catch { /* Locked or contradictory distances remain inadmissible. */ }
   }
   return { ...result, messages: [...result.messages, '現在の絵・選択・固定条件のまま、2〜70 mmの1 mm刻み探索では候補が見つかりませんでした。選択位置を中央側へ選び直すか、詳細設定で変更を許す条件を明示してください。すべての配置が不可能という意味ではありません。'] };
 }
