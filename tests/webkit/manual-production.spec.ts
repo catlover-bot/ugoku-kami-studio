@@ -72,22 +72,49 @@ test('own artwork survives native save and reload, then downloads matching split
   await page.getByRole('button', { name: '2点で囲む', exact: true }).click();
   const preview = page.locator('#workbench .artwork-svg');
   await preview.scrollIntoViewIfNeeded();
-  const points = await preview.evaluate((element, document) => {
-    const p = document.artwork.placement, scale = p.width / document.input.image.widthPx;
-    return [[300, 150], [460, 270]].map(([x, y]) => {
-      const point = new DOMPoint(p.x + x! * scale, p.y + y! * scale).matrixTransform((element as SVGSVGElement).getScreenCTM()!);
-      return { x: point.x, y: point.y };
-    });
-  }, initial.project.document);
+  const taps = await preview.locator('image[data-part="original-art"]').evaluate((element, source) => {
+    const bounds = element.getBoundingClientRect();
+    // WebKit's touch protocol quantizes CSS positions. Choose the integer input
+    // explicitly, then derive its expected source pixel from the rendered image
+    // bounds, independently of Preview's SVG matrix conversion or saved selection.
+    const points = [[300, 150], [460, 270]].map(([x, y]) => ({
+      x: Math.round(bounds.x + x! / source.widthPx * bounds.width),
+      y: Math.round(bounds.y + y! / source.heightPx * bounds.height),
+    }));
+    const sourcePoints = points.map(point => ({
+      x: Math.round((point.x - bounds.x) / bounds.width * source.widthPx),
+      y: Math.round((point.y - bounds.y) / bounds.height * source.heightPx),
+    }));
+    return { points, sourcePoints, imageBounds: bounds.toJSON() };
+  }, initial.project.document.input.image);
+  const [start, end] = taps.sourcePoints;
+  const expectedSelection = { x: start!.x, y: start!.y, width: end!.x - start!.x, height: end!.y - start!.y };
+  const observedTaps: { x: number; y: number; pointerType: string }[] = [];
+  await page.exposeFunction('__recordTestTap', (point: typeof observedTaps[number]) => { observedTaps.push(point); });
+  await preview.evaluate(element => {
+    element.addEventListener('pointerup', event => {
+      const pointer = event as PointerEvent;
+      const observer = window as unknown as { __recordTestTap: (point: { x: number; y: number; pointerType: string }) => Promise<void> };
+      void observer.__recordTestTap({ x: pointer.clientX, y: pointer.clientY, pointerType: pointer.pointerType });
+    }, { capture: true });
+  });
   // This is Playwright touch emulation, not a claim about real touchscreen hardware.
-  for (const point of points) await page.touchscreen.tap(point.x, point.y);
+  for (const point of taps.points) await page.touchscreen.tap(point.x, point.y);
+  await expect.poll(() => observedTaps.length).toBe(2);
+  const touchEvidence = { ...taps, observedTaps, expectedSelection };
+  await writeFile(info.outputPath('touch-coordinates.json'), JSON.stringify(touchEvidence, null, 2) + '\n');
+  expect(observedTaps).toEqual(taps.points.map(point => ({ ...point, pointerType: 'touch' })));
   await page.getByRole('button', { name: '選択の編集を終える', exact: true }).click();
   await stage(page, 2);
   const travel = page.getByLabel('動く距離（mm）', { exact: true });
   await travel.fill('18'); await travel.press('Enter');
   await expect.poll(async () => (await readSaved(page)).project.document.input.travelMm).toBe(18);
   const acquired = (await readSaved(page)).project, document = acquired.document;
-  expect(document.input.selection).toEqual({ x: 300, y: 150, width: 160, height: 120 });
+  expect(document.input.selection).toEqual(expectedSelection);
+  // The complete intended moving contour (fish bounds) must still be enclosed.
+  expect(expectedSelection.x).toBeLessThan(314); expect(expectedSelection.y).toBeLessThan(172);
+  expect(expectedSelection.x + expectedSelection.width).toBeGreaterThan(440);
+  expect(expectedSelection.y + expectedSelection.height).toBeGreaterThan(232);
   expect(acquired.imageDataUrl).toBe(initial.project.imageDataUrl);
   expect(acquired.records).toEqual([]);
   await page.reload();
@@ -148,7 +175,7 @@ test('own artwork survives native save and reload, then downloads matching split
     browserEngine: browser.browserType().name(), browserVersion: browser.version(), viewport: page.viewportSize(),
     scope: 'Actual local production UI, native IndexedDB and PDF worker downloads; automated engine and touch emulation, not an iPhone or physical paper test',
     input: { file: 'developer-fish.png', sha256: sha256(png), provenance: 'Original developer vector drawing rasterized with Sharp' },
-    design: { id: document.designId, revision: document.revision, hash: document.designHash },
+    design: { id: document.designId, revision: document.revision, hash: document.designHash }, touchEvidence,
     persistedGuideStep: 3, downloads: downloadEvidence, paidApiCalls: 0, physicalValidation: 'unverified', visualReview: 'Screenshots generated; human review is separate',
   };
   await writeFile(info.outputPath('manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
