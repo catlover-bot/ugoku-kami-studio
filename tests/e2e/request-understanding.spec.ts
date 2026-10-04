@@ -96,19 +96,18 @@ test('Manual interpretation is bound to the request and revision; undo does not 
 
 // Only the model transport is injected below. Sessions, correction binding,
 // deterministic tools, approval and PDF generation use the actual application.
-import { FinishReason, type Part } from '@google/genai';
 import { createApp } from '../../apps/server/src/app.js';
 import { readConfig } from '../../apps/server/src/config.js';
-import type { ModelProvider, ProviderResponse } from '../../apps/server/src/provider.js';
+import type { ModelProvider, ProviderResponse, ToolCall } from '../../apps/server/src/provider.js';
 import { ai } from './helpers';
 import type { AiRun } from '../../apps/web/src/aiEvidence';
 const accessCode = 'request-ui-offline-access-secret-32-characters';
-const modelReply = (parts: Part[]): ProviderResponse => ({candidates:[{finishReason:FinishReason.STOP,content:{role:'model',parts}}]});
-const toolCall = (name: string, args: Record<string, unknown> = {}): Part => ({functionCall:{name,args,id:`fixture-${name}`}});
-const finalReply = () => modelReply([{text:'模擬通信です。実Geminiの理解性能を確認した結果ではありません。'}]);
+const modelReply = (calls: ToolCall[], text = ''): ProviderResponse => ({message:{role:'assistant',text,calls},finishReason:'STOP'});
+const toolCall = (name: string, args: Record<string, unknown> = {}): ToolCall => ({name,args,id:`fixture-${name}`});
+const finalReply = () => modelReply([], '模擬通信です。実Geminiの理解性能を確認した結果ではありません。');
 async function isolatedAi(provider: ModelProvider) {
   const previous = process.env.NODE_ENV; process.env.NODE_ENV = 'test';
-  try {return await createApp({config:readConfig({AI_ENABLED:'true',GEMINI_API_KEY:'offline-not-real',AI_ACCESS_SECRET:accessCode}),provider});}
+  try {return await createApp({config:readConfig({AI_PROVIDER:'gemini',GEMINI_API_KEY:'offline-not-real',AI_ACCESS_SECRET:accessCode}),provider});}
   finally {if(previous === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous;}
 }
 
