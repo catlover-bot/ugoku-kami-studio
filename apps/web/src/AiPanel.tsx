@@ -42,6 +42,8 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
   const [interpretationDraft, setInterpretationDraft] = useState(false);
   const [unsupported, setUnsupported] = useState(false);
   const [pollInterrupted, setPollInterrupted] = useState(false);
+  const [waitSeconds, setWaitSeconds] = useState(0);
+  const waitStarted = useRef<number | null>(null);
   const [evidence, setEvidence] = useState<AiEvidence[]>([]);
   const sessionRef = useRef<Session | null>(null);
   const documentRef = useRef(document); documentRef.current = document;
@@ -51,7 +53,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
   const acceptedIdentity = useRef<string | null>(null);
   const isCurrent = (base: DesignDocument, submittedPrompt?: string) => !draftRef.current && base.designId === documentRef.current.designId && base.revision === documentRef.current.revision && base.designHash === documentRef.current.designHash && (submittedPrompt === undefined || submittedPrompt === promptRef.current);
   const generation = useRef(0);
-  const endedGenerations = useRef(new Map<number, 'cancelled' | 'stale'>());
+  const endedGenerations = useRef(new Map<number, 'cancelled' | 'stale' | 'expired'>());
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pollContext = useRef<PollContext | null>(null);
   const cancellationSent = useRef(new Set<string>());
@@ -64,7 +66,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     setEvidence(items => {
       const entry = observeRun(items.find(item => item.runId === candidate.id), candidate, context.base, context.prompt, context.requestedAt);
       const ended = endedGenerations.current.get(context.ticket) ?? (!isCurrent(context.base, context.prompt) ? 'stale' : undefined);
-      if (ended) entry.decision = {status: ended, at: new Date().toISOString(), reason: '実行開始後に画面で中断、または依頼・設計を変更しました。届いた候補は反映していません。'};
+      if (ended) entry.decision = {status: ended, at: new Date().toISOString(), reason: ended === 'expired' ? 'サーバー側の作業が失効しました。以前の候補は反映していません。' : '実行開始後に画面で中断、または依頼・設計を変更しました。届いた候補は反映していません。'};
       return [...items.filter(item => item.runId !== candidate.id), entry].slice(-20);
     });
   }
@@ -78,11 +80,21 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     try {const result = await request<{run: Run}>(`/api/sessions/${session.sessionId}/runs/${runId}`, 'DELETE', undefined, session.token, accessCode); rememberResponse(result.run);}
     catch (error) {cancellationSent.current.delete(key); throw error;}
   }
-  function endGeneration(kind: 'cancelled' | 'stale') {
+  function endGeneration(kind: 'cancelled' | 'stale' | 'expired') {
     endedGenerations.current.set(generation.current, kind);
     // A session itself is bounded to 100 runs. Keep only recent local generations, too.
     if (endedGenerations.current.size > 100) endedGenerations.current.delete(endedGenerations.current.keys().next().value!);
     generation.current++; clearTimeout(timer.current); pollContext.current = null; setPollInterrupted(false); setBusy(false);
+  }
+  function releaseExpiredSession(error: unknown): boolean {
+    if (!(error instanceof ApiRequestError) || !['unauthorized', 'not_found'].includes(error.code ?? '')) return false;
+    const current = runRef.current;
+    endGeneration('expired');
+    if (current) decide(current.id, 'expired', undefined, 'サーバー側の作業が失効しました。現在の作品へ以前の候補を反映していません。');
+    sessionRef.current = null; pollContext.current = null;
+    setRun(null); runRef.current = null; setInterpretationDraft(false); setUnsupported(false);
+    setMessage('サーバー側の作業が失効しました。現在の作品と希望は残っています。「AIで案をつくる」で新しく実行するか、手動の調整に戻れます。');
+    return true;
   }
   function discardCurrent(reason: string) {
     const current = runRef.current, session = sessionRef.current;
@@ -116,6 +128,13 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     setMessage(active ? '希望が変わったため、以前の変更案を無効にしました。現在の作品は変わっていません。' : '');
   }, [prompt]);
   useEffect(() => {onCandidateChange?.(run?.status === 'awaiting_approval' && !!run.proposal);}, [run?.status, run?.proposal, onCandidateChange]);
+  useEffect(() => {
+    if (!busy && !pollInterrupted) { waitStarted.current = null; return; }
+    waitStarted.current ??= performance.now();
+    const update = () => setWaitSeconds(Math.floor((performance.now() - waitStarted.current!) / 1000));
+    update(); const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [busy, pollInterrupted]);
 
   function editPrompt(value: string) {
     if (value === promptRef.current) return;
@@ -144,6 +163,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
       await receive(next.run, context);
     } catch (error) {
       if (context.ticket !== generation.current || !isCurrent(context.base, context.prompt)) return;
+      if (releaseExpiredSession(error)) return;
       setMessage(`${error instanceof Error ? error.message : '通信に失敗しました。'} 実行結果の確認が止まっています。「状況を確認する」で同じ実行を確認できます。`);
       setPollInterrupted(true); setBusy(false);
     }
@@ -164,6 +184,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
       endGeneration('stale'); decide(correction.runId, 'stale', undefined, '解釈を訂正して検査し直しました。以前の候補は採用していません。');
     } else if (runRef.current?.status === 'awaiting_approval') discardCurrent('新しい依頼を実行するため、以前の候補を無効にしました。');
     const ticket = ++generation.current, base = documentRef.current, submittedPrompt = prompt, requestedAt = new Date().toISOString(), submittedAccess = access;
+    waitStarted.current = performance.now(); setWaitSeconds(0);
     setBusy(true); setRun(null); runRef.current = null; setMessage('設計条件を読み取り、変更案を検査しています。'); setUnsupported(false); setPollInterrupted(false);
     try {
       let session = sessionRef.current;
@@ -178,7 +199,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
       if (ticket !== generation.current || !isCurrent(base, submittedPrompt)) return;
       const result = await request<{run: Run}>(`/api/sessions/${session.sessionId}/runs`, 'POST', {requestId: crypto.randomUUID(), prompt: submittedPrompt, baseRevision: base.revision, baseHash: base.designHash, ...(correction ? {correction} : {})}, session.token, submittedAccess);
       await receive(result.run, {session, runId: result.run.id, base, ticket, prompt: submittedPrompt, requestedAt, access: submittedAccess});
-    } catch (error) {if (ticket === generation.current) {sessionRef.current = null; setUnsupported(error instanceof ApiRequestError && error.code === 'unsupported_motion'); setMessage(error instanceof Error ? error.message : '実行に失敗しました。'); setBusy(false);}}
+    } catch (error) {if (ticket === generation.current) {if (releaseExpiredSession(error)) return; sessionRef.current = null; setUnsupported(error instanceof ApiRequestError && error.code === 'unsupported_motion'); setMessage(error instanceof Error ? error.message : '実行に失敗しました。'); setBusy(false);}}
   }
   async function correctInterpretation(changes: InterpretationChanges) {
     const current = runRef.current;
@@ -196,7 +217,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     setRun(null); runRef.current = null;
     if (current && session) {
       try {await cancelServerRun(session, current.id, access);}
-      catch {if (ticket === generation.current) setMessage('画面での待機を中断しました。サーバーへの中断要求は届きませんでした。送信済みの呼び出しは取り消せないことがあります。'); return;}
+      catch (error) {if (ticket === generation.current && !releaseExpiredSession(error)) setMessage('画面での待機を中断しました。サーバーへの中断要求は届きませんでした。送信済みの呼び出しは取り消せないことがあります。'); return;}
     }
     if (ticket === generation.current) setMessage('中断しました。届いた結果は反映しません。編集内容と実行記録は残っています。');
   }
@@ -204,7 +225,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     const session = sessionRef.current;
     if (!run?.proposal || !session || busyRef.current || draftRef.current || interpretationDraft) return;
     if (run.baseHash !== documentRef.current.designHash || run.baseRevision !== documentRef.current.revision) {discardCurrent('古い設計への変更案です。'); setMessage('古い設計への変更案です。新しい設計で再実行してください。'); return;}
-    setBusy(true);
+    waitStarted.current = performance.now(); setWaitSeconds(0); setBusy(true);
     const base = documentRef.current, ticket = generation.current, submittedPrompt = promptRef.current;
     try {
       const path = `/api/sessions/${session.sessionId}/proposals/${run.proposal.id}`;
@@ -220,7 +241,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
         if (ticket !== generation.current) return;
         decide(run.id, 'rejected'); setRun(null); runRef.current = null; setMessage('変更案を却下しました。設計は変わりません。実行記録は残っています。');
       }
-    } catch (error) {if (ticket === generation.current) setMessage(error instanceof Error ? error.message : '変更案を処理できませんでした。');}
+    } catch (error) {if (ticket === generation.current && !releaseExpiredSession(error)) setMessage(error instanceof Error ? error.message : '変更案を処理できませんでした。');}
     finally {if (ticket === generation.current) setBusy(false);}
   }
   function exportEvidence() {
@@ -234,10 +255,10 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
   const settings = <section className="ai-settings" aria-label="AIの設定">
     <h3>{connectionLabel}</h3>
     {connection.enabled ? <>
-      <p>{connection.mode === 'injected-test' ? 'テスト用の模擬AIです。実モデルへの送信はありません。' : connection.mode === 'ollama' ? 'このコンピューターのOllamaを使う設定です。外部の推論APIへ自動で切り替えません。設定済みの表示だけでは、接続成功を確認していません。' : 'Geminiを使う設定です。設定済みの表示だけでは、接続成功を確認していません。'}</p>
+      <p>{connection.mode === 'injected-test' ? 'テスト用の模擬AIです。実モデルへの送信はありません。' : connection.mode === 'ollama' ? 'アプリのサーバー内で動くOllamaを使う設定です。外部の推論APIへ自動で切り替えません。設定済みの表示だけでは、接続成功を確認していません。' : 'Geminiを使う設定です。設定済みの表示だけでは、接続成功を確認していません。'}</p>
       <label className="field">AIアクセスコード<input type="password" value={access} onChange={event => setAccess(event.target.value)} autoComplete="off" spellCheck={false} /><small>この画面のメモリだけで扱い、作品には保存しません。</small></label>
       {connection.model && <p className="field-note">モデル：{connection.model}</p>}{connection.endpoint && <p className="field-note">接続先：<code>{connection.endpoint}</code></p>}{connection.contextLength && <p className="field-note">コンテキスト上限：{connection.contextLength} / {connection.toolMode}</p>}{limits && <p className="field-note">1依頼の上限：モデル{limits.modelCalls}回・ツール{limits.toolCalls}回・{limits.timeoutMs / 1000}秒</p>}
-      <p className="field-note">{connection.mode === 'ollama' ? '推論にはこのコンピューターの計算資源と電力を使います。外部推論APIへの課金はありません。モデルの初回取得には外部通信が必要です。' : connection.mode === 'injected-test' ? '模擬実行の結果は、実モデルの性能確認にはなりません。' : '外部推論APIの利用料が発生する場合があります。'}</p>
+      <p className="field-note">{connection.mode === 'ollama' ? '推論にはアプリのサーバーの計算資源と電力を使います。外部推論APIへの課金はありません。モデルの初回取得には外部通信が必要です。' : connection.mode === 'injected-test' ? '模擬実行の結果は、実モデルの性能確認にはなりません。' : '外部推論APIの利用料が発生する場合があります。'}</p>
     </> : <p>{connection.unreachable ? 'サーバーの状態を確認できません。' : 'このサイトではAIは無効です。'} 方向・距離の操作や、寸法からの案づくりを続けられます。</p>}
     <p className="field-note">案をつくる操作をしたときだけ、希望・寸法・選択範囲を送ります。画像そのものは送信しません。</p>
   </section>;
@@ -249,10 +270,10 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
   return <>
     {actionTarget && createPortal(action, actionTarget)}
     {settingsTarget && createPortal(<>{settings}
-    {!!evidence.length && <details className="ai-evidence"><summary>AI実行の記録（{evidence.length}件）</summary><p className="field-note">この画面で受け取った直近20件を保存できます。依頼文・モデル・ツール・検査・使用量・採用した版を含みます。画像やアクセスコードは含めません。</p><ul>{evidence.map(item => <li key={item.runId}><strong>{item.execution.mode === 'ollama' ? '実ローカルAI' : item.execution.mode === 'gemini' ? '実Gemini' : item.execution.mode === 'injected-test' ? '模擬実行' : '実行方式は未確認'}</strong> · {item.execution.model ?? 'モデル名未取得'}<br /><code>{item.runId}</code><br />{({pending:'候補待ち／未採用',accepted:'採用済み',rejected:'不採用',cancelled:'中断',stale:'依頼・設計が変わったため無効',failed:'失敗',completed:'応答完了'})[item.decision.status]}{item.decision.adopted ? ` · 第${item.decision.adopted.revision}版` : ''}<br />モデル {item.serverRun.modelCalls}回 / ツール {item.serverRun.toolCalls}回 / {usageLabel(item.serverRun)}</li>)}</ul><button className="secondary" onClick={exportEvidence}>AI実行記録を書き出す</button><p className="field-note">使用量未取得は0料金を意味しません。実物確認の記録は工程3で追加します。</p></details>}
+    {!!evidence.length && <details className="ai-evidence"><summary>AI実行の記録（{evidence.length}件）</summary><p className="field-note">この画面で受け取った直近20件を保存できます。依頼文・モデル・ツール・検査・使用量・採用した版を含みます。画像やアクセスコードは含めません。</p><ul>{evidence.map(item => <li key={item.runId}><strong>{item.execution.mode === 'ollama' ? '実ローカルAI' : item.execution.mode === 'gemini' ? '実Gemini' : item.execution.mode === 'injected-test' ? '模擬実行' : '実行方式は未確認'}</strong> · {item.execution.model ?? 'モデル名未取得'}<br /><code>{item.runId}</code><br />{({pending:'候補待ち／未採用',accepted:'採用済み',rejected:'不採用',cancelled:'中断',stale:'依頼・設計が変わったため無効',expired:'サーバー側の作業が失効',failed:'失敗',completed:'応答完了'})[item.decision.status]}{item.decision.adopted ? ` · 第${item.decision.adopted.revision}版` : ''}<br />モデル {item.serverRun.modelCalls}回 / ツール {item.serverRun.toolCalls}回 / {usageLabel(item.serverRun)}</li>)}</ul><button className="secondary" onClick={exportEvidence}>AI実行記録を書き出す</button><p className="field-note">使用量未取得は0料金を意味しません。実物確認の記録は工程3で追加します。</p></details>}
     {!!run?.events?.length && <details><summary>実際の操作ログ（{run.toolCalls}回）</summary><ol className="execution-log">{run.events.map((event, index) => <li key={index}>{event.tool ?? event.name ?? event.type} {event.message}</li>)}</ol><small>モデル {run.modelCalls}回 · ツール {run.toolCalls}回 · {(run.elapsedMs / 1000).toFixed(1)}秒</small></details>}</>, settingsTarget)}
     <section className="ai-panel" aria-label="AIの調整結果" hidden={!visible}>
-    {(busy || pollInterrupted) && <div className="ai-wait"><p>{pollInterrupted ? '通信の確認が必要です。現在の作品は変わっていません。' : run?.status === 'awaiting_approval' ? '採用の結果を確認しています。' : '候補を待っています。現在の作品は変わっていません。'}</p><div className="button-row">{pollInterrupted && <button className="secondary" onClick={() => void resumePolling()}>状況を確認する</button>}<button onClick={() => void cancel()} className="text-button">中断する</button></div></div>}
+    {(busy || pollInterrupted) && <div className="ai-wait"><p>{pollInterrupted ? '通信の確認が必要です。現在の作品は変わっていません。' : run?.status === 'awaiting_approval' ? '採用の結果を確認しています。' : '候補を待っています。現在の作品は変わっていません。'}</p><p>経過 {waitSeconds}秒 · 中断して手動で調整できます。</p><div className="button-row">{pollInterrupted && <button className="secondary" onClick={() => void resumePolling()}>状況を確認する</button>}<button onClick={() => void cancel()} className="text-button">中断する</button></div></div>}
     {statusMessage && !busy && <p role="status" className={`notice ${unsupported || run?.status === 'failed' ? 'warning' : ''}`}>{statusMessage}</p>}
     {unsupported && <button className="text-button" onClick={() => { editPrompt('引っぱりタブでまっすぐ動く距離を調整したい'); setUnsupported(false); setMessage('代案を入力しました。実行するか、手動で調整してください。'); }}>代案「まっすぐ動かす」を選ぶ</button>}
 

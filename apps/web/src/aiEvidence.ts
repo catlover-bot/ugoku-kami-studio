@@ -26,7 +26,7 @@ export type AiEvidence = {
   proposed?: DesignStamp & {checks: CheckResult[]; changes: ReturnType<typeof designChanges>};
   /** Last response actually received from the application server, independent of the UI decision. */
   serverRun: AiRun;
-  decision: {status: 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'stale' | 'failed' | 'completed'; at: string; adopted?: DesignStamp; reason?: string};
+  decision: {status: 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'stale' | 'expired' | 'failed' | 'completed'; at: string; adopted?: DesignStamp; reason?: string};
 };
 export const designStamp = (document: DesignDocument): DesignStamp => ({designId: document.designId, revision: document.revision, designHash: document.designHash});
 
@@ -44,7 +44,7 @@ export function publicRunSnapshot(run: AiRun): AiRun {
 export function observeRun(previous: AiEvidence | undefined, run: AiRun, base: DesignDocument, prompt: string, requestedAt: string): AiEvidence {
   const now = new Date().toISOString();
   const document = run.proposal?.document;
-  const terminalDecision = previous && ['accepted', 'rejected', 'cancelled', 'stale'].includes(previous.decision.status);
+  const terminalDecision = previous && ['accepted', 'rejected', 'cancelled', 'stale', 'expired'].includes(previous.decision.status);
   return {
     runId: run.id, requestedAt, observedAt: now, prompt,
     execution: {mode: run.mode ?? 'unknown', model: run.model ?? null},
