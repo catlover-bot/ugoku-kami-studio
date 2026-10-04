@@ -95,6 +95,38 @@ describe('configuration, authorization and input limits', () => {
 });
 
 describe('real deterministic tool loop with test-only communication', () => {
+  it('confirms a first valid no-op without creating a proposal, revision or approval', async () => {
+    const provider = script([response([call('propose_design_patch', { direction: 'right', travelMm: 20 })]), final]);
+    const s = await setup(provider);
+    const run = s.app.runs.start(s.session, { ...s.request, prompt: '回転させずに右へ動かしたい' }); await run.done;
+    expect(run.status).toBe('succeeded'); expect(run.proposal).toBeUndefined();
+    expect(toolResult(provider.histories[1]!)).toMatchObject({ unchanged: true, revision: s.document.revision, designHash: s.document.designHash, patch: {}, applied: false, candidateTravelMm: 20 });
+    expect(run.events.some(event => event.type === 'validation')).toBe(true);
+    expect(s.session.document).toEqual(s.document);
+  });
+  it('rejects a second no-op and still stops repeated attempts without changing the design', async () => {
+    const unchanged = response([call('propose_design_patch', { direction: 'right', travelMm: 20 })]);
+    const provider = script([unchanged, unchanged, unchanged]);
+    const s = await setup(provider);
+    const run = s.app.runs.start(s.session, { ...s.request, prompt: '回転させずに右へ動かしたい' }); await run.done;
+    expect(toolResult(provider.histories[1]!)).toMatchObject({ unchanged: true });
+    expect(toolResult(provider.histories[2]!).error).toMatchObject({ code: 'repeated_design' });
+    expect(run.status).toBe('failed'); expect(run.error?.code).toBe('repeated_failure');
+    expect(run.proposal).toBeUndefined(); expect(s.session.document).toEqual(s.document);
+  });
+  it('keeps elapsed durations monotonic when the wall clock moves backward', async () => {
+    const realNow = Date.now, started = realNow();
+    const provider = script([response([call('propose_design_patch', { travelMm: 15 })]), final]);
+    const original = provider.generate;
+    provider.generate = async (...args) => { vi.spyOn(Date, 'now').mockReturnValue(started - 60_000); await new Promise(resolve => setTimeout(resolve, 2)); return original(...args); };
+    const s = await setup(provider);
+    try {
+      const run = s.app.runs.start(s.session, s.request); await run.done;
+      expect(run.status).toBe('awaiting_approval'); expect(run.elapsedMs).toBeGreaterThan(0);
+      expect(run.modelUsage.every(item => item.durationMs > 0)).toBe(true);
+      expect(run.events.every(item => item.durationMs >= 0)).toBe(true);
+    } finally { vi.spyOn(Date, 'now').mockRestore(); }
+  });
   it('keeps thinking/cache/tool token counters and distinguishes missing usage from zero billing', async () => {
     const first = response([call('propose_design_patch', { travelMm: 15 })]);
     first.usageMetadata = { promptTokenCount: 50, candidatesTokenCount: 7, thoughtsTokenCount: 12, cachedContentTokenCount: 20, toolUsePromptTokenCount: 3, totalTokenCount: 72 };

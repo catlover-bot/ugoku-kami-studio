@@ -26,8 +26,31 @@ async function localJson(config: ServerConfig, path: '/api/status' | '/api/versi
     const data = body === undefined ? undefined : JSON.stringify(body);
     const req = request(target, { method: data === undefined ? 'GET' : 'POST', signal, agent: false, headers: { Accept: 'application/json', ...(data ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } : {}) } }, response => {
       if (response.statusCode !== 200) {
-        response.destroy();
-        reject(new AppError(response.statusCode && response.statusCode >= 300 && response.statusCode < 400 ? 'local_configuration' : 'provider_unavailable', response.statusCode === 400 ? 'ローカルAIが入力を処理できませんでした。履歴・設定の上限を確認してください。' : LOCAL_ERROR)); return;
+        const failure = new AppError(response.statusCode && response.statusCode >= 300 && response.statusCode < 400 ? 'local_configuration' : 'provider_unavailable', response.statusCode === 400 ? 'ローカルAIが入力を処理できませんでした。履歴・設定の上限を確認してください。' : LOCAL_ERROR);
+        // Read only a bounded known-error envelope; never expose arbitrary runtime text.
+        if (path !== '/api/chat' || response.statusCode !== 400 || !response.headers['content-type']?.includes('application/json') || Number(response.headers['content-length']) > 8192) {
+          response.destroy(); reject(failure); return;
+        }
+        const chunks: Buffer[] = []; let bytes = 0;
+        response.on('data', (chunk: Buffer) => {
+          bytes += chunk.length;
+          if (bytes > 8192) { response.destroy(); reject(failure); }
+          else chunks.push(chunk);
+        });
+        response.on('error', () => reject(failure));
+        response.on('end', () => {
+          let contextLimit = false;
+          try {
+            const value = z.object({ error: z.string() }).parse(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+            contextLimit = /^(?:the input length exceeds the context length|request \(\d+ tokens\) exceeds (?:the )?available context size \(\d+ tokens\)(?:, try increasing it)?)$/.test(value.error.trim());
+            if (!contextLimit) {
+              const nested = z.object({ error: z.object({ code: z.literal(400), type: z.literal('exceed_context_size_error') }) }).safeParse(JSON.parse(value.error));
+              contextLimit = nested.success;
+            }
+          } catch { /* Unknown or malformed runtime errors remain generic. */ }
+          reject(contextLimit ? new AppError('local_context_limit', 'ローカルAIの会話がコンテキスト上限に達しました。履歴は切り捨てず停止しました。作品は変更していません。') : failure);
+        });
+        return;
       }
       if (!response.headers['content-type']?.includes('application/json') || Number(response.headers['content-length']) > maxBytes) {
         response.destroy(); reject(new AppError('invalid_output', 'ローカルAIの応答形式または容量が不正です。')); return;
@@ -73,8 +96,8 @@ export async function checkLocalRuntime(config: ServerConfig, signal: AbortSigna
   return { digest, quantization: model.data.details.quantization_level, contextLength: config.ollama.contextLength, runtimeVersion: version.data.version, toolMode: config.ollama.toolMode };
 }
 
-const actionSchema = z.object({ actions: z.array(z.object({ tool: z.string().refine(name => declarations.some(tool => tool.name === name)), arguments: z.record(z.string(), z.unknown()) }).strict()).max(12), message: z.string().max(6000) }).strict();
-const actionFormat = { type: 'object', properties: { actions: { type: 'array', maxItems: 12, items: { type: 'object', properties: { tool: { type: 'string', enum: declarations.map(tool => tool.name) }, arguments: { type: 'object' } }, required: ['tool', 'arguments'], additionalProperties: false } }, message: { type: 'string' } }, required: ['actions', 'message'], additionalProperties: false };
+const actionSchema = z.object({ actions: z.array(z.object({ tool: z.string().refine(name => declarations.some(tool => tool.name === name)), arguments: z.record(z.string(), z.unknown()) }).strict()).max(2), message: z.string().max(6000) }).strict();
+const actionFormat = { type: 'object', properties: { actions: { type: 'array', maxItems: 2, items: { oneOf: declarations.map(tool => ({ type: 'object', properties: { tool: { const: tool.name }, arguments: tool.parametersJsonSchema }, required: ['tool', 'arguments'], additionalProperties: false })) } }, message: { type: 'string', maxLength: 6000 } }, required: ['actions', 'message'], additionalProperties: false };
 type NativeMessage = { role: string; content: string; thinking?: string; tool_calls?: { id?: string; function: { name: string; arguments: Record<string, unknown> } }[]; tool_name?: string; tool_call_id?: string };
 const metric = z.number().finite().nonnegative().optional();
 const chatSchema = z.object({ model: z.string(), message: z.object({ role: z.literal('assistant'), content: z.string(), thinking: z.string().optional(), images: z.array(z.string()).max(0).optional(), tool_calls: z.array(z.object({ id: z.string().max(200).optional(), function: z.object({ name: z.string().min(1).max(100), arguments: z.record(z.string(), z.unknown()) }) })).max(24).optional() }), done: z.literal(true), done_reason: z.literal('stop'), total_duration: metric, load_duration: metric, prompt_eval_duration: metric, eval_duration: metric, prompt_eval_count: metric, eval_count: metric }).passthrough();
@@ -88,7 +111,7 @@ export class OllamaProvider implements ModelProvider {
   }
   private payload(history: ConversationMessage[]) {
     const jsonMode = this.config.ollama.toolMode === 'json-actions';
-    const system = SYSTEM_INSTRUCTION + (jsonMode ? '\n返答は厳密なJSON {"actions":[{"tool":"許可ツール名","arguments":{}}],"message":"短い説明"}だけです。actionsは実行要求です。検査を終えた最終返答だけactionsを空にします。ツール定義:\n' + JSON.stringify(declarations) : '');
+    const system = SYSTEM_INSTRUCTION + (jsonMode ? '\n返答は厳密なJSON {"actions":[{"tool":"許可ツール名","arguments":{}}],"message":"短い説明"}だけです。actionsは実行要求です。1応答は最大2アクションです。引数は各ツールの宣言に従ってください。すでに成功したツールを同じ引数で繰り返す必要はありません。検査を終えた最終返答だけactionsを空にします。ツール定義:\n' + JSON.stringify(declarations) : '');
     const messages: NativeMessage[] = [{ role: 'system', content: system }];
     for (const message of history) {
       if (message.role === 'user') messages.push({ role: 'user', content: message.text });

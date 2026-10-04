@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import { z } from 'zod';
 import { applyIntentPatch, assertRequestBinding, distanceTargetMm, InterpretationCorrectionSchema, interpretDesignRequest, interpretModelRequest, parseDesignDocument, validateDesign, type DesignDocument, type DesignPatch, type DesignIntent, type LockKey, type CheckResult, type InterpretationCorrection, type RequestInterpretation } from '@ugoku/core';
 import type { ConversationMessage, ToolResult, LocalTiming, LocalModel } from './conversation.js';
@@ -178,7 +179,7 @@ export class RunManager {
   }
 
   private async execute(session: Session, run: Run, prompt: string): Promise<void> {
-    const start = Date.now();
+    const start = performance.now();
     const timer = setTimeout(() => run.controller.abort(new AppError('timeout', '実行時間の上限に達しました。設計は変更されていません。')), this.config.runTimeoutMs);
     const signal = run.controller.signal;
     const base = structuredClone(parseDesignDocument(session.document));
@@ -191,12 +192,12 @@ export class RunManager {
         signal.throwIfAborted(); assertCurrent(session, run.baseRevision, run.baseHash);
         const inputBytes = assertModelInput(this.config, history, this.provider);
         run.modelCalls++;
-        const modelStart = Date.now();
+        const modelStart = performance.now();
         const meter: ModelUsage = { call: run.modelCalls, inputBytes, outputTokenLimit: this.config.maxOutputTokens, durationMs: 0, received: false, finishReason: null, modelVersion: null, usage: null };
         run.modelUsage.push(meter); run.usage.responsesWithoutUsage++;
         let response: ProviderResponse;
         try { response = await abortable(this.provider!.generate(history, signal), signal); }
-        finally { meter.durationMs = Date.now() - modelStart; }
+        finally { meter.durationMs = performance.now() - modelStart; }
         meter.received = true;
         meter.finishReason = response.finishReason ?? null;
         meter.localTiming = response.localTiming; meter.localModel = response.localModel;
@@ -207,7 +208,7 @@ export class RunManager {
           for (const key of Object.keys(meter.usage) as (keyof TokenUsage)[]) run.usage[key] += meter.usage[key];
         }
         signal.throwIfAborted(); assertCurrent(session, run.baseRevision, run.baseHash);
-        run.events.push({ sequence: run.events.length + 1, type: 'model', message: `モデル応答 ${run.modelCalls}`, durationMs: Date.now() - modelStart });
+        run.events.push({ sequence: run.events.length + 1, type: 'model', message: `モデル応答 ${run.modelCalls}`, durationMs: performance.now() - modelStart });
         const finishReason = response.finishReason;
         if (response.refusal || ['SAFETY', 'RECITATION', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII'].includes(finishReason || '')) throw new AppError('refusal', 'AIがこの依頼への応答を拒否しました。内容を変更して再試行してください。');
         if (finishReason && finishReason !== 'STOP') throw new AppError('invalid_output', 'AIの応答が途中で終了しました。設計は変更されていません。');
@@ -229,7 +230,7 @@ export class RunManager {
           if (context.candidate.designHash === base.designHash && needsCandidate(base, run.intent)) {
             throw new AppError(run.constraintSuggestions.length ? 'conditions_conflict' : 'invalid_output', run.constraintSuggestions.length ? '希望と保護条件を両立する候補はできていません。条件変更案を確認し、必要な場合だけ手動で見直してください。' : '希望に対する設計候補が生成されていません。設計は変更されていません。');
           }
-          const validationStart = Date.now();
+          const validationStart = performance.now();
           if (context.candidate.designHash !== base.designHash) {
             let rebuilt: DesignDocument;
             try { rebuilt = applyIntentPatch(base, context.patch, interpretModelRequest(base, run.prompt, run.interpretationProposal, run.authorCorrection)); }
@@ -238,7 +239,7 @@ export class RunManager {
           }
           const checks = validateDesign(context.candidate);
           run.validationIssues = checks.filter(check => check.status === 'fail');
-          run.events.push({ sequence: run.events.length + 1, type: 'validation', message: '最終候補を再検査しました。', designHash: context.candidate.designHash, checkStatuses: checks.map(check => ({ id: check.id, status: check.status })), durationMs: Date.now() - validationStart });
+          run.events.push({ sequence: run.events.length + 1, type: 'validation', message: '最終候補を再検査しました。', designHash: context.candidate.designHash, checkStatuses: checks.map(check => ({ id: check.id, status: check.status })), durationMs: performance.now() - validationStart });
           if (run.validationIssues.length) {
             const issue = run.validationIssues[0]!;
             throw new AppError('validation_failed', `候補は条件を満たしません。${issue.partIds.join('・')}：${issue.message} ${issue.suggestion ?? '条件変更案を確認してください。'}`);
@@ -256,7 +257,7 @@ export class RunManager {
           signal.throwIfAborted(); assertCurrent(session, run.baseRevision, run.baseHash);
           if (run.toolCalls >= this.config.maxToolCalls) throw new AppError('tool_limit', 'ツール実行回数の上限に達しました。');
           run.toolCalls++;
-          const toolStart = Date.now();
+          const toolStart = performance.now();
           let result: Record<string, unknown>;
           let message = '実行しました。';
           try {
@@ -280,7 +281,7 @@ export class RunManager {
             const count = (failures.get(key) || 0) + 1; failures.set(key, count);
             if (count >= 2) throw new AppError('repeated_failure', '同じ失敗の反復を検出し、中止しました。');
           }
-          run.events.push({ sequence: run.events.length + 1, type: 'tool', tool: call.name, message, designHash: context.candidate.designHash, patch: call.name === 'propose_design_patch' ? structuredClone(context.patch) : undefined, checkStatuses: context.candidate.checks.map(check => ({ id: check.id, status: check.status })), durationMs: Date.now() - toolStart });
+          run.events.push({ sequence: run.events.length + 1, type: 'tool', tool: call.name, message, designHash: context.candidate.designHash, patch: call.name === 'propose_design_patch' ? structuredClone(context.patch) : undefined, checkStatuses: context.candidate.checks.map(check => ({ id: check.id, status: check.status })), durationMs: performance.now() - toolStart });
           results.push({ name: call.name || 'unknown', ...(call.id ? { id: call.id } : {}), response: result });
         }
         history.push({ role: 'tool', results });
@@ -292,6 +293,6 @@ export class RunManager {
         run.error = publicError(signal.aborted ? signal.reason : error);
         run.status = 'failed'; run.message = run.error.message;
       }
-    } finally { clearTimeout(timer); run.elapsedMs = Date.now() - start; }
+    } finally { clearTimeout(timer); run.elapsedMs = performance.now() - start; }
   }
 }

@@ -8,6 +8,7 @@ import { GeminiProvider } from '../src/provider.js';
 import { createApp } from '../src/app.js';
 import { publicRun } from '../src/runs.js';
 import type { ConversationMessage } from '../src/conversation.js';
+import { declarations } from '../src/tools.js';
 
 const model = 'gemma4:e2b-it-qat', digest = 'a'.repeat(64), access = 'test-local-access-code-at-least-32-characters';
 const cleanups: (() => Promise<void>)[] = [];
@@ -110,6 +111,19 @@ describe('local-only Ollama adapter against a fake loopback HTTP runtime; never 
     const good = await fixture(); await expect(checkLocalRuntime({ ...good.config, ollama: { ...good.config.ollama, digest: 'b'.repeat(64) } }, signal())).rejects.toMatchObject({ code: 'local_configuration' });
   });
   it.each([
+    ['known plain context error', JSON.stringify({ error: 'request (9346 tokens) exceeds available context size (8192 tokens)' }), 'local_context_limit'],
+    ['known nested runtime context error', JSON.stringify({ error: JSON.stringify({ error: { code: 400, type: 'exceed_context_size_error', message: 'private-runtime-detail', n_prompt_tokens: 10009, n_ctx: 8192 } }) }), 'local_context_limit'],
+    ['unknown runtime error', JSON.stringify({ error: 'private-runtime-detail: exceed_context_size_error' }), 'provider_unavailable'],
+    ['oversized error', JSON.stringify({ error: 'private-runtime-detail'.repeat(1000) }), 'provider_unavailable'],
+  ])('safely classifies %s without forwarding runtime text or changing the design', async (_label, payload, code) => {
+    const local = await fixture((call, response) => { if (call.path === '/api/chat') { response.writeHead(400, { 'Content-Type': 'application/json' }); response.end(payload); } });
+    const { run, document, session } = await runApp(local.config);
+    expect(run.status).toBe('failed'); expect(run.error?.code).toBe(code);
+    expect(run.proposal).toBeUndefined(); expect(session.document).toEqual(document);
+    expect(JSON.stringify(publicRun(run))).not.toContain('private-runtime-detail');
+    expect(local.requests.filter(call => call.path === '/api/chat')).toHaveLength(1);
+  });
+  it.each([
     ['unknown tool', { ...completion('', [{ function: { name: 'exec_shell', arguments: {} } }]) }],
     ['truncated', { ...completion('partial'), done_reason: 'length' }],
     ['unfinished', { ...completion('partial'), done: false }],
@@ -157,9 +171,17 @@ describe('local-only Ollama adapter against a fake loopback HTTP runtime; never 
     local.config.ollama.toolMode = 'json-actions';
     const { run } = await runApp(local.config);
     expect(run.status).toBe('awaiting_approval'); expect(run.proposal!.document.input.travelMm).toBe(25);
-    expect(local.requests.find(item => item.path === '/api/chat')!.body).toHaveProperty('format');
+    const payload = local.requests.find(item => item.path === '/api/chat')!.body!;
+    expect(payload).not.toHaveProperty('tools');
+    expect(payload.format).toMatchObject({ properties: { actions: { maxItems: 2, items: { oneOf: declarations.map(tool => ({ properties: { tool: { const: tool.name }, arguments: tool.parametersJsonSchema }, required: ['tool', 'arguments'], additionalProperties: false })) } } } });
     const wrong = await fixture(call => call.path === '/api/chat' ? completion('{"actions":[],"message":"ok","execute":"shell"}') : undefined);
     wrong.config.ollama.toolMode = 'json-actions';
     await expect(new OllamaProvider(wrong.config).generate(initial, signal())).rejects.toMatchObject({ code: 'invalid_output' });
+  });
+  it('rejects more than two JSON actions before dispatching tools', async () => {
+    const local = await fixture(call => call.path === '/api/chat' ? completion(JSON.stringify({ actions: Array.from({ length: 3 }, () => ({ tool: 'inspect_design', arguments: {} })), message: '' })) : undefined);
+    local.config.ollama.toolMode = 'json-actions';
+    const { run, document, session } = await runApp(local.config);
+    expect(run.error?.code).toBe('invalid_output'); expect(run.toolCalls).toBe(0); expect(session.document).toEqual(document);
   });
 });

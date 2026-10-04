@@ -65,6 +65,14 @@ export function executeTool(name: string, args: unknown, context: ToolContext): 
       try { candidate = applyIntentPatch(context.base, merged, context.intent); }
       catch (error) { throw new AppError('protected_condition', error instanceof Error ? error.message : '作者の保護条件に反する変更は採用できません。'); }
       const state = interpretationDesignKey(context, candidate.designHash);
+      if (candidate.designHash === context.base.designHash && !context.seenInterpretationDesigns.has(state)) {
+        // A first valid no-op confirms the current design, without minting a revision or approval.
+        // Keep its interpreted state so a second no-op, including A→B→A, is still a repeat.
+        context.seenInterpretationDesigns.add(state);
+        context.patch = merged;
+        context.candidate = context.base;
+        return { unchanged: true, designHash: context.base.designHash, revision: context.base.revision, patch: {}, checks: validateDesign(context.base), layout: arrangePages(context.base), protections: context.intent.protections, candidateTravelMm: context.base.input.travelMm, applied: false };
+      }
       if (context.seenHashes.has(candidate.designHash) || context.seenInterpretationDesigns.has(state)) throw new AppError('repeated_design', '同じ設計候補の反復を検出しました。');
       context.seenHashes.add(candidate.designHash);
       context.seenInterpretationDesigns.add(state);
