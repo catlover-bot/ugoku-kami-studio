@@ -23,6 +23,7 @@
     "test:e2e": "playwright test",
     "examples": "tsx scripts/examples.ts",
     "smoke:live": "tsx scripts/smoke-live.ts",
+    "smoke:local": "tsx scripts/smoke-local.ts",
     "deploy:plan": "node scripts/deploy.mjs",
     "prototype": "tsx scripts/prepare-prototype.ts",
     "prototype:capture": "tsx scripts/capture-prototype.ts",
