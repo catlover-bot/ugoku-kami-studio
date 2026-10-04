@@ -97,7 +97,16 @@ export async function checkLocalRuntime(config: ServerConfig, signal: AbortSigna
 }
 
 const actionSchema = z.object({ actions: z.array(z.object({ tool: z.string().refine(name => declarations.some(tool => tool.name === name)), arguments: z.record(z.string(), z.unknown()) }).strict()).max(2), message: z.string().max(6000) }).strict();
-const actionFormat = { type: 'object', properties: { actions: { type: 'array', maxItems: 2, items: { oneOf: declarations.map(tool => ({ type: 'object', properties: { tool: { const: tool.name }, arguments: tool.parametersJsonSchema }, required: ['tool', 'arguments'], additionalProperties: false })) } }, message: { type: 'string', maxLength: 6000 } }, required: ['actions', 'message'], additionalProperties: false };
+/** Finite string repetition expands into thousands of llama.cpp grammar rules. The original
+ * schema stays in the prompt and Zod still enforces its lengths; only runtime grammar omits
+ * string maxima. JSON shape, required keys, enums, min lengths and array caps remain intact. */
+function grammarSchema(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(grammarSchema);
+  if (value === null || typeof value !== 'object') return value;
+  const schema = value as Record<string, unknown>;
+  return Object.fromEntries(Object.entries(schema).filter(([key]) => !(schema.type === 'string' && key === 'maxLength')).map(([key, item]) => [key, grammarSchema(item)]));
+}
+const actionFormat = grammarSchema({ type: 'object', properties: { actions: { type: 'array', maxItems: 2, items: { oneOf: declarations.map(tool => ({ type: 'object', properties: { tool: { const: tool.name }, arguments: tool.parametersJsonSchema }, required: ['tool', 'arguments'], additionalProperties: false })) } }, message: { type: 'string', maxLength: 6000 } }, required: ['actions', 'message'], additionalProperties: false });
 type NativeMessage = { role: string; content: string; thinking?: string; tool_calls?: { id?: string; function: { name: string; arguments: Record<string, unknown> } }[]; tool_name?: string; tool_call_id?: string };
 const metric = z.number().finite().nonnegative().optional();
 const chatSchema = z.object({ model: z.string(), message: z.object({ role: z.literal('assistant'), content: z.string(), thinking: z.string().optional(), images: z.array(z.string()).max(0).optional(), tool_calls: z.array(z.object({ id: z.string().max(200).optional(), function: z.object({ name: z.string().min(1).max(100), arguments: z.record(z.string(), z.unknown()) }) })).max(24).optional() }), done: z.literal(true), done_reason: z.literal('stop'), total_duration: metric, load_duration: metric, prompt_eval_duration: metric, eval_duration: metric, prompt_eval_count: metric, eval_count: metric }).passthrough();

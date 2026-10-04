@@ -173,7 +173,21 @@ describe('local-only Ollama adapter against a fake loopback HTTP runtime; never 
     expect(run.status).toBe('awaiting_approval'); expect(run.proposal!.document.input.travelMm).toBe(25);
     const payload = local.requests.find(item => item.path === '/api/chat')!.body!;
     expect(payload).not.toHaveProperty('tools');
-    expect(payload.format).toMatchObject({ properties: { actions: { maxItems: 2, items: { oneOf: declarations.map(tool => ({ properties: { tool: { const: tool.name }, arguments: tool.parametersJsonSchema }, required: ['tool', 'arguments'], additionalProperties: false })) } } } });
+    const format = payload.format as { properties: { actions: { maxItems: number; items: { oneOf: { properties: { tool: { const: string }; arguments: Record<string, unknown> }; required: string[]; additionalProperties: boolean }[] } }; message: Record<string, unknown> } };
+    expect(format.properties.actions.maxItems).toBe(2);
+    expect(format.properties.actions.items.oneOf).toHaveLength(declarations.length);
+    for (const [i, tool] of declarations.entries()) {
+      const variant = format.properties.actions.items.oneOf[i]!;
+      expect(variant).toMatchObject({ properties: { tool: { const: tool.name } }, required: ['tool', 'arguments'], additionalProperties: false });
+      if (tool.name !== 'propose_request_interpretation') expect(variant.properties.arguments).toEqual(tool.parametersJsonSchema);
+      else {
+        expect(variant.properties.arguments).toMatchObject({ additionalProperties: false, properties: { unresolved: { maxItems: 40, items: { type: 'string', minLength: 1 } } } });
+        expect(JSON.stringify(variant.properties.arguments)).not.toContain('maxLength');
+        expect(JSON.stringify(tool.parametersJsonSchema)).toContain('"maxLength":2000');
+      }
+    }
+    expect(format.properties.message).toEqual({ type: 'string' });
+    expect(JSON.stringify(payload.messages)).toContain('maxLength'); // Original argument limits still guide the model.
     const wrong = await fixture(call => call.path === '/api/chat' ? completion('{"actions":[],"message":"ok","execute":"shell"}') : undefined);
     wrong.config.ollama.toolMode = 'json-actions';
     await expect(new OllamaProvider(wrong.config).generate(initial, signal())).rejects.toMatchObject({ code: 'invalid_output' });
@@ -183,5 +197,21 @@ describe('local-only Ollama adapter against a fake loopback HTTP runtime; never 
     local.config.ollama.toolMode = 'json-actions';
     const { run, document, session } = await runApp(local.config);
     expect(run.error?.code).toBe('invalid_output'); expect(run.toolCalls).toBe(0); expect(session.document).toEqual(document);
+  });
+  it('enforces message length after removing finite string repetitions from runtime grammar', async () => {
+    const local = await fixture(call => call.path === '/api/chat' ? completion(JSON.stringify({ actions: [], message: 'x'.repeat(6001) })) : undefined);
+    local.config.ollama.toolMode = 'json-actions';
+    const { run, document, session } = await runApp(local.config);
+    expect(run.error?.code).toBe('invalid_output'); expect(run.toolCalls).toBe(0); expect(session.document).toEqual(document);
+  });
+  it('keeps nested argument string limits in actual core validation after simplifying runtime grammar', async () => {
+    let chats = 0;
+    const interpretation = { distance: { kind: 'relative', delta: 5, unit: 'mm' }, direction: { forbidden: [] }, size: 'unspecified', paper: { kind: 'unspecified' }, mechanism: 'single-pull-tab', unresolved: ['x'.repeat(2001)] };
+    const local = await fixture(call => call.path !== '/api/chat' ? undefined : completion(JSON.stringify(++chats === 1 ? { actions: [{ tool: 'propose_request_interpretation', arguments: interpretation }], message: '' } : { actions: [], message: '検査しました。' })));
+    local.config.ollama.toolMode = 'json-actions';
+    const { run, document, session } = await runApp(local.config);
+    const messages = local.requests.filter(item => item.path === '/api/chat')[1]!.body!.messages as { content: string }[];
+    expect(JSON.parse(messages.at(-1)!.content)).toMatchObject({ toolResult: { name: 'propose_request_interpretation', response: { error: { code: 'invalid_arguments' } } } });
+    expect(run.status).toBe('failed'); expect(run.proposal).toBeUndefined(); expect(session.document).toEqual(document);
   });
 });
