@@ -262,7 +262,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     {run?.requestInterpretation && !busy && run.baseHash === document.designHash && run.baseRevision === document.revision && run.status !== 'succeeded' && run.status !== 'cancelled' && <RequestInterpretation compact={awaitingProposal} value={run.requestInterpretation} document={document} source="ai" disabled={busy || inputDraftActive || !selectionReady || !['awaiting_approval', 'clarification_required'].includes(run.status)} onCorrect={changes => void correctInterpretation(changes)} onDraftChange={setInterpretationDraft} />}
     {awaitingProposal && <button className="text-button" onClick={() => {void cancel(); onManual?.();}}>設定を編集する</button>}
     {!!run?.validationIssues?.length && <div className="notice warning"><h3>設計で見つかった問題</h3>{run.validationIssues.map(issue => <p key={issue.id}>{issue.partIds.join('・')}：{issue.message} {issue.suggestion}</p>)}</div>}
-    {!!run?.constraintSuggestions?.length && <div className="notice"><h3>条件変更の提案</h3>{run.constraintSuggestions.map((item, index) => <p key={index}>{fieldNames[item.key] ?? item.key} → {String(item.value)}：{item.reason}（自動では変更しません）</p>)}</div>}
+    {!!run?.constraintSuggestions?.length && <div className="notice"><h3>条件変更の提案</h3><p>この値で成立するかは未検査です。変更後に再検査してください。</p>{run.constraintSuggestions.map((item, index) => <p key={index}>{fieldNames[item.key] ?? item.key} → {String(item.value)}：{item.reason}（自動では変更しません）</p>)}</div>}
 
     </section>
   </>;
