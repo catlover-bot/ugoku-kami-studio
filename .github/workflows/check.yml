@@ -1,0 +1,78 @@
+name: Check
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+env:
+  AI_ENABLED: 'false'
+  GEMINI_API_KEY: ''
+  AI_ACCESS_SECRET: ''
+  LIVE_API_AUTHORIZED: ''
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  local-verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run doctor
+      - run: npm run check
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - run: npm run examples
+      - run: npm run smoke:live
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: local-verification
+          path: |
+            artifacts/
+            playwright-report/
+          retention-days: 7
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: docker build -t ugoku-kami-studio:check .
+      - name: Start built container and verify health
+        run: |
+          mkdir -p artifacts/goal004-r/container
+          echo "CONTAINER_IMAGE_ID=$(docker image inspect --format '{{.Id}}' ugoku-kami-studio:check)" >> "$GITHUB_ENV"
+          docker run --rm -d --name ugoku-check -p 127.0.0.1:8080:8080 \
+            -e AI_ENABLED=false -e GEMINI_API_KEY= -e AI_ACCESS_SECRET= -e LIVE_API_AUTHORIZED= \
+            ugoku-kami-studio:check
+          for i in $(seq 1 20); do
+            if curl --fail --silent http://127.0.0.1:8080/api/health; then exit 0; fi
+            sleep 1
+          done
+          docker logs ugoku-check
+          exit 1
+      - name: Verify real container manual workflow and PDF
+        run: npx playwright test --config playwright.container.config.ts
+      - if: always()
+        name: Capture logs and stop the test container
+        run: |
+          mkdir -p artifacts/goal004-r/container
+          docker logs ugoku-check > artifacts/goal004-r/container/runtime.log 2>&1 || true
+          docker stop ugoku-check || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: container-verification
+          path: artifacts/goal004-r/container/
+          retention-days: 7

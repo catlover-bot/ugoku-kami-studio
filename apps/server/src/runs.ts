@@ -1,0 +1,238 @@
+import { createHash, randomUUID } from 'node:crypto';
+import { z } from 'zod';
+import { applyIntentPatch, interpretDesignRequest, parseDesignDocument, validateDesign, type DesignDocument, type DesignPatch, type DesignIntent, type LockKey, type CheckResult } from '@ugoku/core';
+import type { Content, Part } from '@google/genai';
+import type { ServerConfig } from './config.js';
+import { AppError, publicError } from './errors.js';
+import { assertModelInput, GeminiProvider, type ModelProvider, type ProviderResponse } from './provider.js';
+import type { Session } from './sessions.js';
+import { executeTool, type ConstraintSuggestion, type ToolContext } from './tools.js';
+
+const Request = z.object({ requestId: z.string().min(8).max(100).regex(/^[a-zA-Z0-9_-]+$/), prompt: z.string().trim().min(1).max(2000), baseRevision: z.number().int().positive(), baseHash: z.string().min(8).max(128) }).strict();
+const Approval = Request.omit({ prompt: true });
+type RunState = 'running' | 'awaiting_approval' | 'succeeded' | 'failed' | 'cancelled';
+type Event = { sequence: number; type: 'model' | 'tool' | 'validation'; tool?: string; message: string; designHash?: string; patch?: DesignPatch; checkStatuses?: { id: string; status: string }[]; durationMs: number };
+export type Proposal = { id: string; requestId: string; baseRevision: number; baseHash: string; patch: DesignPatch; document: DesignDocument; addedLocks: LockKey[]; protectedConditions: string[]; requestedTravelMm?: number; fulfillsRequested: boolean };
+export type TokenUsage = { promptTokens: number; outputTokens: number; thinkingTokens: number; cachedInputTokens: number; toolPromptTokens: number; totalTokens: number };
+export type ModelUsage = { call: number; inputBytes: number; outputTokenLimit: number; durationMs: number; received: boolean; finishReason: string | null; modelVersion: string | null; usage: TokenUsage | null };
+function tokenUsage(usage: ProviderResponse['usageMetadata']): TokenUsage | null {
+  if (!usage) return null;
+  const count = (value: number | undefined) => Number.isSafeInteger(value) && value! >= 0 ? value! : 0;
+  return { promptTokens: count(usage.promptTokenCount), outputTokens: count(usage.candidatesTokenCount), thinkingTokens: count(usage.thoughtsTokenCount), cachedInputTokens: count(usage.cachedContentTokenCount), toolPromptTokens: count(usage.toolUsePromptTokenCount), totalTokens: count(usage.totalTokenCount) };
+}
+export type Run = {
+  id: string; requestId: string; baseRevision: number; baseHash: string; fingerprint: string;
+  model: string; mode: 'gemini' | 'injected-test'; modelUsage: ModelUsage[];
+  intent: DesignIntent; intentSummary: { protections: string[]; notes: string[] };
+  status: RunState; message: string; events: Event[]; proposal?: Proposal;
+  validationIssues: CheckResult[];
+  constraintSuggestions: ConstraintSuggestion[]; error?: { code: string; message: string };
+  modelCalls: number; toolCalls: number; elapsedMs: number; usage: TokenUsage & { responsesWithUsage: number; responsesWithoutUsage: number };
+  controller: AbortController; done?: Promise<void>;
+};
+
+export function publicRun(run: Run) {
+  const { controller: _controller, done: _done, fingerprint: _fingerprint, intent: _intent, ...result } = run;
+  return structuredClone(result);
+}
+
+function protectionLabels(base: DesignDocument, intent: DesignIntent): string[] {
+  const labels: Record<LockKey, string> = { widthMm: '作品の幅', heightMm: '作品の高さ', maxSheets: '厚紙の上限', direction: '動く方向', travelMm: '動く距離', selection: '選択領域', paperThicknessMm: '紙の厚さ', clearanceMm: 'すき間' };
+  const directions = { right: '右', left: '左', up: '上', down: '下' };
+  const protectedValues = { ...Object.fromEntries(base.input.locks.map(key => [key, base.input[key]])), ...intent.protections };
+  return Object.entries(protectedValues).map(([key, value]) => {
+    if (key === 'selection') return '選択領域を変更しない';
+    if (key === 'direction') return `動く方向は${directions[value as keyof typeof directions]}`;
+    return `${labels[key as LockKey]} ${String(value)}${key === 'maxSheets' ? '枚以内' : 'mmを維持'}`;
+  });
+}
+
+function needsCandidate(base: DesignDocument, intent: DesignIntent): boolean {
+  return Object.entries(intent.patch).some(([key, value]) => JSON.stringify(base.input[key as keyof DesignDocument['input']]) !== JSON.stringify(value)) || intent.addLocks.some(key => !base.input.locks.includes(key));
+}
+
+function assertCurrent(session: Session, revision: number, hash: string) {
+  if (session.document.revision !== revision || session.document.designHash !== hash) throw new AppError('stale_design', '設計が更新されています。現在版からもう一度依頼してください。', 409);
+}
+
+async function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted();
+  let listener: (() => void) | undefined;
+  const aborted = new Promise<never>((_resolve, reject) => { listener = () => reject(signal.reason); signal.addEventListener('abort', listener, { once: true }); });
+  try { return await Promise.race([promise, aborted]); }
+  finally { if (listener) signal.removeEventListener('abort', listener); }
+}
+
+export class RunManager {
+  private active = 0;
+  private starts: number[] = [];
+  constructor(private config: ServerConfig, private provider?: ModelProvider) {}
+
+  start(session: Session, body: unknown): Run {
+    if (!this.config.aiEnabled || !this.provider) throw new AppError('ai_disabled', 'AI未接続です。手動で設計できます。', 503);
+    const input = Request.parse(body);
+    const fingerprint = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+    const duplicate = [...session.runs.values()].find(run => run.requestId === input.requestId);
+    if (duplicate) {
+      if (duplicate.fingerprint !== fingerprint) throw new AppError('request_conflict', '同じリクエストIDを別の依頼には使えません。', 409);
+      return duplicate;
+    }
+    assertCurrent(session, input.baseRevision, input.baseHash);
+    const intent = interpretDesignRequest(session.document, input.prompt);
+    if (!intent.supported) throw new AppError('unsupported_motion', [...intent.conflicts, ...intent.notes].join(' ') || 'この版は引っぱりタブの直線運動だけに対応しています。', 422);
+    if (intent.conflicts.length) throw new AppError('clarification_required', intent.conflicts.join(' '), 422);
+    if (session.runs.size >= 100) throw new AppError('session_limit', 'この作業セッションの依頼上限です。保存して再接続してください。', 429);
+    if ([...session.runs.values()].some(run => run.status === 'running')) throw new AppError('run_active', 'この設計はすでに実行中です。', 409);
+    const now = Date.now();
+    this.starts = this.starts.filter(time => now - time < 3_600_000);
+    if (this.active >= this.config.maxConcurrentRuns || this.starts.length >= this.config.runsPerHour || this.starts.filter(time => now - time < 60_000).length >= this.config.runsPerMinute) throw new AppError('instance_limit', '現在の実行上限です。時間をおいて再試行してください。', 429);
+    for (const previous of session.runs.values()) if (previous.status === 'awaiting_approval') { previous.status = 'cancelled'; previous.proposal = undefined; }
+    const run: Run = { id: randomUUID(), requestId: input.requestId, baseRevision: input.baseRevision, baseHash: input.baseHash, fingerprint, model: this.config.model, mode: this.provider instanceof GeminiProvider ? 'gemini' : 'injected-test', modelUsage: [], intent: structuredClone(intent), intentSummary: { protections: protectionLabels(session.document, intent), notes: [...intent.notes] }, status: 'running', message: '現在の設計と、守る条件を確認しています。', events: [], validationIssues: [], constraintSuggestions: [], modelCalls: 0, toolCalls: 0, elapsedMs: 0, usage: { promptTokens: 0, outputTokens: 0, thinkingTokens: 0, cachedInputTokens: 0, toolPromptTokens: 0, totalTokens: 0, responsesWithUsage: 0, responsesWithoutUsage: 0 }, controller: new AbortController() };
+    session.runs.set(run.id, run);
+    this.starts.push(now); this.active++;
+    run.done = this.execute(session, run, input.prompt).finally(() => { this.active--; });
+    return run;
+  }
+
+  get(session: Session, runId: string): Run {
+    const run = session.runs.get(runId);
+    if (!run) throw new AppError('not_found', '実行が見つかりません。', 404);
+    return run;
+  }
+
+  cancel(run: Run): Run {
+    if (run.status === 'running' || run.status === 'awaiting_approval') {
+      run.status = 'cancelled'; run.proposal = undefined;
+      run.message = '中断しました。送信済みのAPI呼び出しの課金取消しは保証されません。';
+      run.controller.abort(new AppError('cancelled', '利用者が中断しました。'));
+    }
+    return run;
+  }
+
+  approve(session: Session, proposalId: string, body: unknown) {
+    const input = Approval.parse(body);
+    const run = [...session.runs.values()].find(item => item.proposal?.id === proposalId);
+    if (!run?.proposal || run.status !== 'awaiting_approval') throw new AppError('stale_approval', 'この提案の承認は無効です。', 409);
+    const proposal = run.proposal;
+    if (input.requestId !== proposal.requestId || input.baseRevision !== proposal.baseRevision || input.baseHash !== proposal.baseHash) throw new AppError('stale_approval', '承認した提案と元の設計が一致しません。', 409);
+    assertCurrent(session, input.baseRevision, input.baseHash);
+    // Rebuild from the currently trusted base, never from a client-supplied candidate.
+    let document: DesignDocument;
+    try { document = applyIntentPatch(session.document, proposal.patch, run.intent); }
+    catch { throw new AppError('protected_condition', '作者の保護条件に反するため、この変更案は採用できません。', 409); }
+    if (document.designHash !== proposal.document.designHash || validateDesign(document).some(check => check.status === 'fail')) throw new AppError('validation_failed', '提案の再検査に失敗しました。', 409);
+    session.document = structuredClone(document);
+    for (const other of session.runs.values()) if (other !== run && (other.status === 'running' || other.status === 'awaiting_approval')) this.cancel(other);
+    run.status = 'succeeded'; run.message = '提案を採用しました。実物の動作は未検証です。'; run.proposal = undefined;
+    return { document: structuredClone(document) };
+  }
+
+  reject(session: Session, proposalId: string) {
+    const run = [...session.runs.values()].find(item => item.proposal?.id === proposalId);
+    if (!run) throw new AppError('not_found', '提案が見つかりません。', 404);
+    return this.cancel(run);
+  }
+
+  private async execute(session: Session, run: Run, prompt: string): Promise<void> {
+    const start = Date.now();
+    const timer = setTimeout(() => run.controller.abort(new AppError('timeout', '実行時間の上限に達しました。設計は変更されていません。')), this.config.runTimeoutMs);
+    const signal = run.controller.signal;
+    const base = structuredClone(parseDesignDocument(session.document));
+    const context: ToolContext = { base, candidate: base, patch: structuredClone(run.intent.patch), intent: run.intent, seenHashes: new Set([base.designHash]), constraintSuggestions: run.constraintSuggestions };
+    const history: Content[] = [{ role: 'user', parts: [{ text: JSON.stringify({ request: prompt, design: base, requestIntent: run.intent, sentData: '画像本体は送信していません。選択領域・寸法と検査結果です。' }) }] }];
+    const failures = new Map<string, number>();
+    let unresolvedToolFailure = false;
+    try {
+      while (run.modelCalls < this.config.maxModelCalls) {
+        signal.throwIfAborted(); assertCurrent(session, run.baseRevision, run.baseHash);
+        const inputBytes = assertModelInput(this.config, history);
+        run.modelCalls++;
+        const modelStart = Date.now();
+        const meter: ModelUsage = { call: run.modelCalls, inputBytes, outputTokenLimit: this.config.maxOutputTokens, durationMs: 0, received: false, finishReason: null, modelVersion: null, usage: null };
+        run.modelUsage.push(meter); run.usage.responsesWithoutUsage++;
+        let response: ProviderResponse;
+        try { response = await abortable(this.provider!.generate(history, signal), signal); }
+        finally { meter.durationMs = Date.now() - modelStart; }
+        meter.received = true;
+        meter.finishReason = response.candidates?.[0]?.finishReason ?? null;
+        meter.modelVersion = response.modelVersion?.slice(0, 128) ?? null;
+        meter.usage = tokenUsage(response.usageMetadata);
+        if (meter.usage) {
+          run.usage.responsesWithUsage++; run.usage.responsesWithoutUsage--;
+          for (const key of Object.keys(meter.usage) as (keyof TokenUsage)[]) run.usage[key] += meter.usage[key];
+        }
+        signal.throwIfAborted(); assertCurrent(session, run.baseRevision, run.baseHash);
+        run.events.push({ sequence: run.events.length + 1, type: 'model', message: `モデル応答 ${run.modelCalls}`, durationMs: Date.now() - modelStart });
+        const candidate = response.candidates?.[0];
+        if (response.promptFeedback?.blockReason || ['SAFETY', 'RECITATION', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII'].includes(candidate?.finishReason || '')) throw new AppError('refusal', 'AIがこの依頼への応答を拒否しました。内容を変更して再試行してください。');
+        if (candidate?.finishReason && !['STOP'].includes(candidate.finishReason)) throw new AppError('invalid_output', 'AIの応答が途中で終了しました。設計は変更されていません。');
+        const content = candidate?.content;
+        if (!content?.parts?.length || JSON.stringify(content).length > 100_000) throw new AppError('invalid_output', 'AIの応答形式が不正です。');
+        // Keep the entire SDK Content, including all parts, function call IDs and opaque thought signatures.
+        history.push(structuredClone(content));
+        const calls = content.parts.flatMap(part => part.functionCall ? [part.functionCall] : []);
+        if (!calls.length) {
+          const text = content.parts.filter(part => !part.thought && part.text).map(part => part.text).join('\n').slice(0, 6000);
+          if (!text.trim()) throw new AppError('invalid_output', 'AIから表示できる応答が届きませんでした。');
+          if (unresolvedToolFailure) throw new AppError('invalid_output', '不正なツール実行が修正されていません。設計は変更されていません。');
+          if (context.candidate.designHash === base.designHash && needsCandidate(base, run.intent)) {
+            throw new AppError(run.constraintSuggestions.length ? 'conditions_conflict' : 'invalid_output', run.constraintSuggestions.length ? '希望と保護条件を両立する候補はできていません。条件変更案を確認し、必要な場合だけ手動で見直してください。' : '希望に対する設計候補が生成されていません。設計は変更されていません。');
+          }
+          const validationStart = Date.now();
+          if (context.candidate.designHash !== base.designHash) {
+            let rebuilt: DesignDocument;
+            try { rebuilt = applyIntentPatch(base, context.patch, run.intent); }
+            catch { throw new AppError('protected_condition', '変更案が作者の保護条件と一致しません。'); }
+            if (rebuilt.designHash !== context.candidate.designHash) throw new AppError('protected_condition', '変更案が作者の保護条件と一致しません。');
+          }
+          const checks = validateDesign(context.candidate);
+          run.validationIssues = checks.filter(check => check.status === 'fail');
+          run.events.push({ sequence: run.events.length + 1, type: 'validation', message: '最終候補を再検査しました。', designHash: context.candidate.designHash, checkStatuses: checks.map(check => ({ id: check.id, status: check.status })), durationMs: Date.now() - validationStart });
+          if (run.validationIssues.length) {
+            const issue = run.validationIssues[0]!;
+            throw new AppError('validation_failed', `候補は条件を満たしません。${issue.partIds.join('・')}：${issue.message} ${issue.suggestion ?? '条件変更案を確認してください。'}`);
+          }
+          run.message = text;
+          if (context.candidate.designHash !== base.designHash) {
+            run.proposal = { id: randomUUID(), requestId: run.requestId, baseRevision: run.baseRevision, baseHash: run.baseHash, patch: structuredClone(context.patch), document: structuredClone(context.candidate), addedLocks: context.candidate.input.locks.filter(key => !base.input.locks.includes(key)), protectedConditions: [...run.intentSummary.protections], requestedTravelMm: run.intent.explicitTravelMm, fulfillsRequested: run.intent.explicitTravelMm === undefined || context.candidate.input.travelMm === run.intent.explicitTravelMm };
+            if (!run.proposal.fulfillsRequested) run.message = `希望は${run.intent.explicitTravelMm}mm、候補は${context.candidate.input.travelMm}mmです。違いを確認してから採用してください。\n${text}`;
+            run.status = 'awaiting_approval';
+          } else { run.status = 'succeeded'; run.message = `設計の変更はありません。\n${text}`; }
+          return;
+        }
+        const results: Part[] = [];
+        for (const call of calls) {
+          signal.throwIfAborted(); assertCurrent(session, run.baseRevision, run.baseHash);
+          if (run.toolCalls >= this.config.maxToolCalls) throw new AppError('tool_limit', 'ツール実行回数の上限に達しました。');
+          run.toolCalls++;
+          const toolStart = Date.now();
+          let result: Record<string, unknown>;
+          let message = '実行しました。';
+          try {
+            result = executeTool(call.name || '', call.args ?? {}, context);
+            if (call.name === 'propose_design_patch' || call.name === 'validate_design') run.validationIssues = context.candidate.checks.filter(check => check.status === 'fail');
+            if (call.name === 'propose_design_patch' || call.name === 'propose_constraint_change') unresolvedToolFailure = false;
+          } catch (error) {
+            const info = error instanceof AppError ? publicError(error) : { code: 'invalid_arguments', message: '値が不正、または固定条件の変更に当たるため拒否しました。' };
+            message = info.message;
+            result = { error: info };
+            unresolvedToolFailure = true;
+            const key = `${call.name}:${info.code}:${JSON.stringify(call.args)}`;
+            const count = (failures.get(key) || 0) + 1; failures.set(key, count);
+            if (count >= 2) throw new AppError('repeated_failure', '同じ失敗の反復を検出し、中止しました。');
+          }
+          run.events.push({ sequence: run.events.length + 1, type: 'tool', tool: call.name, message, designHash: context.candidate.designHash, patch: call.name === 'propose_design_patch' ? structuredClone(context.patch) : undefined, checkStatuses: context.candidate.checks.map(check => ({ id: check.id, status: check.status })), durationMs: Date.now() - toolStart });
+          results.push({ functionResponse: { name: call.name || 'unknown', ...(call.id ? { id: call.id } : {}), response: result } });
+        }
+        history.push({ role: 'user', parts: results });
+      }
+      throw new AppError('model_limit', 'モデル呼び出し回数の上限に達しました。');
+    } catch (error) {
+      run.proposal = undefined;
+      if (run.status !== 'cancelled') {
+        run.error = publicError(signal.aborted ? signal.reason : error);
+        run.status = 'failed'; run.message = run.error.message;
+      }
+    } finally { clearTimeout(timer); run.elapsedMs = Date.now() - start; }
+  }
+}

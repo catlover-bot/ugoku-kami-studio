@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="550" viewBox="0 0 800 550">
+  <title>首をのばすカメ — うごく紙工房オリジナル</title>
+  <rect width="800" height="550" fill="#fff"/>
+  <g stroke="#2b5548" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M219 338Q170 336 150 315Q143 302 158 298L215 308" fill="#a8bf87"/>
+    <path d="M270 325L248 382Q248 398 276 397L312 371L324 332" fill="#a8bf87"/>
+    <path d="M425 332L438 384Q443 399 469 394L491 381L473 326" fill="#a8bf87"/>
+    <path d="M480 268L581 236Q594 192 639 190Q688 188 703 229Q718 272 682 296Q650 318 616 292L493 317Z" fill="#a8bf87"/>
+    <path d="M208 323Q206 222 284 184Q393 132 473 222Q503 258 504 325Q351 377 208 323Z" fill="#71966a"/>
+    <path d="M299 211L349 187L403 216L418 274L371 312L312 285Z" fill="#91af7a" stroke-width="5"/>
+    <path d="M299 211L255 223M312 285L247 300M371 312L368 347M418 274L487 278M403 216L438 197" fill="none" stroke-width="5"/>
+    <path d="M209 323Q355 368 503 325" fill="none" stroke="#40684e" stroke-width="13"/>
+    <path d="M670 267Q683 271 691 258" fill="none" stroke-width="4"/>
+  </g>
+  <circle cx="670" cy="230" r="7" fill="#253b31"/>
+  <circle cx="672" cy="228" r="2" fill="#fff"/>
+  <ellipse cx="686" cy="251" rx="9" ry="6" fill="#d7a48a"/>
+  <path d="M205 431Q227 414 242 432M516 430Q535 413 549 427" fill="none" stroke="#b4bf9b" stroke-width="4" stroke-linecap="round"/>
+  <path d="M222 431L224 411M534 429L541 411" fill="none" stroke="#b4bf9b" stroke-width="4" stroke-linecap="round"/>
+</svg>

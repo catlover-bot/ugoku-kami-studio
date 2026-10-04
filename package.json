@@ -1,0 +1,59 @@
+{
+  "name": "ugoku-kami-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "packageManager": "npm@11.19.0",
+  "scripts": {
+    "doctor": "node scripts/doctor.mjs",
+    "dev": "concurrently -k -n api,web 'node --import tsx --watch apps/server/src/index.ts' 'vite --config apps/web/vite.config.ts'",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "vite build --config apps/web/vite.config.ts && node scripts/build-server.mjs",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build",
+    "start": "node dist/server/index.js",
+    "test:e2e": "playwright test",
+    "examples": "tsx scripts/examples.ts",
+    "smoke:live": "tsx scripts/smoke-live.ts",
+    "deploy:plan": "node scripts/deploy.mjs",
+    "prototype": "tsx scripts/prepare-prototype.ts",
+    "prototype:capture": "tsx scripts/capture-prototype.ts"
+  },
+  "dependencies": {
+    "@fastify/static": "10.1.5",
+    "@google/genai": "2.27.0",
+    "@noble/hashes": "2.4.0",
+    "@pdf-lib/fontkit": "1.1.1",
+    "fastify": "5.12.5",
+    "pdf-lib": "1.17.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "sharp": "0.35.5",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.10.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "concurrently": "10.0.5",
+    "esbuild": "0.28.2",
+    "eslint": "10.12.0",
+    "globals": "17.13.0",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.0",
+    "vite": "8.3.2",
+    "vitest": "5.0.3"
+  }
+}

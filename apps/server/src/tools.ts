@@ -1,0 +1,64 @@
+import { z } from 'zod';
+import { applyIntentPatch, arrangePages, DesignPatchSchema, validateDesign, type DesignDocument, type DesignPatch, type DesignIntent } from '@ugoku/core';
+import type { FunctionDeclaration } from '@google/genai';
+import { AppError } from './errors.js';
+
+const Empty = z.object({}).strict();
+const Constraint = z.object({ key: z.enum(['travelMm', 'direction', 'widthMm', 'heightMm', 'maxSheets', 'paperThicknessMm', 'clearanceMm']), value: z.union([z.number().finite().min(0).max(500), z.enum(['right', 'left', 'up', 'down'])]), reason: z.string().min(1).max(500) }).strict();
+export type ConstraintSuggestion = z.infer<typeof Constraint>;
+export type ToolContext = { base: DesignDocument; candidate: DesignDocument; patch: DesignPatch; intent: DesignIntent; seenHashes: Set<string>; constraintSuggestions: ConstraintSuggestion[] };
+const number = { type: 'number' };
+const direction = { type: 'string', enum: ['right', 'left', 'up', 'down'] };
+const noArgs = { type: 'object', properties: {}, additionalProperties: false };
+
+export const declarations: FunctionDeclaration[] = [
+  { name: 'inspect_design', description: '現在の設計・固定条件・実検査結果を読み取る。', parametersJsonSchema: noArgs },
+  { name: 'propose_design_patch', description: '利用者の希望と保護条件の中で候補を生成し、決定的に検査する。空オブジェクトは解釈済み希望の初期候補を作る。返されたfailを読んで修正する。選択・画像・固定条件は変更できない。', parametersJsonSchema: {
+    type: 'object', properties: { direction, travelMm: number, widthMm: number, heightMm: number, maxSheets: { type: 'integer' }, paperThicknessMm: number, clearanceMm: number }, additionalProperties: false,
+  } },
+  { name: 'validate_design', description: '最新候補の全検査を再計算する。unknownをpassにしない。', parametersJsonSchema: noArgs },
+  { name: 'arrange_pages', description: '最新候補の全機構部品をA4紙面へ決定的に配置する。縮小しない。', parametersJsonSchema: noArgs },
+  { name: 'propose_constraint_change', description: '固定条件を変える案を表示するだけ。実際の条件や設計は変更しない。', parametersJsonSchema: {
+    type: 'object', properties: { key: { type: 'string', enum: ['travelMm', 'direction', 'widthMm', 'heightMm', 'maxSheets', 'paperThicknessMm', 'clearanceMm'] }, value: { anyOf: [number, direction] }, reason: { type: 'string' } }, required: ['key', 'value', 'reason'], additionalProperties: false,
+  } },
+];
+
+export function executeTool(name: string, args: unknown, context: ToolContext): Record<string, unknown> {
+  switch (name) {
+    case 'inspect_design': {
+      Empty.parse(args);
+      return { document: context.candidate, trustedLocks: context.base.input.locks, requestedPatch: context.intent.patch, requestProtections: context.intent.protections, locksToAddOnApproval: context.intent.addLocks, relativeTravel: context.intent.relativeTravel, requestedTravelMm: context.intent.explicitTravelMm, approvalRequired: true };
+    }
+    case 'propose_design_patch': {
+      const patch = DesignPatchSchema.parse(args);
+      if ('selection' in patch || 'title' in patch) throw new AppError('forbidden_patch', 'AIは選択領域や作品名を変更できません。');
+      if (Object.keys(patch).length === 0 && Object.keys(context.intent.patch).length === 0 && context.intent.addLocks.length === 0) throw new AppError('invalid_arguments', '変更値を指定してください。');
+      const merged = { ...context.patch, ...patch };
+      // Always apply against the immutable server snapshot. Model input never supplies locks.
+      let candidate: DesignDocument;
+      try { candidate = applyIntentPatch(context.base, merged, context.intent); }
+      catch (error) { throw new AppError('protected_condition', error instanceof Error ? error.message : '作者の保護条件に反する変更は採用できません。'); }
+      if (context.seenHashes.has(candidate.designHash)) throw new AppError('repeated_design', '同じ設計候補の反復を検出しました。');
+      context.seenHashes.add(candidate.designHash);
+      context.patch = merged;
+      context.candidate = candidate;
+      return { designHash: candidate.designHash, revision: candidate.revision, patch: merged, checks: validateDesign(candidate), layout: arrangePages(candidate), protections: context.intent.protections, locksToAddOnApproval: context.intent.addLocks, requestedTravelMm: context.intent.explicitTravelMm, candidateTravelMm: candidate.input.travelMm, applied: false };
+    }
+    case 'validate_design': {
+      Empty.parse(args);
+      return { designHash: context.candidate.designHash, checks: validateDesign(context.candidate) };
+    }
+    case 'arrange_pages': {
+      Empty.parse(args);
+      return { designHash: context.candidate.designHash, layout: arrangePages(context.candidate), searchIsExhaustive: false };
+    }
+    case 'propose_constraint_change': {
+      const suggestion = Constraint.parse(args);
+      if ((suggestion.key === 'direction') !== (typeof suggestion.value === 'string')) throw new AppError('invalid_arguments', '条件の値の型が一致しません。');
+      DesignPatchSchema.parse({ [suggestion.key]: suggestion.value });
+      context.constraintSuggestions.push(suggestion);
+      return { suggestion, applied: false, nextStep: '利用者が手動で固定を解除・変更してから再実行してください。' };
+    }
+    default: throw new AppError('unknown_tool', '許可されていないツールです。');
+  }
+}
