@@ -202,7 +202,7 @@ describe('author intent through the actual server, core tools, approval and outp
   });
 
   it('presents actual failed part reasons and a condition suggestion without applying it', async () => {
-    const provider = sequence([invoke('propose_design_patch'), invoke('propose_constraint_change', { key: 'widthMm', value: 180, reason: '切り込みの縁が足りないため、作品の幅を変えることを許すか、選択を中央側へ動かしてください。' }), resultText]);
+    const provider = sequence([invoke('propose_design_patch'), invoke('propose_constraint_change', { key: 'travelMm', value: 15, reason: '距離を短くする案です。希望との違いを確認してください。' }), resultText]);
     const s = await setup(provider); const run = await s.start('距離を70mmに。絵の大きさは変えない。紙は増やさない');
     expect(run.status).toBe('failed'); expect(run.error?.code).toBe('validation_failed'); expect(run.proposal).toBeUndefined();
     expect(run.validationIssues.some(check => check.id === 'slot-contained' && check.partIds.includes('B1'))).toBe(true);
@@ -210,13 +210,27 @@ describe('author intent through the actual server, core tools, approval and outp
   });
 
   it('rejects the failing candidate value as a condition change while permitting a different explicit suggestion', async () => {
-    const changed = { key: 'widthMm', value: 180, reason: '作品の幅を変えることを許すか、手動で選択範囲を見直してください。' };
+    const changed = { key: 'travelMm', value: 15, reason: '距離を短くする案です。希望との違いを確認してください。' };
     const provider = sequence([invoke('propose_design_patch'), invoke('propose_constraint_change', { key: 'travelMm', value: 70, reason: 'この距離では成立しません。' }), invoke('propose_constraint_change', changed), resultText]);
     const s = await setup(provider); const run = await s.start('距離を70mmに。絵の大きさは変えない。紙は増やさない');
     expect(toolResult(provider.histories[2]!).error).toMatchObject({ code: 'invalid_arguments' });
-    expect(run.constraintSuggestions).toEqual([changed]);
+    expect(run.constraintSuggestions).toHaveLength(1);
+    expect(run.constraintSuggestions[0]).toMatchObject({ ...changed, source: 'model', verification: { source: 'deterministic-core', geometry: 'pass', conditionsApproved: false } });
     expect(run.error?.code).toBe('validation_failed'); expect(run.validationIssues.length).toBeGreaterThan(0);
     expect(run.proposal).toBeUndefined(); expect(s.session.document).toEqual(s.document);
+  });
+
+  it('returns real50mm suggestion failure to the model and cannot approve it through prose', async () => {
+    const provider = sequence([invoke('propose_design_patch'), invoke('propose_constraint_change', { key: 'travelMm', value: 50, reason: '70mmより短いので成立します。' }), resultText]);
+    const document = createDesign({ ...SAMPLE_INPUT, selection: { x: 350, y: 170, width: 300, height: 210 }, maxSheets: 1, locks: ['widthMm', 'heightMm', 'maxSheets', 'selection'] });
+    const s = await setup(provider, document), run = await s.start('動く距離を70mmにしたい。絵の大きさと紙の枚数は変えない');
+    expect(toolResult(provider.histories[2]!).error).toMatchObject({ code: 'suggestion_validation_failed', message: expect.stringContaining('guides-on-base') });
+    expect(run.status).toBe('failed');
+    expect(run.constraintSuggestions).toEqual([]);
+    expect(run.proposal).toBeUndefined();
+    expect(run.validationIssues.map(check => check.id)).toEqual(['guides-on-base', 'slot-contained']);
+    expect(s.session.document).toEqual(document);
+    expect(s.app.runs.approve.bind(s.app.runs, s.session, 'unverified-advice', { requestId: run.requestId, baseRevision: run.baseRevision, baseHash: run.baseHash })).toThrow();
   });
 
   it.each(['direction', 'paperThicknessMm'] as const)('also rejects unchanged %s suggestions on the valid current design', async key => {

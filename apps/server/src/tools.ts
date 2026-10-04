@@ -1,11 +1,18 @@
 import { z } from 'zod';
-import { applyIntentPatch, arrangePages, DesignPatchSchema, distanceTargetMm, interpretModelRequest, RequestInterpretationSchema, validateDesign, type DesignDocument, type DesignPatch, type DesignIntent, type InterpretationCorrection, type RequestInterpretation } from '@ugoku/core';
+import { applyIntentPatch, arrangePages, createDesign, DesignPatchSchema, distanceTargetMm, interpretModelRequest, RequestInterpretationSchema, validateDesign, type CheckResult, type DesignDocument, type DesignPatch, type DesignIntent, type InterpretationCorrection, type RequestInterpretation } from '@ugoku/core';
 import type { ToolDeclaration } from './conversation.js';
 import { AppError } from './errors.js';
 
 const Empty = z.object({}).strict();
 const Constraint = z.object({ key: z.enum(['travelMm', 'direction', 'widthMm', 'heightMm', 'maxSheets', 'paperThicknessMm', 'clearanceMm']), value: z.union([z.number().finite().min(0).max(500), z.enum(['right', 'left', 'up', 'down'])]), reason: z.string().min(1).max(500) }).strict();
-export type ConstraintSuggestion = z.infer<typeof Constraint>;
+export type ConstraintSuggestion = z.infer<typeof Constraint> & {
+  source: 'model';
+  verification: {
+    source: 'deterministic-core'; geometry: 'pass'; conditionsApproved: false;
+    baseHash: string; baseRevision: number; comparedCandidateHash: string;
+    hypotheticalDesignHash: string; checks: CheckResult[];
+  };
+};
 export type ToolContext = { prompt: string; correction?: InterpretationCorrection; interpretationProposal: RequestInterpretation; base: DesignDocument; candidate: DesignDocument; patch: DesignPatch; intent: DesignIntent; seenHashes: Set<string>; seenInterpretationDesigns: Set<string>; constraintSuggestions: ConstraintSuggestion[] };
 const number = { type: 'number' };
 const direction = { type: 'string', enum: ['right', 'left', 'up', 'down'] };
@@ -22,7 +29,7 @@ export const declarations: ToolDeclaration[] = [
   } },
   { name: 'validate_design', description: '最新候補の全検査を再計算する。unknownをpassにしない。', parametersJsonSchema: noArgs },
   { name: 'arrange_pages', description: '最新候補の全機構部品をA4紙面へ決定的に配置する。縮小しない。', parametersJsonSchema: noArgs },
-  { name: 'propose_constraint_change', description: '固定条件を変える案を表示するだけ。最新候補と異なる具体値を指定する。同じ値や失敗した値の繰り返しは変更案にならない。実際の条件や設計は変更しない。', parametersJsonSchema: {
+  { name: 'propose_constraint_change', description: '最新候補の条件1つを変える仮案を共通コアで検査する。寸法・紙面のfailがある案は表示せず、失敗理由を返す。同じ値は変更案にならない。検査を通っても固定解除・希望の変更・採用は許可されず、実物未確認。実際の条件や設計は変更しない。', parametersJsonSchema: {
     type: 'object', properties: { key: { type: 'string', enum: ['travelMm', 'direction', 'widthMm', 'heightMm', 'maxSheets', 'paperThicknessMm', 'clearanceMm'] }, value: { anyOf: [number, direction] }, reason: { type: 'string' } }, required: ['key', 'value', 'reason'], additionalProperties: false,
   } },
 ];
@@ -52,7 +59,7 @@ export function executeTool(name: string, args: unknown, context: ToolContext): 
       const changed = JSON.stringify(intent) !== JSON.stringify(context.intent);
       context.intent = intent;
       context.interpretationProposal = structuredClone(proposal);
-      if (changed) { context.candidate = context.base; context.patch = structuredClone(intent.patch); context.seenHashes = new Set([context.base.designHash]); }
+      if (changed) { context.candidate = context.base; context.patch = structuredClone(intent.patch); context.seenHashes = new Set([context.base.designHash]); context.constraintSuggestions.length = 0; }
       return { interpretation: intent.interpretation, binding: intent.binding, summary: intent.summary, clarifications: intent.clarifications, approvalRequired: intent.approvalRequired, supported: intent.supported, conflicts: intent.conflicts, protections: intent.protections, requestedPatch: intent.patch, applied: false };
     }
     case 'propose_design_patch': {
@@ -70,6 +77,7 @@ export function executeTool(name: string, args: unknown, context: ToolContext): 
         // Keep its interpreted state so a second no-op, including A→B→A, is still a repeat.
         context.seenInterpretationDesigns.add(state);
         context.patch = merged;
+        if (context.candidate.designHash !== context.base.designHash) context.constraintSuggestions.length = 0;
         context.candidate = context.base;
         return { unchanged: true, designHash: context.base.designHash, revision: context.base.revision, patch: {}, checks: validateDesign(context.base), layout: arrangePages(context.base), protections: context.intent.protections, candidateTravelMm: context.base.input.travelMm, applied: false };
       }
@@ -77,6 +85,7 @@ export function executeTool(name: string, args: unknown, context: ToolContext): 
       context.seenHashes.add(candidate.designHash);
       context.seenInterpretationDesigns.add(state);
       context.patch = merged;
+      context.constraintSuggestions.length = 0;
       context.candidate = candidate;
       return { designHash: candidate.designHash, revision: candidate.revision, patch: merged, checks: validateDesign(candidate), layout: arrangePages(candidate), protections: context.intent.protections, locksToAddOnApproval: context.intent.addLocks, requestedTravelMm: context.intent.explicitTravelMm, candidateTravelMm: candidate.input.travelMm, applied: false };
     }
@@ -93,8 +102,18 @@ export function executeTool(name: string, args: unknown, context: ToolContext): 
       if ((suggestion.key === 'direction') !== (typeof suggestion.value === 'string')) throw new AppError('invalid_arguments', '条件の値の型が一致しません。');
       DesignPatchSchema.parse({ [suggestion.key]: suggestion.value });
       if (context.candidate.input[suggestion.key] === suggestion.value) throw new AppError('invalid_arguments', '最新候補と同じ値は条件変更案にできません。変更する具体値を指定してください。');
-      context.constraintSuggestions.push(suggestion);
-      return { suggestion, applied: false, nextStep: '利用者が手動で固定を解除・変更してから再実行してください。' };
+      // A conditional geometry calculation, never an authorized patch: the one
+      // named condition may be locked. No lock, intent, candidate or seen-state
+      // is changed, and no adoptable proposal is created from this calculation.
+      const hypothetical = createDesign({ ...context.candidate.input, [suggestion.key]: suggestion.value }, { designId: context.base.designId, revision: context.base.revision + 1 });
+      // A rebuilt input's locks-preserved check is not evidence of permission
+      // to change the named condition. Omit it rather than imply approval.
+      const checks = validateDesign(hypothetical).filter(check => check.id !== 'locks-preserved');
+      const failures = checks.filter(check => check.status === 'fail');
+      if (failures.length) throw new AppError('suggestion_validation_failed', `この条件変更案も成立しません。${failures.map(check => `${check.partIds.join('・')} [${check.id}]: ${check.message} ${check.suggestion ?? ''}`).join(' ')}`);
+      const verified: ConstraintSuggestion = { ...suggestion, source: 'model', verification: { source: 'deterministic-core', geometry: 'pass', conditionsApproved: false, baseHash: context.base.designHash, baseRevision: context.base.revision, comparedCandidateHash: context.candidate.designHash, hypotheticalDesignHash: hypothetical.designHash, checks } };
+      context.constraintSuggestions.push(verified);
+      return { suggestion: verified, applied: false, nextStep: 'この1条件だけを変更した場合の寸法・紙面を検査しました。固定条件や希望の変更は未承認です。必要な場合だけ利用者が手動で変更し、再検査してください。実物の動作は未確認です。' };
     }
     default: throw new AppError('unknown_tool', '許可されていないツールです。');
   }

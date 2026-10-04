@@ -12,7 +12,7 @@ export type AiRun = {
   requestInterpretation?: Pick<DesignIntent, 'binding' | 'interpretation' | 'clarifications' | 'summary' | 'approvalRequired'>;
   intentSummary?: {protections: string[]; notes: string[]};
   validationIssues?: CheckResult[];
-  constraintSuggestions: {key: string; value: unknown; reason: string}[];
+  constraintSuggestions: {key: string; value: unknown; reason: string; source?: 'model'; verification?: {source: 'deterministic-core'; geometry: 'pass'; conditionsApproved: false; baseHash: string; baseRevision: number; comparedCandidateHash: string; hypotheticalDesignHash: string; checks: CheckResult[]}}[];
   error?: {code: string; message: string};
   modelCalls: number; toolCalls: number; elapsedMs: number;
   usage?: {promptTokens: number; outputTokens: number; totalTokens: number; thinkingTokens?: number; cachedInputTokens?: number; toolPromptTokens?: number; responsesWithUsage?: number; responsesWithoutUsage?: number};
