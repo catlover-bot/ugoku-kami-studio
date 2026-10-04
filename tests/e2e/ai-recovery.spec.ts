@@ -8,6 +8,8 @@ class RecoveryFixture {
   base!: DesignDocument;
   run!: AiRun;
   sessions = 0; starts = 0; polls = 0; approvals = 0;
+  statusRequests = 0;
+  statusOutcome: 'ready' | 'unavailable' = 'ready';
   startStatus: 'running' | 'awaiting_approval' = 'running';
   pollOutcome: LostCode | 'unavailable' | 'running' | 'proposal' = 'running';
   approvalError?: LostCode;
@@ -17,7 +19,10 @@ class RecoveryFixture {
       const pathname = new URL(route.request().url()).pathname, method = route.request().method();
       const json = (data: unknown, status = 200) => route.fulfill({status, contentType: 'application/json', body: JSON.stringify(data)});
       const lost = (code: LostCode) => json({error: {code, message: code === 'unauthorized' ? '作業セッションが無効です。再接続してください。' : '実行が見つかりません。'}}, code === 'unauthorized' ? 401 : 404);
-      if (pathname === '/api/status') return json({ai: {enabled: true, mode: 'injected-test', provider: 'ollama', model: 'offline-recovery-fixture'}});
+      if (pathname === '/api/status') {
+        this.statusRequests++;
+        return this.statusOutcome === 'unavailable' ? json({error: {code: 'temporarily_unavailable', message: '起動待ちです。'}}, 503) : json({ai: {enabled: true, mode: 'injected-test', provider: 'ollama', model: 'offline-recovery-fixture'}});
+      }
       if (pathname === '/api/sessions' && method === 'POST') {
         this.sessions++;
         this.base = parseDesignDocument(route.request().postDataJSON().document);
@@ -68,6 +73,37 @@ async function expectOriginal(page: Page, original: Awaited<ReturnType<typeof sa
 }
 
 test.describe('expired AI sessions: offline HTTP fixtures, no model or paid API', () => {
+  test('initial status failure can be rechecked without starting inference or changing saved work', async ({page}, info) => {
+    const fixture = new RecoveryFixture(); fixture.statusOutcome = 'unavailable';
+    await fixture.attach(page); await page.goto('/'); await startSample(page);
+    const original = await saveProject(page);
+    await ai(page);
+    await page.getByLabel('どう動かしたいですか？').fill('動く距離を15mmにしたい');
+    await start(page).click();
+    const recheck = page.getByRole('button', {name: '接続状態を再確認する', exact: true});
+    await expect(recheck).toBeVisible();
+    expect(fixture.statusRequests).toBe(1); expect(fixture.sessions).toBe(0); expect(fixture.starts).toBe(0);
+    await expectOriginal(page, original);
+    // Another failed read must remain retryable and never create a session.
+    await recheck.click(); await expect(recheck).toBeEnabled();
+    await expect(page.locator('.ai-panel')).toContainText('サーバーの状態を確認できません');
+    expect(fixture.statusRequests).toBe(2); expect(fixture.sessions).toBe(0);
+    fixture.statusOutcome = 'ready';
+    await recheck.click();
+    await expect(page.locator('.ai-panel')).toContainText('AIへの依頼はまだ送っていません');
+    await expect(recheck).toHaveCount(0);
+    await page.waitForTimeout(850);
+    expect(fixture.statusRequests).toBe(3); expect(fixture.sessions).toBe(0); expect(fixture.starts).toBe(0);
+    await expectOriginal(page, original);
+    await page.screenshot({path: info.outputPath('status-recovered-before-explicit-start.png'), fullPage: true});
+    await ai(page); await page.getByLabel('AIアクセスコード').fill('test-only-code'); await closeDialog(page);
+    fixture.startStatus = 'awaiting_approval';
+    await start(page).click(); await expect(accept(page)).toBeVisible();
+    expect(fixture.sessions).toBe(1); expect(fixture.starts).toBe(1);
+    expect(fixture.requests[0]!.baseHash).toBe(original.document.designHash);
+    await expectOriginal(page, original);
+  });
+
   for (const code of ['unauthorized', 'not_found'] as const) {
     test(`lost polling ${code} clears stale state and needs one explicit fresh request`, async ({page}, info) => {
       const fixture = new RecoveryFixture(); fixture.pollOutcome = code;

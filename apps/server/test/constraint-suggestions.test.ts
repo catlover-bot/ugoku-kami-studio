@@ -34,6 +34,29 @@ describe('constraint suggestions use existing core without authorizing changes',
     expect(protectedState(context)).toEqual(before);
   });
 
+  it.each([false, true])('retains the70mm request when suggesting width before/after candidate generation: %s', generated => {
+    const context = contextFor();
+    if (generated) executeTool('propose_design_patch', {}, context);
+    const before = protectedState(context);
+    expect(() => suggest(context, 'widthMm', 180)).toThrow('guides-on-base');
+    expect(context.constraintSuggestions).toEqual([]);
+    expect(protectedState(context)).toEqual(before);
+    expect(context.patch.travelMm).toBe(70);
+  });
+
+  it('keeps the requested direction and paper cap before the first candidate and rejects request no-ops', () => {
+    const base = createDesign({ ...fish().input, maxSheets: 2, locks: [] });
+    const context = contextFor(base, '左へ動く距離を25mmにしたい。厚紙は1枚まで');
+    const before = protectedState(context);
+    suggest(context, 'paperThicknessMm', 0.3);
+    const verification = context.constraintSuggestions[0]!.verification;
+    const expected = createDesign({ ...base.input, ...context.patch, paperThicknessMm: 0.3 });
+    expect(verification.contextPatch).toMatchObject({ direction: 'left', travelMm: 25, maxSheets: 1 });
+    expect(verification.hypotheticalDesignHash).toBe(expected.designHash);
+    expect(protectedState(context)).toEqual(before);
+    expect(() => suggest(context, 'travelMm', 25)).toThrow('同じ値');
+  });
+
   it.each([['right', 300], ['right', 350], ['left', 350]] as const)('checks varying %s/%s geometry without a fixed42mm fallback', (direction, x) => {
     const original = fish();
     const base = createDesign({ ...original.input, direction, selection: { ...original.input.selection, x } });

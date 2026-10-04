@@ -29,6 +29,9 @@ type AiPanelProps = {
 export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl, onAccept, inputDraftActive = false, selectionReady = true, onCandidateChange, onManual, requestText, onRequestTextChange, previewTarget, actionTarget, settingsTarget, visible = true, onActivate, onOpenSettings, onConnectionLabel}: AiPanelProps) {
   const [connection, setConnection] = useState<{enabled: boolean; reason?: string; mode: string; provider?: 'none' | 'ollama' | 'gemini'; model?: string | null; endpoint?: string | null; contextLength?: number; toolMode?: string; unreachable?: boolean}>({enabled: false, mode: 'manual', reason: '接続を確認中です。'});
   const [limits, setLimits] = useState<{modelCalls: number; toolCalls: number; timeoutMs: number; inputBytes: number; outputTokens: number} | null>(null);
+  const [checkingConnection, setCheckingConnection] = useState(false);
+  const connectionTicket = useRef(0);
+  const connectionChecking = useRef(false);
   const [localPrompt, setLocalPrompt] = useState('もう少し大きく動かしたい。絵の大きさは変えず、紙も増やさない');
   const prompt = requestText ?? localPrompt;
   const promptRef = useRef(prompt); promptRef.current = prompt;
@@ -105,10 +108,26 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
       void cancelServerRun(session, current.id, access).catch(() => undefined);
     }
   }
+  async function checkConnection(explicit = false) {
+    if (connectionChecking.current) return;
+    const ticket = ++connectionTicket.current;
+    connectionChecking.current = true; setCheckingConnection(true);
+    try {
+      const result = await request<{ai: typeof connection; limits?: typeof limits}>('/api/status', 'GET');
+      if (ticket !== connectionTicket.current) return;
+      setConnection(result.ai); setLimits(result.limits ?? null);
+      if (explicit) setMessage(result.ai.enabled ? 'サーバーの設定を確認しました。AIへの依頼はまだ送っていません。「AIで案をつくる」で実行できます。' : 'サーバーの設定を確認しました。このサイトではAIは無効です。手動での編集と出力を続けられます。');
+    } catch {
+      if (ticket !== connectionTicket.current) return;
+      setConnection({enabled: false, mode: 'manual', unreachable: true});
+      if (explicit) setMessage('サーバーの状態を確認できません。現在の作品と希望は残っています。接続状態を再確認するか、手動での編集と出力を続けてください。');
+    } finally {
+      if (ticket === connectionTicket.current) {connectionChecking.current = false; setCheckingConnection(false);}
+    }
+  }
   useEffect(() => {
-    let current = true;
-    request<{ai: typeof connection; limits?: typeof limits}>('/api/status', 'GET').then(result => {if (current) {setConnection(result.ai); setLimits(result.limits ?? null);}}).catch(() => {if (current) setConnection({enabled: false, mode: 'manual', unreachable: true});});
-    return () => {current = false; generation.current++; clearTimeout(timer.current);};
+    void checkConnection();
+    return () => {connectionTicket.current++; connectionChecking.current = false; generation.current++; clearTimeout(timer.current);};
   }, []);
   useEffect(() => {
     if (previousIdentity.current === identity) return;
@@ -275,6 +294,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     <section className="ai-panel" aria-label="AIの調整結果" hidden={!visible}>
     {(busy || pollInterrupted) && <div className="ai-wait"><p>{pollInterrupted ? '通信の確認が必要です。現在の作品は変わっていません。' : run?.status === 'awaiting_approval' ? '採用の結果を確認しています。' : '候補を待っています。現在の作品は変わっていません。'}</p><p>経過 {waitSeconds}秒 · 中断して手動で調整できます。</p><div className="button-row">{pollInterrupted && <button className="secondary" onClick={() => void resumePolling()}>状況を確認する</button>}<button onClick={() => void cancel()} className="text-button">中断する</button></div></div>}
     {statusMessage && !busy && <p role="status" className={`notice ${unsupported || run?.status === 'failed' ? 'warning' : ''}`}>{statusMessage}</p>}
+    {connection.unreachable && <button className="secondary" disabled={checkingConnection} onClick={() => void checkConnection(true)}>{checkingConnection ? '接続状態を確認中…' : '接続状態を再確認する'}</button>}
     {unsupported && <button className="text-button" onClick={() => { editPrompt('引っぱりタブでまっすぐ動く距離を調整したい'); setUnsupported(false); setMessage('代案を入力しました。実行するか、手動で調整してください。'); }}>代案「まっすぐ動かす」を選ぶ</button>}
 
     {run?.status === 'clarification_required' && !busy && <button className="text-button" onClick={() => void cancel()}>この依頼を取り消す</button>}
@@ -283,7 +303,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     {run?.requestInterpretation && !busy && run.baseHash === document.designHash && run.baseRevision === document.revision && run.status !== 'succeeded' && run.status !== 'cancelled' && <RequestInterpretation compact={awaitingProposal} value={run.requestInterpretation} document={document} source="ai" disabled={busy || inputDraftActive || !selectionReady || !['awaiting_approval', 'clarification_required'].includes(run.status)} onCorrect={changes => void correctInterpretation(changes)} onDraftChange={setInterpretationDraft} />}
     {awaitingProposal && <button className="text-button" onClick={() => {void cancel(); onManual?.();}}>設定を編集する</button>}
     {!!run?.validationIssues?.length && <div className="notice warning"><h3>設計で見つかった問題</h3>{run.validationIssues.map(issue => <p key={issue.id}>{issue.partIds.join('・')}：{issue.message} {issue.suggestion}</p>)}</div>}
-    {!!run?.constraintSuggestions?.length && <div className="notice"><h3>条件を見直す案</h3><p>採用候補ではありません。固定条件や希望の変更は、必要な場合だけ手動で行い、再検査してください。</p>{run.constraintSuggestions.map((item, index) => <p key={index}>{fieldNames[item.key] ?? item.key} → {String(item.value)}：{item.reason}<br />{item.source === 'model' && item.verification?.geometry === 'pass' && item.verification.source === 'deterministic-core' && item.verification.baseHash === run.baseHash && item.verification.baseRevision === run.baseRevision ? 'モデルの案。この1条件だけを変えた場合の寸法・紙面は共通コアで検査済み。条件変更は未承認、実物未確認です。' : 'この値で成立するかは未検査です。'}（自動では変更しません）</p>)}</div>}
+    {!!run?.constraintSuggestions?.length && <div className="notice"><h3>条件を見直す案</h3><p>採用候補ではありません。固定条件や希望の変更は、必要な場合だけ手動で行い、再検査してください。</p>{run.constraintSuggestions.map((item, index) => <p key={index}>{fieldNames[item.key] ?? item.key} → {String(item.value)}：{item.reason}<br />{item.source === 'model' && item.verification?.geometry === 'pass' && item.verification.source === 'deterministic-core' && item.verification.baseHash === run.baseHash && item.verification.baseRevision === run.baseRevision ? 'モデルの案。希望と直近の変更内容へこの1条件を加え、寸法・紙面を共通コアで検査しました。条件変更は未承認、実物未確認です。' : 'この値で成立するかは未検査です。'}（自動では変更しません）</p>)}</div>}
 
     </section>
   </>;

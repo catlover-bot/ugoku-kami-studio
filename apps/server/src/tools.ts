@@ -10,7 +10,7 @@ export type ConstraintSuggestion = z.infer<typeof Constraint> & {
   verification: {
     source: 'deterministic-core'; geometry: 'pass'; conditionsApproved: false;
     baseHash: string; baseRevision: number; comparedCandidateHash: string;
-    hypotheticalDesignHash: string; checks: CheckResult[];
+    contextPatch: DesignPatch; hypotheticalDesignHash: string; checks: CheckResult[];
   };
 };
 export type ToolContext = { prompt: string; correction?: InterpretationCorrection; interpretationProposal: RequestInterpretation; base: DesignDocument; candidate: DesignDocument; patch: DesignPatch; intent: DesignIntent; seenHashes: Set<string>; seenInterpretationDesigns: Set<string>; constraintSuggestions: ConstraintSuggestion[] };
@@ -29,7 +29,7 @@ export const declarations: ToolDeclaration[] = [
   } },
   { name: 'validate_design', description: '最新候補の全検査を再計算する。unknownをpassにしない。', parametersJsonSchema: noArgs },
   { name: 'arrange_pages', description: '最新候補の全機構部品をA4紙面へ決定的に配置する。縮小しない。', parametersJsonSchema: noArgs },
-  { name: 'propose_constraint_change', description: '最新候補の条件1つを変える仮案を共通コアで検査する。寸法・紙面のfailがある案は表示せず、失敗理由を返す。同じ値は変更案にならない。検査を通っても固定解除・希望の変更・採用は許可されず、実物未確認。実際の条件や設計は変更しない。', parametersJsonSchema: {
+  { name: 'propose_constraint_change', description: '解釈済みの希望と直近の変更内容へ、条件1つを変える仮案を加えて共通コアで検査する。候補をまだ生成していない場合も希望値を省かない。寸法・紙面のfailがある案は表示せず、失敗理由を返す。同じ値は変更案にならない。検査を通っても固定解除・希望の変更・採用は許可されず、実物未確認。実際の条件や設計は変更しない。', parametersJsonSchema: {
     type: 'object', properties: { key: { type: 'string', enum: ['travelMm', 'direction', 'widthMm', 'heightMm', 'maxSheets', 'paperThicknessMm', 'clearanceMm'] }, value: { anyOf: [number, direction] }, reason: { type: 'string' } }, required: ['key', 'value', 'reason'], additionalProperties: false,
   } },
 ];
@@ -101,19 +101,22 @@ export function executeTool(name: string, args: unknown, context: ToolContext): 
       const suggestion = Constraint.parse(args);
       if ((suggestion.key === 'direction') !== (typeof suggestion.value === 'string')) throw new AppError('invalid_arguments', '条件の値の型が一致しません。');
       DesignPatchSchema.parse({ [suggestion.key]: suggestion.value });
-      if (context.candidate.input[suggestion.key] === suggestion.value) throw new AppError('invalid_arguments', '最新候補と同じ値は条件変更案にできません。変更する具体値を指定してください。');
+      const referenceInput = { ...context.base.input, ...context.patch };
+      if (referenceInput[suggestion.key] === suggestion.value) throw new AppError('invalid_arguments', '希望・直近の変更内容と同じ値は条件変更案にできません。変更する具体値を指定してください。');
       // A conditional geometry calculation, never an authorized patch: the one
       // named condition may be locked. No lock, intent, candidate or seen-state
       // is changed, and no adoptable proposal is created from this calculation.
-      const hypothetical = createDesign({ ...context.candidate.input, [suggestion.key]: suggestion.value }, { designId: context.base.designId, revision: context.base.revision + 1 });
+      // candidate can still be the base before the first propose_design_patch.
+      // The trusted pending patch already contains the interpreted request.
+      const hypothetical = createDesign({ ...referenceInput, [suggestion.key]: suggestion.value }, { designId: context.base.designId, revision: context.base.revision + 1 });
       // A rebuilt input's locks-preserved check is not evidence of permission
       // to change the named condition. Omit it rather than imply approval.
       const checks = validateDesign(hypothetical).filter(check => check.id !== 'locks-preserved');
       const failures = checks.filter(check => check.status === 'fail');
       if (failures.length) throw new AppError('suggestion_validation_failed', `この条件変更案も成立しません。${failures.map(check => `${check.partIds.join('・')} [${check.id}]: ${check.message} ${check.suggestion ?? ''}`).join(' ')}`);
-      const verified: ConstraintSuggestion = { ...suggestion, source: 'model', verification: { source: 'deterministic-core', geometry: 'pass', conditionsApproved: false, baseHash: context.base.designHash, baseRevision: context.base.revision, comparedCandidateHash: context.candidate.designHash, hypotheticalDesignHash: hypothetical.designHash, checks } };
+      const verified: ConstraintSuggestion = { ...suggestion, source: 'model', verification: { source: 'deterministic-core', geometry: 'pass', conditionsApproved: false, baseHash: context.base.designHash, baseRevision: context.base.revision, comparedCandidateHash: context.candidate.designHash, contextPatch: structuredClone(context.patch), hypotheticalDesignHash: hypothetical.designHash, checks } };
       context.constraintSuggestions.push(verified);
-      return { suggestion: verified, applied: false, nextStep: 'この1条件だけを変更した場合の寸法・紙面を検査しました。固定条件や希望の変更は未承認です。必要な場合だけ利用者が手動で変更し、再検査してください。実物の動作は未確認です。' };
+      return { suggestion: verified, applied: false, nextStep: '希望と直近の変更内容へ、この1条件の変更を加えた場合の寸法・紙面を検査しました。固定条件や希望の変更は未承認です。必要な場合だけ利用者が手動で変更し、再検査してください。実物の動作は未確認です。' };
     }
     default: throw new AppError('unknown_tool', '許可されていないツールです。');
   }
