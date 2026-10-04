@@ -106,7 +106,9 @@ test('P4 Home keeps samples ephemeral, supports own artwork and three works, and
   await home(page); await expect(page.locator('.library-entry')).toHaveCount(3);
   for (const work of [own, imported1, imported2]) {
     await entryById(page, work.metadata.id).getByRole('button', { name: '続きから開く', exact: true }).click();
-    expect(await stamp(page)).toEqual({ id: work.project.document.designId, hash: work.project.document.designHash, revision: work.project.document.revision });
+    // A click starts asynchronous IndexedDB loading and image validation.
+    // Wait for that work to finish; still require the exact requested identity.
+    await expect.poll(() => stamp(page)).toEqual({ id: work.project.document.designId, hash: work.project.document.designHash, revision: work.project.document.revision });
     await home(page);
   }
   const original = entryById(page, imported1.metadata.id); await more(original);

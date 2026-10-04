@@ -14,7 +14,7 @@ const call = (name: string, args: Record<string, unknown> = {}): Part => ({ func
 
 for (const caseId of ['L1', 'L2', 'L3'] as LiveCase[]) test(`Goal004 ${caseId}: offline transport, actual application/approval/PDF path`, async ({ page }, info) => {
   test.setTimeout(60_000);
-  const outDir = resolve(`artifacts/goal004/rehearsal/${info.project.name}/${caseId}`);
+  const outDir = resolve(`artifacts/goal005/rehearsal/${info.project.name}/${caseId}`);
   await mkdir(outDir, { recursive: true });
   const project = await createPrototypeProject();
   const projectPath = join(outDir, 'input.ugoku.json');
@@ -40,5 +40,10 @@ for (const caseId of ['L1', 'L2', 'L3'] as LiveCase[]) test(`Goal004 ${caseId}: 
     expect(result.status).toBe(caseId === 'L1' ? 'adopted-and-pdf-verified' : caseId === 'L2' ? 'condition-change-offered-original-preserved' : 'unsupported-locally-no-model-call');
     expect(calls).toBe(caseId === 'L1' ? 2 : caseId === 'L2' ? 3 : 0);
     expect(result.physicalValidation).toBe('unverified');
-  } finally { await app.close(); }
+  } finally {
+    // Release browser connections before awaiting the server owned by this test.
+    // Fixture cleanup happens after this function returns; waiting for app.close()
+    // first can leave it waiting on a speculative/keep-alive browser socket.
+    try { await page.context().close(); } finally { await app.close(); }
+  }
 });
