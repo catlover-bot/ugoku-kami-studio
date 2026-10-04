@@ -26,8 +26,9 @@ describe('installed official SDK wire format with local fetch interception only'
     const body = JSON.parse(String(options.body));
     expect(body.contents).toEqual(contents);
     expect(body.generationConfig.maxOutputTokens).toBe(512);
-    expect(body.tools[0].functionDeclarations).toHaveLength(5);
+    expect(body.tools[0].functionDeclarations).toHaveLength(6);
     expect(body.tools[0].functionDeclarations[0].parametersJsonSchema).toMatchObject({ type: 'object', additionalProperties: false });
+    expect(body.tools[0].functionDeclarations.find((tool: { name: string }) => tool.name === 'propose_request_interpretation').parametersJsonSchema).toMatchObject({ type: 'object', additionalProperties: false, required: ['distance', 'direction', 'size', 'paper', 'mechanism', 'unresolved'] });
     expect(result.usageMetadata?.thoughtsTokenCount).toBe(3);
   });
   it('does not automatically retry an intercepted quota response', async () => {

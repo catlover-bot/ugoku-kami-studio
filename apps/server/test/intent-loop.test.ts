@@ -69,17 +69,22 @@ describe('author intent through the actual server, core tools, approval and outp
     expect(approved.input.travelMm).toBe(25); expect(approved.input.maxSheets).toBe(2);
   });
 
-  it('requires concrete author confirmation before relaxing the paper cap', async () => {
-    const provider = sequence([invoke('propose_design_patch'), resultText]);
-    const s = await setup(provider);
-    const result = await s.app.inject({ method: 'POST', url: `${s.url}/runs`, headers: s.headers, payload: {
-      requestId: 'paper-confirmation-required', prompt: '動く距離を25mmにしたい。厚紙はA4で3枚まで',
-      baseRevision: s.document.revision, baseHash: s.document.designHash,
-    } });
-    expect(result.statusCode).toBe(422);
-    expect(provider.generate).not.toHaveBeenCalled();
-    expect(s.session.document).toEqual(s.document);
+  it('requires concrete paper-budget confirmation before creating a proposal, then preserves approval binding', async () => {
+    const provider = sequence([resultText, invoke('propose_design_patch'), resultText]);
+    const s = await setup(provider), prompt = '動く距離を25mmにしたい。厚紙はA4で3枚まで';
+    const first = await s.start(prompt);
+    expect(first.status).toBe('clarification_required'); expect(first.proposal).toBeUndefined();
+    expect(first.requestInterpretation.approvalRequired).toEqual({ key: 'maxSheets', from: 2, to: 3 });
     expect(s.session.document.input.maxSheets).toBe(2);
+    const run = s.app.runs.start(s.session, { requestId: 'paper-confirmed-001', prompt, baseRevision: s.document.revision, baseHash: s.document.designHash,
+      correction: { runId: first.id, requestId: first.requestId, changes: { binding: first.requestInterpretation.binding, paperApproval: { from: 2, to: 3 } } },
+    }); await run.done;
+    expect(run.status).toBe('awaiting_approval');
+    expect(run.proposal!.protectedConditions.join(' ')).toContain('3枚以内');
+    expect(run.proposal!.document.input.maxSheets).toBe(3);
+    expect(s.session.document.input.maxSheets).toBe(2);
+    const approved = s.app.runs.approve(s.session, run.proposal!.id, { requestId: run.requestId, baseRevision: run.baseRevision, baseHash: run.baseHash }).document;
+    expect(approved.input.maxSheets).toBe(3); expect(approved.input.locks).toContain('maxSheets');
   });
   it('keeps author-approved v2 artwork repair through the tool loop and rejects model repair edits', async () => {
     const original = applyArtworkRepair(createDesign(SAMPLE_INPUT), { mode: 'solid', color: '#e6cfaa' });
@@ -206,14 +211,20 @@ describe('author intent through the actual server, core tools, approval and outp
   it('reject leaves newly requested protections unapplied; existing protected conditions cannot be unlocked by prose', async () => {
     const s = await setup(adjustingProvider()); const run = await s.start('少し大きく動かしたい。絵のサイズを保って、厚紙は2枚まで');
     expect(run.proposal).toBeDefined(); s.app.runs.reject(s.session, run.proposal!.id); expect(s.session.document).toEqual(s.document); expect(s.session.document.input.locks).toEqual([]);
-    const provider = adjustingProvider(); const locked = await setup(provider, createDesign({ ...SAMPLE_INPUT, locks: ['widthMm', 'heightMm', 'maxSheets'], maxSheets: 1 }));
+    const provider = sequence([resultText]); const locked = await setup(provider, createDesign({ ...SAMPLE_INPUT, locks: ['widthMm', 'heightMm', 'maxSheets'], maxSheets: 1 }));
     const result = await locked.app.inject({ method: 'POST', url: `${locked.url}/runs`, headers: locked.headers, payload: { requestId: 'request-unlock-001', prompt: '固定を解除して絵のサイズを変更して。紙は2枚まで増やして', baseRevision: locked.document.revision, baseHash: locked.document.designHash } });
-    expect(result.statusCode).toBe(422); expect(result.json().error.code).toBe('clarification_required'); expect(provider.generate).not.toHaveBeenCalled(); expect(locked.session.document).toEqual(locked.document);
+    expect(result.statusCode).toBe(202);
+    const blocked = locked.app.runs.get(locked.session, result.json().run.id); await blocked.done;
+    expect(blocked.status).toBe('clarification_required'); expect(blocked.proposal).toBeUndefined();
+    expect(provider.generate).toHaveBeenCalledTimes(1); expect(locked.session.document).toEqual(locked.document);
   });
 
-  it.each(['絵の大きさを保つ。でも絵を小さくして', '紙は増やさない。でも紙を増やして', '右へ、上へ動かす', 'もっと大きく、少し小さく動かしたい', 'もっと大きく動かさないで'])('asks to clarify conflicting or negative instructions before calling the provider: %s', async prompt => {
-    const provider = adjustingProvider(); const s = await setup(provider);
+  it.each(['絵の大きさを保つ。でも絵を小さくして', '紙は増やさない。でも紙を増やして', '右へ、上へ動かす', 'もっと大きく、少し小さく動かしたい', 'もっと大きく動かさないで'])('does not fulfill unresolved or conflicting instructions just because the bounded provider returns prose: %s', async prompt => {
+    const provider = sequence([resultText]); const s = await setup(provider);
     const result = await s.app.inject({ method: 'POST', url: `${s.url}/runs`, headers: s.headers, payload: { requestId: 'request-clarify-001', prompt, baseRevision: s.document.revision, baseHash: s.document.designHash } });
-    expect(result.statusCode).toBe(422); expect(result.json().error.code).toBe('clarification_required'); expect(provider.generate).not.toHaveBeenCalled();
+    expect(result.statusCode).toBe(202);
+    const blocked = s.app.runs.get(s.session, result.json().run.id); await blocked.done;
+    expect(blocked.status).toBe('clarification_required'); expect(blocked.proposal).toBeUndefined();
+    expect(provider.generate).toHaveBeenCalledTimes(1); expect(s.session.document).toEqual(s.document);
   });
 });

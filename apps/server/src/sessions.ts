@@ -40,7 +40,7 @@ export class SessionStore {
     }
     if (document.designHash !== session.document.designHash || document.revision !== session.document.revision) {
       for (const run of session.runs.values()) {
-        if (run.status === 'running' || run.status === 'awaiting_approval') {
+        if (run.status === 'running' || run.status === 'awaiting_approval' || run.status === 'clarification_required') {
           run.controller.abort(); run.status = 'cancelled'; run.proposal = undefined;
           run.error = { code: 'stale_design', message: '設計が変更されたため、以前の実行と承認を無効にしました。' };
         }
