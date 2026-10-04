@@ -1,0 +1,304 @@
+{
+  "schemaVersion": 1,
+  "runtimeVersion": "0.33.3",
+  "runtimeSource": "https://github.com/ollama/ollama/releases/tag/v0.33.3",
+  "platform": "linux/amd64",
+  "model": "gemma4:e2b-it-qat",
+  "quantization": "Q4_0",
+  "modelDigest": "07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c",
+  "manifestPath": "manifests/registry.ollama.ai/library/gemma4/e2b-it-qat",
+  "runtimeFiles": [
+    {
+      "path": "bin/ollama",
+      "size": 39521328,
+      "sha256": "7deaad14177b824d8fcff7136d4418c0111d2db35fa872a5071fa8db5b8db527",
+      "executable": true
+    },
+    {
+      "path": "lib/ollama/CPP_HTTPLIB_LICENSE",
+      "size": 1075,
+      "sha256": "4b45cbe16d7b71b89ae6127e26e0d90a029198ca5e958ad8e3d0b8bbed364d8b",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/DLPACK_LICENSE",
+      "size": 11345,
+      "sha256": "3e8f6bc39276a586d60c8c5aaece2ff989262181cf2b3d2a128db58f97a9300c",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/FMT_LICENSE",
+      "size": 1431,
+      "sha256": "07580f2a3b35709ce703d523f447b242f6dfec7582a8c0df102c7fa2849375f8",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/GO_LICENSE",
+      "size": 255417,
+      "sha256": "d07b7d6333a1bbea62adaffcc5b7751e44a2aaef55837411325dedc7d2091ea6",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/LLAMA_CPP_LICENSE",
+      "size": 1078,
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/LLAMA_CPP_VENDORS_LICENSE",
+      "size": 7257,
+      "sha256": "eb17b411e39c75c4ac40916d66e39287ee9723b8bbe54daf020fc27acf670c11",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/MLX_C_LICENSE",
+      "size": 1067,
+      "sha256": "44326a4ea062241ae6fc26ee2ec90bdc81af7eb7b9d3966181b733fa69d42057",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/MLX_LICENSE",
+      "size": 1066,
+      "sha256": "ccfab7ccb2ea306f71531c8ca77bb55507606cd90768b1e32b8b52ab5b48cf01",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/PICOJSON_LICENSE",
+      "size": 1414,
+      "sha256": "52a7da16781b4b899382c9ddfcf059235cdee73e2f45cfd7402c2ae9a2e9d28d",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/XGRAMMAR_LICENSE",
+      "size": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/XGRAMMAR_NOTICE",
+      "size": 54,
+      "sha256": "769c6907073c65801bfcfe3ce1c0e80bf0ae4e124e2769d4f026c038ad583c0f",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/libggml-base.so",
+      "symlink": "libggml-base.so.0"
+    },
+    {
+      "path": "lib/ollama/libggml-base.so.0",
+      "symlink": "libggml-base.so.0.22.0"
+    },
+    {
+      "path": "lib/ollama/libggml-base.so.0.22.0",
+      "size": 826016,
+      "sha256": "65c626b436e5aadd1ba9dea9599c22ef97dfc784905ba739138d0eda6cc5458e",
+      "executable": true
+    },
+    {
+      "path": "lib/ollama/libggml-cpu-alderlake.so",
+      "size": 1108040,
+      "sha256": "4014a5ff8c736c70c9c99db3710c3b4a92efd61c35804a5a634311586f716c5e",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/libggml-cpu-cannonlake.so",
+      "size": 1337416,
+      "sha256": "5962c985d66dfd68fa7d6f046e7c2347d65b65c487ef95f8b639e27b331b33dd",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/libggml-cpu-cascadelake.so",
+      "size": 1333320,
+      "sha256": "1858fb6aa3f75d324f17aabf074f2bc53015c9737fb77d4def27f635b974afd8",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/libggml-cpu-cooperlake.so",
+      "size": 1329224,
+      "sha256": "83b9b3644f006f61c9f025bd65ef795ccc2b357476eead7fb643317ea9158142",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/libggml-cpu-haswell.so",
+      "size": 1112136,
+      "sha256": "d0f70a09c60a8f32106a122acf2af92f6be94f7fecf950da9470c9b7dee3d9ff",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/libggml-cpu-icelake.so",
+      "size": 1333320,
+      "sha256": "46beab7babc6f45d2a583e4d5ef9a9b4397bc5ca1554936ca92608bff024d071",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/libggml-cpu-ivybridge.so",
+      "size": 1046696,
+      "sha256": "970fce37823de77771fc431fc0ec04a44c013c84365fb9513826123b00f8e1f0",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/libggml-cpu-piledriver.so",
+      "size": 1042600,
+      "sha256": "b74caf2dabfeed842462aaf3004dde8096826742f2b627d649b7de0cc77ef4c6",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/libggml-cpu-sandybridge.so",
+      "size": 1038504,
+      "sha256": "4eeb624126e481c1c91b3992bbf50b6ea0590c3998b85ae41843e06b83e83fd8",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/libggml-cpu-sapphirerapids.so",
+      "size": 1579376,
+      "sha256": "cc8b714eaa200dd3f8313fd641d32409a7bcf4d0b5636bf3457d3902f755a0e1",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/libggml-cpu-skylakex.so",
+      "size": 1337416,
+      "sha256": "7c3855bab06d76f3f77656ce042df05863fd77ee7930cb35fc1b16bd82b58db7",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/libggml-cpu-sse42.so",
+      "size": 878888,
+      "sha256": "51d280095e81f05883fc355a20995442c194e6257c6e3c8b766f74fdbee1abb0",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/libggml-cpu-x64.so",
+      "size": 874824,
+      "sha256": "620b5aa346457272f8c4dd982311a346c0c528b23df19ea61479eb12288663a9",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/libggml-cpu-zen4.so",
+      "size": 1329224,
+      "sha256": "2ac6302c9cc4d4990ca354dbef78a3429e3e68e7ebff13d74fadb9c0d1aaa4d6",
+      "executable": false
+    },
+    {
+      "path": "lib/ollama/libggml.so",
+      "symlink": "libggml.so.0"
+    },
+    {
+      "path": "lib/ollama/libggml.so.0",
+      "symlink": "libggml.so.0.22.0"
+    },
+    {
+      "path": "lib/ollama/libggml.so.0.22.0",
+      "size": 220832,
+      "sha256": "959e2fe38c212fec3596c56947ce2ab09c9ed8ed14e9fa667f25b5a409b86804",
+      "executable": true
+    },
+    {
+      "path": "lib/ollama/libgomp.so.1",
+      "symlink": "libgomp.so.1.0.0"
+    },
+    {
+      "path": "lib/ollama/libgomp.so.1.0.0",
+      "size": 235072,
+      "sha256": "e985bcbb6b444c2c472de70c331ab101e6de860affa3a20d1d1aecd06d9242e8",
+      "executable": true
+    },
+    {
+      "path": "lib/ollama/libllama-common.so",
+      "symlink": "libllama-common.so.0"
+    },
+    {
+      "path": "lib/ollama/libllama-common.so.0",
+      "symlink": "libllama-common.so.0.3.0"
+    },
+    {
+      "path": "lib/ollama/libllama-common.so.0.3.0",
+      "size": 4220016,
+      "sha256": "cdcd77c3c1314ba012ba832ad4a391169b378db67dd69b3d51f6014b9caa6321",
+      "executable": true
+    },
+    {
+      "path": "lib/ollama/libllama-quantize-impl.so",
+      "size": 72560,
+      "sha256": "5c0f92bb561398ec86f5450df468407cf784b5bacf8f7b5a0b878bbca3822155",
+      "executable": true
+    },
+    {
+      "path": "lib/ollama/libllama-server-impl.so",
+      "size": 2774448,
+      "sha256": "47558fc8e3947942b6f5b942eb7a0d10744d32a80c2de515f09c0789e48c8e11",
+      "executable": true
+    },
+    {
+      "path": "lib/ollama/libllama.so",
+      "symlink": "libllama.so.0"
+    },
+    {
+      "path": "lib/ollama/libllama.so.0",
+      "symlink": "libllama.so.0.3.0"
+    },
+    {
+      "path": "lib/ollama/libllama.so.0.3.0",
+      "size": 4025208,
+      "sha256": "af4d01b0a315516b61facc7ff9df13c65e3409162cf7bed3d5a48bb7fef83a0e",
+      "executable": true
+    },
+    {
+      "path": "lib/ollama/libmtmd.so",
+      "symlink": "libmtmd.so.0"
+    },
+    {
+      "path": "lib/ollama/libmtmd.so.0",
+      "symlink": "libmtmd.so.0.3.0"
+    },
+    {
+      "path": "lib/ollama/libmtmd.so.0.3.0",
+      "size": 1852048,
+      "sha256": "252918bb1e1099894c808fa7e7520704bc4850d6a0528b75a4cc96382efc451c",
+      "executable": true
+    },
+    {
+      "path": "lib/ollama/llama-quantize",
+      "size": 15096,
+      "sha256": "208fcacd9b4264cacdc9783efc5b3361ac775372469edc12b48747e6b9c4dbff",
+      "executable": true
+    },
+    {
+      "path": "lib/ollama/llama-server",
+      "size": 15096,
+      "sha256": "234b05b2138264f8fb263c3205e85f4c290e8afe5067e280a4f6f90cdac5696b",
+      "executable": true
+    }
+  ],
+  "modelFiles": [
+    {
+      "path": "manifests/registry.ollama.ai/library/gemma4/e2b-it-qat",
+      "size": 900,
+      "sha256": "07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c"
+    },
+    {
+      "path": "blobs/sha256-e382105d2ac3bee2c4f45647365e2feb906eddac1b6ff44cbaeb28e4c7629286",
+      "size": 545,
+      "sha256": "e382105d2ac3bee2c4f45647365e2feb906eddac1b6ff44cbaeb28e4c7629286"
+    },
+    {
+      "path": "blobs/sha256-58c187648007cab392bd5678b87e862c3e8794017deb945feea2cf256195e96a",
+      "size": 986833312,
+      "sha256": "58c187648007cab392bd5678b87e862c3e8794017deb945feea2cf256195e96a"
+    },
+    {
+      "path": "blobs/sha256-3646b4c147cd235a44d91df1546d3b7d8e29b547dbe4e1f80856419aa455e6fd",
+      "size": 3349514112,
+      "sha256": "3646b4c147cd235a44d91df1546d3b7d8e29b547dbe4e1f80856419aa455e6fd"
+    },
+    {
+      "path": "blobs/sha256-0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+      "size": 10174,
+      "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+    },
+    {
+      "path": "blobs/sha256-56380ca2ab89f1f68c283f4d50863c0bcab52ae3f1b9a88e4ab5617b176f71a3",
+      "size": 42,
+      "sha256": "56380ca2ab89f1f68c283f4d50863c0bcab52ae3f1b9a88e4ab5617b176f71a3"
+    }
+  ]
+}
