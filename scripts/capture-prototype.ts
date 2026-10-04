@@ -78,10 +78,11 @@ export async function capturePrototype(outDir = resolve('artifacts/goal004/proto
       await page.getByRole('button', { name: 'はじめ', exact: true }).click();
       await capture('back-start.png', '.workbench');
       await page.getByRole('button', { name: '正面', exact: true }).click();
+      await page.locator('.motion-alternatives > summary').click();
       await page.getByRole('button', { name: 'もう少し大きく', exact: true }).click();
       await expect(page.locator('.intent-panel .manual-result')).toBeVisible();
-      await expect(page.locator('.intent-panel .outline-tag')).toHaveText('AIなし');
-      const candidateHashes = await page.locator('.intent-panel svg.artwork-svg').evaluateAll(elements => elements.map(element => element.getAttribute('data-design-hash')));
+      await expect(page.getByText('手動で編集中', { exact: true })).toBeVisible();
+      const candidateHashes = await page.locator('.candidate-workbench svg.artwork-svg').evaluateAll(elements => elements.map(element => element.getAttribute('data-design-hash')));
       expect(candidateHashes).toContain(doc.designHash);
       expect(candidateHashes.some(hash => hash !== doc.designHash)).toBe(true);
       await capture('manual-candidate-not-adopted.png');

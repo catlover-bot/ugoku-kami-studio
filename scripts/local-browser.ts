@@ -39,7 +39,7 @@ export async function runLocalBrowserCase(options: {
 }): Promise<LocalCaseResult> {
   const { page, origin, projectPath, accessSecret, caseId, outDir, timeoutMs, mode } = options;
   await mkdir(outDir, { recursive: true });
-  const start = Date.now(); let check = 'import';
+  const start = performance.now(); let check = 'import';
   const result: LocalCaseResult = { caseId, mode, prompt: LOCAL_PROMPTS[caseId], status: 'not-started', elapsedMs: 0, runRequests: 0, physicalValidation: 'unverified' };
   const pending = new Set<Promise<void>>();
   const onResponse = (response: Response) => {
@@ -74,13 +74,13 @@ export async function runLocalBrowserCase(options: {
     await openRequestEditor(page);
     await page.getByLabel('どう動かしたいですか？', { exact: true }).fill(result.prompt);
     await page.screenshot({ path: join(outDir, 'before-request.png') });
-    const requestedAt = Date.now();
+    const requestedAt = performance.now();
     await page.getByRole('button', { name: mode === 'ollama' ? 'AIで案をつくる' : '寸法から案をつくる', exact: true }).click();
     check = 'wait-for-response';
     if (mode === 'ollama') {
       await expect.poll(() => result.serverRejection ? 'rejected' : result.run?.status ?? 'running', { timeout: timeoutMs + 15_000 }).not.toBe('running');
       await Promise.allSettled([...pending]);
-      result.candidateWaitMs = Date.now() - requestedAt;
+      result.candidateWaitMs = Math.round(performance.now() - requestedAt);
       await json(join(outDir, 'run-before-decision.json'), result.run ?? result.serverRejection);
       check = 'real-local-response';
       expect(result.serverRejection).toBeUndefined();
@@ -90,7 +90,7 @@ export async function runLocalBrowserCase(options: {
       expect(result.run?.baseHash).toBe(base.designHash);
     } else {
       await expect(page.locator('.manual-result')).toBeVisible();
-      result.candidateWaitMs = Date.now() - requestedAt;
+      result.candidateWaitMs = Math.round(performance.now() - requestedAt);
       expect(result.runRequests).toBe(0);
     }
     const panel = page.locator(mode === 'ollama' ? '.ai-panel' : '.intent-panel');
@@ -169,7 +169,7 @@ export async function runLocalBrowserCase(options: {
     await page.screenshot({ path: join(outDir, 'failure.png'), fullPage: true }).catch(() => undefined);
   } finally {
     await Promise.allSettled([...pending]); page.off('response', onResponse);
-    result.elapsedMs = Date.now() - start;
+    result.elapsedMs = Math.round(performance.now() - start);
     await json(join(outDir, 'case-result.json'), result);
   }
   return result;

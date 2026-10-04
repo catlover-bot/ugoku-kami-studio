@@ -19,7 +19,7 @@ const sourceRoot = resolve(process.env.PRODUCT_ZOOM_SOURCE_ROOT ?? repository);
 const port = Number(process.env.PRODUCT_ZOOM_PORT ?? '4821');
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('PRODUCT_ZOOM_PORT must be an integer from 1024 to 65535');
 const origin = `http://127.0.0.1:${port}`;
-const output = resolve(repository, 'artifacts/goal005/product-zoom', new Date().toISOString().replaceAll(/[:.]/g, '-'));
+const output = resolve(repository, process.env.PRODUCT_ZOOM_OUTPUT_DIR ?? 'artifacts/goal005/product-zoom', new Date().toISOString().replaceAll(/[:.]/g, '-'));
 const snapshot = join(output, 'build-snapshot');
 const sha256 = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
 const checkedAt = new Date().toISOString();

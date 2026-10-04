@@ -30,7 +30,7 @@ try {
     await stage(page, step);
     const measured = await page.evaluate(() => ({ innerWidth, innerHeight, outerWidth, outerHeight, dpr: devicePixelRatio, scrollWidth: document.documentElement.scrollWidth, hash: document.querySelector('main')?.getAttribute('data-design-hash'), revision: document.querySelector('main')?.getAttribute('data-design-revision') }));
     expect(measured.scrollWidth).toBeLessThanOrEqual(measured.innerWidth + 1);
-    const control = page.getByRole('button', { name: ['自分の絵ではじめる', 'もう少し大きく', 'PDFをダウンロード'][step - 1], exact: true });
+    const control = page.getByRole('button', { name: ['画像を選び直す', /^印刷する内容を確認する/, 'PDFをダウンロード'][step - 1], exact: true });
     await control.scrollIntoViewIfNeeded(); await expect(control).toBeVisible();
     const box = await control.boundingBox(); expect(box!.width).toBeGreaterThanOrEqual(44); expect(box!.height).toBeGreaterThanOrEqual(44);
     measurements.push({ step, ...measured, primaryTarget: box });
