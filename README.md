@@ -6,7 +6,7 @@
 
 初期版の機構は直線運動だけです。回転・揺動・歩行・歯車・立体・モーターには対応しません。**実物未検証**で、紙質・摩擦・耐久性まで保証するものではありません。ソフトウェアはmainへ統合し、GitHub CIでDockerのビルド・実起動・手動操作・PDF取得を確認しました。実Gemini・Cloud Run公開は未確認です。実行した検証と制約は [検証記録](docs/verification.md) を参照してください。
 
-[Goal 005](docs/goals/005-product-experience.md) の入力・保存・工程・組立体験を維持し、[Goal 006](docs/goals/006-request-understanding.md) では希望の読み取りと訂正を改善しています。統合の許可は [Goal 004-R](docs/goals/004-resume-and-main.md) から継続しています。確認済み変更のコミット・mainへの通常統合・push・通常CIは許可されています。実Gemini、実物、初見の人、実スマートフォン、Cloud Run公開の未確認状態は、ソフトウェア統合と分けて管理します。過去Goalのpush保留や全体blockedの記録は当時の状態であり、現在の統合を止める指示ではありません。
+[Goal 005](docs/goals/005-product-experience.md) の入力・保存・工程・組立体験を維持し、[Goal 006](docs/goals/006-request-understanding.md) では希望の読み取りと訂正を改善しました。統合の許可は [Goal 004-R](docs/goals/004-resume-and-main.md) から継続しています。確認済み変更のコミット・mainへの通常統合・push・通常CIは許可されています。実Gemini、実物、初見の人、実スマートフォン、Cloud Run公開の未確認状態は、ソフトウェア統合と分けて管理します。過去Goalのpush保留や全体blockedの記録は当時の状態であり、現在の統合を止める指示ではありません。
 
 ## 起動
 

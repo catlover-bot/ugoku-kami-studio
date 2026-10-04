@@ -1,6 +1,6 @@
 # 検証記録
 
-## Goal 006 — 希望の読み取りと訂正（進行中）
+## Goal 006 — 希望の読み取りと訂正（実装・回帰確認済み）
 
 2026-10-04。[依頼全文](goals/006-request-understanding.md)。開始時は local/origin/main と GitHub main が `757837a236e152d9a539529886e3583f45e4a16f`、作業ツリーはクリーンだった。同SHAの [Check・コンテナ](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37176726708) と [WebKit](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37176726694) は成功。既存の保存データ・開発サーバーを保持し、分離した作業ブランチで修正する。
 
@@ -21,6 +21,22 @@ Bでは既存function callingへ構造化した解釈ツールを追加し、手
 手動・AIに共通の「希望をこう受け取りました」を表示する。曖昧な数値は短い選択肢、明確な解釈は必要時だけ開く訂正欄で修正できる。訂正欄の入力中は旧候補を採用できず、再検査か訂正取消しを選べる。距離未指定のR2/R3は20mmを維持し、既に右向きなら変更不要と表示する。禁じた左方向は希望の右方向と別に表示する。
 
 Bの旧L3試験は、画面内の語彙判定による0 POSTから、実サーバーのHTTP422／モデル0呼出しへ変更した。AI無効時の試験は未接続表示→同じ希望文を手動支援へ→真の回転要求の非対応→直線代案を選ぶ流れに改訂した。UI全体探索実行で代案ボタンが消える実回帰を検出し修正した。関連40件は再実行で成功。大容量作品の復帰待ちが5秒を超えた1件は無変更の単独再試験で成功し、同時実行負荷の可能性を含め記録した。最終固定コミットの独立回帰は以下へ追記する。
+
+Cの固定実装 `4dc87200436a57af5addbaa200a07ede25451858` は、クリーンな別worktreeで `npm ci` / `npm run doctor` / `npm run check`（144件、lint・型検査・build）/ `npm run test:e2e -- --workers=2`（152件、PC76・狭幅Chromium76）/ `npm run test:storage`（native IndexedDB29件）/ `npm run examples`（4例）が成功した。各スイートは別の検証として記録し、合算を成果にしない。保存・作品一覧・Undo/Redo・入力draft・分割PDF・取得版固定ガイド・中断後の応答を含む既存回帰も維持した。
+
+Aの最終 `d9eaa4b` は [作業ブランチCheck](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37181579860)／[WebKit](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37181579876) の成功後に通常fast-forwardでmainへ反映し、[main Check](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37181922362)／[main WebKit](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37181922367)も成功した。Aのローカル最終全体実行は139/140で、大容量ファイルが「確認しています」のまま5秒のassertionを超えた1件を記録し、同じコードの容量2件再実行で成功した。失敗を消さず `phase-a-capacity-failure/` に残す。Bでは独立実行の152件が一度ですべて成功した。
+
+Bの `4dc8720` は [作業ブランチCheck](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37181809526)／[WebKit](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37181809561) 成功後にmainへ通常反映した。Checkは実Docker build/run/health・手動編集/保存/reload/PDFのコンテナ検証も含む。ローカルOSへWebKit用ライブラリやDockerを追加していない。Cはこの実装の成果物と確認結果の記録のみで、実行コードは同一。BとCのmain反映後の対象SHA・実際のCI完了結果・最終remote照合は `artifacts/goal006/phase-b-integration.json` と `final-verification.json` に保存する。pendingを成功として扱わない。
+
+固定版の実画面は `after-ui-final/manifest.json`（同じ自作魚画像、PC1440×1000・390×844、R1〜R3）。7画面を実際に開き、20→25mm、禁止左と希望右の区別、短い選択肢、訂正欄、採用/却下、印刷案内の文字と操作を確認した。手動の採用版は `after-ui-final/desktop/R1/adopted.ugoku.json`（`intent-006-fish` 第2版、hash `b142db0a6cdb860c12d85c5a67adcba95d5ae68c299b977e033299f0a1fb8d40`）、実ダウンロードは同階層の `intent-006-fish-r2.pdf`。相対5mmの候補は25mmになり、採用前は第1版20mmを保持した。
+
+模擬AIを使う実ブラウザ→Fastify→ツール→訂正→採用→PDFは `phase-b-clean-e2e/`。この訂正試験では、モデルの矛盾で確認待ちとなった後、作者が明示的に「絶対5mm」へ訂正する。サーバーは再計算した第2版5mmを採用し、選択・固定条件・紙上限を保持する。これは元のR1に対する25mmの確認とは別設計であり、再び相対量を読み違えた結果ではない。R1〜R3の実API結果は `after/server-final.json` に固定SHAとともに記録した。
+
+手動25mm版と模擬AI訂正5mm版の各5ページ、計10ページを100dpiで描画して全ページを目視確認した。対応するPC/mobile PDFは各5ページのRGBAが一致し、設計ID・版・hash、全ページA4、8部品、50mm校正線、始点/終点が一致した。文字・部品の重大な欠けや重なりは見られなかった。PDFの生成日時による全バイト差は幾何・描画一致と区別する。画像と所見は `pdf-review/review.json`／`verification.json`、成果物の案内は `artifact-index.json`。
+
+実装前に別途用意した16の言い換え・対句は、固定版の実コア関数で値と分類が期待に一致した（`after/independent-core.json`）。候補が成立することとは別で、引用・単位不足・二重否定・速度や検査省略などは確認待ち、真の回転は非対応として残る。方向のみの依頼は距離を維持し、幾何的に不成立なら距離を勝手に変えない。手動パーサーは限定的で、日本語全般や実Geminiの理解性能の評価ではない。実APIの追加課金、画像送信、固定条件解除、紙上限の無断拡大はしていない。
+
+`npm run smoke:live -- --plan` を固定版でも再実行し、ネットワーク0・有料API0・台帳0/3の維持を確認した。具体的許可と接続設定がないため実Geminiは `not_run`。印刷/校正線実測/組立/動作、初見参加者、実スマートフォン、実OSのIME、Cloud Run公開もそれぞれ `not_run`。画面・PDF・CIの成功から外部6項目の成功を推定せず、旧実物記録も変更していない。
 
 ## Goal 005 — 入力から中断再開・組立まで（統合済み）
 
