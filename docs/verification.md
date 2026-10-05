@@ -1,8 +1,14 @@
 # 検証記録
 
-## Goal009 — Vertex接続の実装・模擬確認（実通信未実施）
+## Goal009 — 非公開Vertex試験と使用量診断
 
-`AI_PROVIDER=vertex`を明示するADC専用アダプターと接続表示を追加しました。Developer APIの`gemini`経路とは別に、API v1・`VERTEX_PROJECT`・`VERTEX_LOCATION=global`・`VERTEX_MODEL=gemini-3.8-flash`を指定します。東京のCloud Run Web/APIから利用する公開候補であり、**Vertexの実認証・実推論・新構成のデプロイ・公開は未実施**です。[Goal009](goals/009-vertex-comparison.md)と[比較・試験計画](vertex-comparison-009.md)に、実装範囲・模擬検証・残る確認をまとめます。
+2026-10-05 JST、新しい一括承認に基づきSHA `4f43b25`をCloud Run東京へ非公開で配信しました。実Vertex `gemini-3.8-flash`の最初の1依頼はUI待ち6.305秒・モデル2呼出しで、20→25mmの候補を検査・比較・採用し、同版の5ページPDF、ガイド、保存再開まで成功しました。使用量が完全に取得できず、次の予約が管理枠に収まらないため残り3依頼は未実施。試験資源は削除済みです。費用管理合計$3.507861には未確定のモデル予約$3.336192を含み、実請求ではありません。[結果と残る課題](vertex-trial-009.md)。
+
+試験SHAのCheck / WebKit CIは成功しました。試験後、部分usageの数値・欠測理由を残す修正を追加し、`npm run check`（26ファイル・283件、lint・型検査・build）が成功しました。費用予約の解除条件は緩めていません。この後続修正の実Cloud確認は未実施です。
+
+## Goal009 — 試験前の実装・模擬確認の履歴
+
+`AI_PROVIDER=vertex`を明示するADC専用アダプターと接続表示を追加しました。Developer APIの`gemini`経路とは別に、API v1・`VERTEX_PROJECT`・`VERTEX_LOCATION=global`・`VERTEX_MODEL=gemini-3.8-flash`を指定します。東京のCloud Run Web/APIから利用する公開候補であり、**この段階ではVertexの実認証・実推論・新構成のデプロイ・公開は未実施**でした。最新の実試験結果は上記を参照してください。[Goal009](goals/009-vertex-comparison.md)と[比較・試験計画](vertex-comparison-009.md)に、実装範囲・模擬検証・残る確認をまとめます。
 
 UIのHTTP fixture試験はPC/狭幅の4件が成功し、希望欄が一つのまま同じ領域で候補を比較できること、設定済みと接続成功を区別すること、実行記録の`provider=vertex`でも`mode=injected-test`を模擬のまま書き出すこと、中断時の原本保持と本文なしDELETEを確認しました。既存のAI・接続復帰・実行記録の関連21件もPCで成功しました。これらは実Vertex通信の確認ではありません。
 
