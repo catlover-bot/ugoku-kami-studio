@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { getKitSummary, parseDesignDocument, type DesignDocument, type InterpretationChanges, type InterpretationCorrection } from '@ugoku/core';
+import { distanceTargetMm, displayDimension, getKitSummary, parseDesignDocument, type DesignDocument, type InterpretationChanges, type InterpretationCorrection } from '@ugoku/core';
 import DesignComparison, { fieldNames } from './DesignComparison';
 import { designStamp, observeRun, publicRunSnapshot, usageLabel, type AiRun as Run, type AiEvidence } from './aiEvidence';
 import { downloadFile } from './project';
@@ -221,7 +221,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
       if (ticket !== generation.current || !isCurrent(base, submittedPrompt)) return;
       const result = await request<{run: Run}>(`/api/sessions/${session.sessionId}/runs`, 'POST', {requestId: crypto.randomUUID(), prompt: submittedPrompt, baseRevision: base.revision, baseHash: base.designHash, ...(correction ? {correction} : {})}, session.token, submittedAccess);
       await receive(result.run, {session, runId: result.run.id, base, ticket, prompt: submittedPrompt, requestedAt, access: submittedAccess});
-    } catch (error) {if (ticket === generation.current) {if (releaseExpiredSession(error)) return; sessionRef.current = null; setUnsupported(error instanceof ApiRequestError && error.code === 'unsupported_motion'); setMessage(error instanceof Error ? error.message : '実行に失敗しました。'); setBusy(false);}}
+    } catch (error) {if (ticket === generation.current) {if (releaseExpiredSession(error)) return; sessionRef.current = null; setUnsupported(error instanceof ApiRequestError && error.code === 'unsupported_motion'); setMessage(error instanceof ApiRequestError && error.code === 'instance_limit' ? 'AIへの依頼が続いています。時間をおいて再度お試しください。作品は変更していません。' : error instanceof Error ? error.message : '実行に失敗しました。'); setBusy(false);}}
   }
   async function correctInterpretation(changes: InterpretationChanges) {
     const current = runRef.current;
@@ -291,10 +291,15 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     <p className="field-note">案をつくる操作をしたときだけ、希望・寸法・選択範囲を送ります。画像そのものは送信しません。</p>
   </section>;
   const action = <button data-design-action onClick={() => {onActivate?.(); void start();}} disabled={busy || cancelling || pollInterrupted || interpretationDraft || !prompt.trim() || !selectionReady || inputDraftActive} className="secondary">{cancelling ? '中断要求を確認中…' : run?.status === 'failed' ? 'AIを再試行する' : busy ? 'AIの案を待っています…' : 'AIで案をつくる'}</button>;
-  const repeatsValidationIssue = run?.status === 'failed' && run.error?.code === 'validation_failed'
-    && message === (run.error.message ?? run.message)
-    && run.validationIssues?.some(issue => issue.message && message.includes(issue.message));
-  const statusMessage = repeatsValidationIssue ? '候補は条件を満たしません。作品は変更していません。下の理由を確認して調整してください。' : message;
+  const failedValidation = run?.status === 'failed' && run.error?.code === 'validation_failed'
+    && message === (run.error.message ?? run.message) && !!run.validationIssues?.length;
+  const distance = run?.requestInterpretation?.interpretation.distance;
+  const requestedDistance = failedValidation && run?.baseHash === document.designHash && run.baseRevision === document.revision
+    && distance && (distance.kind === 'absolute' || distance.kind === 'relative')
+    ? distanceTargetMm(document.input.travelMm, distance) : undefined;
+  const statusMessage = failedValidation
+    ? `${requestedDistance !== undefined && Number.isFinite(requestedDistance) ? `希望${displayDimension(requestedDistance)}mm。` : ''}この条件では未成立です。作品と固定条件は変更していません。下の理由を確認し、変更してよい条件を見直してください。`
+    : message;
   return <>
     {actionTarget && createPortal(action, actionTarget)}
     {settingsTarget && createPortal(<>{settings}
@@ -308,7 +313,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
 
     {run?.status === 'clarification_required' && !busy && <button className="text-button" onClick={() => void cancel()}>この依頼を取り消す</button>}
     {visible && run?.proposal && run.status === 'awaiting_approval' && run.baseHash === document.designHash && run.baseRevision === document.revision && <div className="proposal"><h3>AIの変更案 · 採用待ち</h3>{run.proposal.fulfillsRequested === false && <p className="notice warning">希望の{run.proposal.requestedTravelMm}mmに対し、候補は{run.proposal.document.input.travelMm}mmです。希望と異なる距離であることを確認してから採用してください。</p>}<DesignComparison previewTarget={visible ? previewTarget : null} before={document} after={run.proposal.document} imageDataUrl={imageDataUrl} backgroundImageDataUrl={backgroundImageDataUrl} preserved={run.proposal.protectedConditions ?? run.intentSummary?.protections ?? document.input.locks.map(key => `${fieldNames[key] ?? key}を固定`)}><div className="button-row"><button className="primary" disabled={busy || inputDraftActive || interpretationDraft || getKitSummary(run.proposal.document).status === 'blocked'} data-design-action onClick={() => void resolveProposal(true)}>この案にする</button><button className="secondary" disabled={busy} onClick={() => void resolveProposal(false)}>この案を使わない</button></div></DesignComparison></div>}
-    {!busy && onManual && (message || run) && (!connection.enabled || unsupported || run?.status === 'failed' || !run && !!message) && <button className="text-button" onClick={onManual}>手動の調整に戻る</button>}
+    {!busy && onManual && (message || run) && (!connection.enabled || unsupported || run?.status === 'failed' || !run && !!message) && <button className="text-button" onClick={onManual}>{failedValidation ? '条件を見直す' : '手動の調整に戻る'}</button>}
     {run?.requestInterpretation && !busy && run.baseHash === document.designHash && run.baseRevision === document.revision && run.status !== 'succeeded' && run.status !== 'cancelled' && <RequestInterpretation compact={awaitingProposal} value={run.requestInterpretation} document={document} source="ai" disabled={busy || inputDraftActive || !selectionReady || !['awaiting_approval', 'clarification_required'].includes(run.status)} onCorrect={changes => void correctInterpretation(changes)} onDraftChange={setInterpretationDraft} />}
     {awaitingProposal && <button className="text-button" onClick={() => {void cancel(); onManual?.();}}>設定を編集する</button>}
     {!!run?.validationIssues?.length && <div className="notice warning"><h3>設計で見つかった問題</h3>{run.validationIssues.map(issue => <p key={issue.id}>{issue.partIds.join('・')}：{issue.message} {issue.suggestion}</p>)}</div>}
