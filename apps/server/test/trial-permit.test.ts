@@ -1,4 +1,10 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Ledger } from '../../../scripts/trial-ledger.js';
+import { trialClosureFromResponse } from '../../../scripts/trial-reconciliation.js';
+import { assessVertexUsage } from '../src/vertex-budget.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GoogleAuth } from 'google-auth-library';
 import { createDesign, SAMPLE_INPUT } from '@ugoku/core';
@@ -64,6 +70,31 @@ describe('durably reserved private-trial call grants (offline transport)', () =>
     await vi.waitFor(() => expect(run.modelUsage[0].observations?.length).toBeGreaterThan(0));
     expect(run).toMatchObject({ status: 'cancelled', dispatchClosed: true, toolCalls: 0, modelCalls: 1 });
     expect(run.proposal).toBeUndefined(); expect(current.document).toEqual(f.document); expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it('carries an actual offline SDK observation through the signed run into a reopened durable ledger', async () => {
+    const f = await fixture(1), directory = mkdtempSync(join(tmpdir(), 'ugoku-meter-chain-')), path = join(directory, 'ledger.jsonl');
+    let ledger = Ledger.create(path, { trialId: 'offline-chain', budget: { grossLimitNanoUsd: 5_000_000_000, modelPoolNanoUsd: 3_900_000_000, priorInfrastructureNanoUsd: 171_668_569, additionalInfrastructureNanoUsd: 700_000_000, safetyNanoUsd: 228_331_431, callReserveNanoUsd: 556_032_000, maxRequests: 4, maxCalls: 24 }, historicalReconciliation: { requestId: 'prior-request', reservationId: 'prior-reservation', runId: 'prior-run', sourceSha: sha, originalLedgerHash: 'b'.repeat(64), evidenceHashes: ['c'.repeat(64)], reservedCalls: 6, sentUnknownCalls: 2, priorRunSeconds: 339.978, priorBuildSeconds: 128.385 } });
+    try {
+      const grant = ledger.reserveRequest({ requestId: f.body.requestId, phase: 'cancel', maxCalls: 1, binding: { sessionId: f.session.sessionId, baseHash: f.body.baseHash, baseRevision: f.body.baseRevision, sourceSha: sha, revision: 'offline-revision' } });
+      const permit = { ...f.permit, permitId: grant.grantId, callIds: grant.callIds, priorCommittedNanoUsd: grant.priorCommittedNanoUsd };
+      const fetch = vi.fn(async () => response()); vi.stubGlobal('fetch', fetch);
+      expect(ledger.markForwarded({ requestId: grant.requestId, grantId: grant.grantId })).toBe(true);
+      const started = await f.app.inject({ method: 'POST', url: f.url + '/runs', headers: { ...f.headers, 'x-ai-trial-permit': signTrialPermit(permit, secret) }, payload: f.body });
+      const run = f.app.sessions.authorize(f.session.sessionId, f.headers.authorization).runs.get(started.json().run.id)!; await run.done;
+      const captured = await f.app.inject({ method: 'GET', url: f.url + '/runs/' + run.id, headers: f.headers });
+      expect(captured.statusCode).toBe(200);
+      const bytes = Buffer.from(captured.body), responseSha256 = createHash('sha256').update(bytes).digest('hex');
+      const report = trialClosureFromResponse(bytes, grant, { authenticatedHttps: true, origin: 'https://offline-fixture.run.app', sourceSha: sha, revision: 'offline-revision', sessionId: f.session.sessionId, responseSha256, deploymentProofSha256: 'd'.repeat(64) }, assessVertexUsage)!;
+      expect(report.attempts[0].cost).toMatchObject({ kind: 'aggregate-upper-estimate' });
+      ledger.reconcile(report, proof => proof.proofHashes.includes(responseSha256));
+      const before = ledger.getSnapshot(); expect(before.committedNanoUsd).toBe(1_112_964_000);
+      expect(run.modelUsage[0]).toMatchObject({ usage: null, usageComplete: false });
+      expect(run.modelUsage[0].usageDiagnostics?.fields.thoughtsTokenCount.state).toBe('missing');
+      ledger.close(); ledger = Ledger.open(path);
+      ledger.reconcile(report, () => { throw Error('An identical historical settlement must not run again'); });
+      expect(ledger.getSnapshot()).toEqual(before); expect(ledger.markForwarded({ requestId: grant.requestId, grantId: grant.grantId })).toBe(false);
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally { ledger.close(); rmSync(directory, { recursive: true, force: true }); }
   });
   it('checks inherited global consumption again before every actual model send', async () => {
     const f = await fixture(2); f.permit.priorCommittedNanoUsd = 2_700_000_000;

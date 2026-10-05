@@ -263,7 +263,12 @@ export class RunManager {
               // Never add the whole grant to its own per-call consumption.
               const previous = run.modelUsage.filter(item => item.dispatch).reduce((sum, item) => {
                 const costs = item.observations?.map(value => value.modelCost) ?? [];
-                const known = costs.length > 0 && costs.every(value => value.estimateUsd !== null && value.kind !== 'sent-unknown');
+                const seen = new Map<string, number>();
+                const consistent = (item.observations ?? []).every(value => Object.entries(value.usageDiagnostics.observed).every(([key, n]) => {
+                  if (seen.has(key) && seen.get(key) !== n) return false;
+                  seen.set(key, n); return true;
+                }));
+                const known = consistent && costs.length > 0 && costs.every(value => value.estimateUsd !== null && value.kind !== 'sent-unknown');
                 return sum + (known ? Math.max(...costs.map(value => Math.ceil(value.estimateUsd! * 1e9))) : permit.callReserveNanoUsd);
               }, 0);
               if (!permit.callIds.includes(attemptId) || permit.priorCommittedNanoUsd + previous + permit.callReserveNanoUsd > permit.poolNanoUsd) throw new AppError('model_budget_limit', '次のモデル送信が試験の費用管理枠に収まらないため停止しました。作品は保持しています。');
