@@ -128,10 +128,10 @@ describe('real deterministic tool loop with test-only communication', () => {
     } finally { vi.spyOn(Date, 'now').mockRestore(); }
   });
   it('keeps thinking/cache/tool token counters and distinguishes missing usage from zero billing', async () => {
-    const first = response([call('propose_design_patch', { travelMm: 15 })]);
+    const first = response([call('inspect_design')]);
     first.usageMetadata = { promptTokenCount: 50, candidatesTokenCount: 7, thoughtsTokenCount: 12, cachedContentTokenCount: 20, toolUsePromptTokenCount: 3, totalTokenCount: 72 };
     first.modelVersion = 'gemini-3.8-flash';
-    const withoutUsage = { message: final.message, finishReason: 'STOP' };
+    const withoutUsage = { message: response([call('propose_design_patch', { travelMm: 15 })]).message, finishReason: 'STOP' };
     const s = await setup(script([first, withoutUsage]));
     const run = s.app.runs.start(s.session, s.request); await run.done;
     expect(run.status).toBe('awaiting_approval');
@@ -164,8 +164,8 @@ describe('real deterministic tool loop with test-only communication', () => {
     expect(JSON.stringify(publicRun(run))).not.toContain('must-never-truncate');
   });
   it('roundtrips normalized content and call IDs; validates candidate; applies only bound approval', async () => {
-    const modelContent = response([{ thought: true, text: 'private reasoning', thoughtSignature: 'signature-a' }, call('inspect_design', {}, 'call-a'), call('propose_design_patch', { travelMm: 15 }, 'call-b')]);
-    const provider = script([modelContent, response([call('validate_design'), call('arrange_pages')]), final]);
+    const modelContent = response([{ thought: true, text: 'private reasoning', thoughtSignature: 'signature-a' }, call('inspect_design', {}, 'call-a'), call('validate_design', {}, 'call-b')]);
+    const provider = script([modelContent, response([call('propose_design_patch', { travelMm: 15 }), call('arrange_pages')])]);
     const s = await setup(provider);
     const run = s.app.runs.start(s.session, s.request); await run.done;
     expect(run.status).toBe('awaiting_approval');
@@ -175,9 +175,9 @@ describe('real deterministic tool loop with test-only communication', () => {
     expect(toolIds(provider.histories[1]!)).toEqual(['call-a', 'call-b']);
     expect(JSON.stringify(publicRun(run))).not.toContain('private reasoning');
     expect(JSON.stringify(publicRun(run))).not.toContain('signature-a');
-    expect(run.usage).toEqual({ promptTokens: 30, outputTokens: 15, thinkingTokens: 0, cachedInputTokens: 0, toolPromptTokens: 0, totalTokens: 45, responsesWithUsage: 3, responsesWithoutUsage: 0 });
+    expect(run.usage).toEqual({ promptTokens: 20, outputTokens: 10, thinkingTokens: 0, cachedInputTokens: 0, toolPromptTokens: 0, totalTokens: 30, responsesWithUsage: 2, responsesWithoutUsage: 0 });
     expect(run.mode).toBe('injected-test'); expect(run.model).toBe('gemini-3.8-flash');
-    expect(run.modelUsage).toHaveLength(3);
+    expect(run.modelUsage).toHaveLength(2);
     expect(run.modelUsage.every(meter => meter.received && meter.inputBytes > 0 && meter.outputTokenLimit === 4096)).toBe(true);
     expect(run.events.some(event => event.checkStatuses?.some(check => check.status === 'unknown'))).toBe(true);
     const proposalId = run.proposal!.id;
@@ -281,7 +281,7 @@ describe('real deterministic tool loop with test-only communication', () => {
       [[response([call('inspect_design')]), response([call('inspect_design')])], { maxModelCalls: 2 }, 'model_limit'],
       [[response([call('inspect_design'), call('validate_design')])], { maxToolCalls: 1 }, 'tool_limit'],
       [[response([call('unknown'), call('unknown')])], {}, 'repeated_failure'],
-      [[response([call('propose_design_patch', { travelMm: 15 })]), response([call('propose_design_patch', { travelMm: 15 }), call('propose_design_patch', { travelMm: 15 })])], {}, 'repeated_failure'],
+      [[response([call('propose_design_patch', { travelMm: 15 }), call('propose_design_patch', { travelMm: 15 }), call('propose_design_patch', { travelMm: 15 })])], {}, 'repeated_failure'],
     ] as [ProviderResponse[], Partial<ServerConfig>, string][]) {
       const s = await setup(script(responses), createDesign(SAMPLE_INPUT), limits); const run = s.app.runs.start(s.session, s.request); await run.done;
       expect(run.error?.code).toBe(code); expect(run.proposal).toBeUndefined();

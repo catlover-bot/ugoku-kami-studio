@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { z } from 'zod';
-import { applyIntentPatch, assertRequestBinding, distanceTargetMm, InterpretationCorrectionSchema, interpretDesignRequest, interpretModelRequest, parseDesignDocument, validateDesign, type DesignDocument, type DesignPatch, type DesignIntent, type LockKey, type CheckResult, type InterpretationCorrection, type RequestInterpretation } from '@ugoku/core';
+import { applyIntentPatch, assertRequestBinding, displayDimension, distanceTargetMm, InterpretationCorrectionSchema, interpretDesignRequest, interpretModelRequest, parseDesignDocument, validateDesign, type DesignDocument, type DesignPatch, type DesignIntent, type LockKey, type CheckResult, type InterpretationCorrection, type RequestInterpretation } from '@ugoku/core';
 import type { ConversationMessage, ToolResult, LocalTiming, LocalModel, ModelCost, ModelObservation } from './conversation.js';
 import { vertexUsageDiagnostics, type VertexUsageDiagnostics } from './vertex-budget.js';
 import { OllamaProvider } from './ollama.js';
@@ -22,7 +22,8 @@ function interpretationView(intent: DesignIntent): PublicInterpretation {
   return structuredClone({ binding: intent.binding, interpretation: intent.interpretation, clarifications: intent.clarifications, summary: intent.summary, approvalRequired: intent.approvalRequired });
 }
 type Event = { sequence: number; type: 'model' | 'tool' | 'validation'; tool?: string; message: string; designHash?: string; patch?: DesignPatch; checkStatuses?: { id: string; status: string }[]; durationMs: number };
-export type Proposal = { id: string; requestId: string; baseRevision: number; baseHash: string; patch: DesignPatch; document: DesignDocument; addedLocks: LockKey[]; protectedConditions: string[]; requestedTravelMm?: number; fulfillsRequested: boolean };
+export type DesignValidation = { source: 'deterministic-core'; designHash: string; travelMm: number; checks: CheckResult[] };
+export type Proposal = { id: string; requestId: string; baseRevision: number; baseHash: string; patch: DesignPatch; document: DesignDocument; addedLocks: LockKey[]; protectedConditions: string[]; requestedTravelMm?: number; fulfillsRequested: boolean; summarySource: 'deterministic-core' };
 export type TokenUsage = { promptTokens: number; outputTokens: number; thinkingTokens: number; cachedInputTokens: number; toolPromptTokens: number; totalTokens: number };
 export type ModelUsage = { call: number; inputBytes: number; outputTokenLimit: number; durationMs: number; received: boolean; finishReason: string | null; modelVersion: string | null; usage: TokenUsage | null; usageComplete?: boolean; usageDiagnostics?: VertexUsageDiagnostics; modelCost?: ModelCost; localTiming?: LocalTiming; localModel?: LocalModel; attemptId?: string; dispatch?: { attemptId: string; startedAt: string; transport: 'vertex-http'; sdkRetryAttempts: 1 }; observations?: ModelObservation[] };
 function tokenUsage(usage: ProviderResponse['usageMetadata']): TokenUsage | null {
@@ -37,7 +38,7 @@ export type Run = {
   requestInterpretation: PublicInterpretation;
   intent: DesignIntent; intentSummary: { protections: string[]; notes: string[] };
   status: RunState; message: string; events: Event[]; proposal?: Proposal;
-  validationIssues: CheckResult[];
+  validationIssues: CheckResult[]; requestedValidation?: DesignValidation; candidateValidation?: DesignValidation;
   constraintSuggestions: ConstraintSuggestion[]; error?: { code: string; message: string };
   modelCalls: number; toolCalls: number; elapsedMs: number; usage: TokenUsage & { responsesWithUsage: number; responsesWithoutUsage: number };
   controller: AbortController; done?: Promise<void>;
@@ -219,9 +220,26 @@ export class RunManager {
     const history: ConversationMessage[] = [{ role: 'user', text: JSON.stringify({ request: prompt, design: base, requestIntent: run.intent, ...(run.authorCorrection ? { authorCorrection: run.authorCorrection } : {}), sentData: '画像本体は送信していません。選択領域・寸法と検査結果です。' }) }];
     this.histories.set(run, history);
     const modelHistory: ConversationMessage[] = [{ role: 'user', text: JSON.stringify(modelInitialInput(base, prompt, run.intent, run.authorCorrection)) }];
+    const acceptedCorrection = structuredClone(run.authorCorrection);
+    const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+    const validation = (document: DesignDocument): DesignValidation => ({ source: 'deterministic-core', designHash: document.designHash, travelMm: document.input.travelMm, checks: validateDesign(document) });
+    const clearIntent = (intent: DesignIntent) => intent.supported && !intent.conflicts.length && !intent.clarifications.length && !intent.interpretation.unresolved.length && !intent.approvalRequired;
+    const rememberRequestedValidation = () => {
+      // This is the interpreted original request, never the last model repair.
+      // Interpretation changes invalidate it; a passing repair never overwrites it.
+      run.requestedValidation = undefined;
+      if (!clearIntent(context.intent)) return;
+      try { run.requestedValidation = validation(applyIntentPatch(base, context.intent.patch, context.intent)); }
+      catch { /* A protected or out-of-domain request has no authorized geometry. */ }
+    };
+    rememberRequestedValidation();
     const failures = new Map<string, number>();
     let unresolvedToolFailure = false;
     const finalize = (text: string) => {
+      signal.throwIfAborted(); assertCurrent(session, run.baseRevision, run.baseHash);
+      if (run.status !== 'running' || session.document.designId !== base.designId || run.prompt !== prompt || !same(run.authorCorrection, acceptedCorrection)) throw new AppError('stale_design', '依頼または基準版が変わったため、この候補を提示できません。', 409);
+      assertRequestBinding(base, prompt, run.intent.binding);
+      if (!same(context.intent, run.intent) || !same(context.interpretationProposal, run.interpretationProposal)) throw new AppError('protected_condition', '候補と希望の解釈が一致しません。');
       if (!run.intent.supported) throw new AppError('unsupported_motion', run.intent.notes.join(' ') || 'この依頼は対応する直線運動の範囲外です。');
       if (run.intent.conflicts.length || run.intent.clarifications.length || run.intent.interpretation.unresolved.length) {
         run.status = 'clarification_required';
@@ -233,13 +251,17 @@ export class RunManager {
         throw new AppError(run.constraintSuggestions.length ? 'conditions_conflict' : 'invalid_output', run.constraintSuggestions.length ? '希望と保護条件を両立する候補はできていません。条件変更案を確認し、必要な場合だけ手動で見直してください。' : '希望に対する設計候補が生成されていません。設計は変更されていません。');
       }
       const validationStart = performance.now();
-      if (context.candidate.designHash !== base.designHash) {
-        let rebuilt: DesignDocument;
-        try { rebuilt = applyIntentPatch(base, context.patch, interpretModelRequest(base, run.prompt, run.interpretationProposal, run.authorCorrection)); }
-        catch { throw new AppError('protected_condition', '変更案が作者の保護条件と一致しません。'); }
-        if (rebuilt.designHash !== context.candidate.designHash) throw new AppError('protected_condition', '変更案が作者の保護条件と一致しません。');
-      }
-      const checks = validateDesign(context.candidate);
+      const checkedIntent = interpretModelRequest(base, prompt, run.interpretationProposal, acceptedCorrection);
+      if (!clearIntent(checkedIntent) || !same(checkedIntent, run.intent)) throw new AppError('protected_condition', '変更案が現在の希望・訂正・保護条件と一致しません。');
+      let rebuilt: DesignDocument;
+      try { rebuilt = applyIntentPatch(base, context.patch, checkedIntent); }
+      catch { throw new AppError('protected_condition', '変更案が作者の保護条件と一致しません。'); }
+      if (rebuilt.designHash !== context.candidate.designHash || rebuilt.designId !== context.candidate.designId || rebuilt.revision !== context.candidate.revision) throw new AppError('protected_condition', '変更案が作者の保護条件と一致しません。');
+      // The rebuilt canonical document supplies both the proposal and checks.
+      // No model-supplied geometry, stale check array or optimistic prose is authority.
+      context.candidate = rebuilt;
+      run.candidateValidation = validation(rebuilt);
+      const checks = run.candidateValidation.checks;
       run.validationIssues = checks.filter(check => check.status === 'fail');
       run.events.push({ sequence: run.events.length + 1, type: 'validation', message: '最終候補を再検査しました。', designHash: context.candidate.designHash, checkStatuses: checks.map(check => ({ id: check.id, status: check.status })), durationMs: performance.now() - validationStart });
       if (run.validationIssues.length) {
@@ -248,8 +270,15 @@ export class RunManager {
       }
       run.message = text;
       if (context.candidate.designHash !== base.designHash) {
-        run.proposal = { id: randomUUID(), requestId: run.requestId, baseRevision: run.baseRevision, baseHash: run.baseHash, patch: structuredClone(context.patch), document: structuredClone(context.candidate), addedLocks: context.candidate.input.locks.filter(key => !base.input.locks.includes(key)), protectedConditions: [...run.intentSummary.protections], requestedTravelMm: run.intent.explicitTravelMm, fulfillsRequested: fulfillsInterpretation(base, context.candidate, run.intent) };
-        if (!run.proposal.fulfillsRequested) run.message = run.intent.explicitTravelMm !== undefined ? `希望は${run.intent.explicitTravelMm}mm、候補は${context.candidate.input.travelMm}mmです。違いを確認してから採用してください。\n${text}` : `これは希望と異なる代案です。解釈と設計差分を確認してから採用してください。\n${text}`;
+        run.proposal = { id: randomUUID(), requestId: run.requestId, baseRevision: run.baseRevision, baseHash: run.baseHash, patch: structuredClone(context.patch), document: structuredClone(context.candidate), addedLocks: context.candidate.input.locks.filter(key => !base.input.locks.includes(key)), protectedConditions: protectionLabels(base, checkedIntent), requestedTravelMm: checkedIntent.explicitTravelMm, fulfillsRequested: fulfillsInterpretation(base, context.candidate, checkedIntent), summarySource: 'deterministic-core' };
+        const requestedFailures = run.requestedValidation?.checks.filter(check => check.status === 'fail') ?? [];
+        const requested = checkedIntent.explicitTravelMm;
+        const candidateDistance = displayDimension(context.candidate.input.travelMm);
+        const difference = run.proposal.fulfillsRequested ? `希望に沿う${candidateDistance}mmの候補です。`
+          : `${requested !== undefined ? `希望は${displayDimension(requested)}mm、候補は${candidateDistance}mmです。` : 'これは希望と異なる代案です。'}違いを確認してから採用してください。`;
+        const reason = !run.proposal.fulfillsRequested && requestedFailures.length ? `希望${requested !== undefined ? `の${displayDimension(requested)}mm` : ''}は、現在の条件と検査した配置では成立しません。${requestedFailures.map(check => `${check.partIds.join('・')}：${check.message}`).join(' ')}` : '';
+        const preserved = [context.candidate.input.widthMm === base.input.widthMm && context.candidate.input.heightMm === base.input.heightMm ? '絵の大きさを維持しています。' : '', context.candidate.layout.sheets === base.layout.sheets ? `型紙は${context.candidate.layout.sheets}枚のままです。` : ''].filter(Boolean).join('');
+        run.message = [reason, difference, `${run.proposal.fulfillsRequested ? '候補' : '代案'}の寸法・配置を確認しました。${preserved}採用するまで元の設計は変わりません。実物の動作は未検証です。`].filter(Boolean).join('\n');
         run.status = 'awaiting_approval';
       } else { run.status = 'succeeded'; run.message = `設計の変更はありません。\n${text}`; }
     };
@@ -354,10 +383,10 @@ export class RunManager {
               run.interpretationProposal = structuredClone(context.interpretationProposal);
               run.requestInterpretation = interpretationView(run.intent);
               run.intentSummary = { protections: protectionLabels(base, run.intent), notes: [...run.intent.notes] };
-              run.validationIssues = [];
+              run.validationIssues = []; run.candidateValidation = undefined; rememberRequestedValidation();
               unresolvedToolFailure = false;
             }
-            if (call.name === 'propose_design_patch' || call.name === 'validate_design') run.validationIssues = context.candidate.checks.filter(check => check.status === 'fail');
+            if (call.name === 'propose_design_patch' || call.name === 'validate_design') { run.candidateValidation = validation(context.candidate); run.validationIssues = run.candidateValidation.checks.filter(check => check.status === 'fail'); }
             if (call.name === 'propose_design_patch' || call.name === 'propose_constraint_change' && result.ignored !== true) unresolvedToolFailure = false;
             if (call.name === 'propose_constraint_change' && result.ignored === true) {
               message = '直近候補と同じ条件のため助言を追加せず、検査済み候補を保持しました。';
@@ -378,20 +407,20 @@ export class RunManager {
         }
         history.push({ role: 'tool', results });
         modelHistory.push({ role: 'tool', results: results.map(result => ({ ...result, response: modelToolResult(result.name, result.response) })) });
-        // A tool-bearing response can already include a short explanation. Once
-        // its entire batch succeeds and the exact requested candidate passes,
-        // a second model turn merely to paraphrase those results is unnecessary.
-        // Tool-only responses, alternatives, failures and ambiguities keep the
-        // normal loop. Never skip a remaining call in this response or adopt.
-        if (content.text.trim() && calls.some(call => call.name === 'propose_design_patch')
-          && !batchFailed && !unresolvedToolFailure && context.candidate.designHash !== base.designHash
-          && fulfillsInterpretation(base, context.candidate, run.intent)
-          && !context.candidate.checks.some(check => check.status === 'fail')) {
+        // Only after every action has returned, a fully checked candidate can
+        // be handed off without asking a model to paraphrase its own tool call.
+        // Alternatives remain explicitly unfulfilled and require author approval.
+        if (calls.some(call => call.name === 'propose_design_patch')
+          && !batchFailed && !unresolvedToolFailure && clearIntent(context.intent)
+          && context.candidate.designHash !== base.designHash
+          && !validateDesign(context.candidate).some(check => check.status === 'fail')) {
           finalize('希望に沿う候補を寸法・紙面で確認しました。採用するまで元の設計は変わりません。実物の動作は未検証です。');
           return;
         }
       }
-      throw new AppError('model_limit', 'モデル呼び出し回数の上限に達しました。');
+      const knownFailures = run.validationIssues.length ? run.validationIssues : run.requestedValidation?.checks.filter(check => check.status === 'fail') ?? [];
+      if (!run.validationIssues.length) run.validationIssues = structuredClone(knownFailures);
+      throw new AppError('model_limit', `モデル呼び出し回数の上限に達しました。採用可能な候補はありません。作品は変更していません。${knownFailures.length ? ` 検査した配置の問題：${knownFailures.map(check => `${check.partIds.join('・')}：${check.message}`).join(' ')}` : ''} 手動で条件を見直せます。`);
     } catch (error) {
       run.proposal = undefined;
       if (run.status !== 'cancelled') {

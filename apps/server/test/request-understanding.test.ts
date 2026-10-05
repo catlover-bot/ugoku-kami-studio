@@ -47,7 +47,7 @@ describe('Goal006 actual API / RunManager / core tools with injected mock model,
     const original = createDesign({ ...SAMPLE_INPUT, direction: prompt.includes('右') ? 'left' : 'right' });
     const s = await setup(scripted([response([call('propose_design_patch')]), final]), original);
     const run = await s.start(prompt);
-    expect(run.status).toBe('awaiting_approval'); expect(run.modelCalls).toBe(2); expect(run.toolCalls).toBe(1);
+    expect(run.status).toBe('awaiting_approval'); expect(run.modelCalls).toBe(1); expect(run.toolCalls).toBe(1);
     expect(run.proposal!.document.input).toMatchObject({ travelMm: travel, direction });
     expect(run.proposal!.fulfillsRequested).toBe(true);
     expect(run.proposal!.document.checks.some(check => check.status === 'fail')).toBe(false);
@@ -59,14 +59,14 @@ describe('Goal006 actual API / RunManager / core tools with injected mock model,
     const prompt = '首のストロークをひと伸び分足したい';
     const interpreted = meaning({ kind: 'relative', delta: .5, unit: 'cm' });
     const signed: Part = { ...call('propose_request_interpretation', interpreted), thoughtSignature: 'opaque-private-fixture-signature' };
-    const provider = scripted([response([signed, call('propose_design_patch')]), final]);
+    const provider = scripted([response([signed]), response([call('propose_design_patch')])]);
     const s = await setup(provider);
     const run = await s.start(prompt);
     expect(run.status).toBe('awaiting_approval'); expect(run.proposal!.document.input.travelMm).toBe(25);
     expect(run.requestInterpretation.interpretation.distance).toEqual(interpreted.distance);
     expect(run.toolCalls).toBe(2); expect(run.modelCalls).toBe(2);
-    expect(provider.histories[1]![1]).toEqual(response([signed, call('propose_design_patch')]).message);
-    expect(toolIds(provider.histories[1]!)).toEqual(['mock-propose_request_interpretation', 'mock-propose_design_patch']);
+    expect(provider.histories[1]![1]).toEqual(response([signed]).message);
+    expect(toolIds(provider.histories[1]!)).toEqual(['mock-propose_request_interpretation']);
     expect(JSON.stringify(publicRun(run))).not.toMatch(/opaque-private-fixture-signature|data:image|test-request-understanding-secret/);
   });
 
@@ -122,7 +122,7 @@ describe('Goal006 actual API / RunManager / core tools with injected mock model,
   });
 
   it('accumulates user corrections, revalidates a changed interpretation and invalidates the old candidate', async () => {
-    const provider = scripted([response([call('propose_design_patch')]), final, response([call('propose_design_patch')]), final, response([call('propose_design_patch')]), final]);
+    const provider = scripted([response([call('propose_design_patch')]), response([call('propose_design_patch')]), response([call('propose_design_patch')])]);
     const s = await setup(provider), prompt = 'あと5mm動かして';
     const original = await s.start(prompt), oldProposal = original.proposal!;
     const second = await s.start(prompt, original, { distance: { kind: 'absolute', value: 15, unit: 'mm' } });
@@ -135,7 +135,7 @@ describe('Goal006 actual API / RunManager / core tools with injected mock model,
   });
 
   it('retains an explicitly ignored unresolved clause across later field corrections, but rejects invented clauses', async () => {
-    const provider = scripted([final, response([call('propose_design_patch')]), final, response([call('propose_design_patch')]), final]);
+    const provider = scripted([final, response([call('propose_design_patch')]), response([call('propose_design_patch')])]);
     const s = await setup(provider), prompt = 'あと5mm動かして、3秒かけて戻す';
     const first = await s.start(prompt);
     expect(first.status).toBe('clarification_required');
@@ -202,7 +202,7 @@ describe('Goal006 actual API / RunManager / core tools with injected mock model,
       correction: { runId: run.id, requestId: run.requestId, changes: { binding: run.requestInterpretation.binding, distance: { kind: 'absolute', value: 5, unit: 'mm' } } },
     } });
     expect(result.statusCode).toBe(409); expect(result.json().error.code).toBe('stale_interpretation');
-    expect(provider.generate).toHaveBeenCalledTimes(2); expect(s.session.document).toEqual(s.document);
+    expect(provider.generate).toHaveBeenCalledTimes(1); expect(s.session.document).toEqual(s.document);
   });
 
   it('ignores a delayed interpretation after cancellation and counts interpretation calls inside existing budgets', async () => {

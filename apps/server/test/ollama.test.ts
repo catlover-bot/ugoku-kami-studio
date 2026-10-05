@@ -72,7 +72,7 @@ describe('local-only Ollama adapter against a fake loopback HTTP runtime; never 
   });
   it('runs real deterministic tools and bound approval with native continuation; stores timings but no thoughts', async () => {
     let chats = 0;
-    const local = await fixture(call => call.path !== '/api/chat' ? undefined : ++chats === 1 ? { ...completion('', [{ id: 'native-call-1', function: { name: 'propose_design_patch', arguments: {} } }]), message: { ...completion('', [{ id: 'native-call-1', function: { name: 'propose_design_patch', arguments: {} } }]).message, thinking: 'private-local-thought' } } : completion('決定的な検査済みの候補です。'));
+    const local = await fixture(call => call.path !== '/api/chat' ? undefined : ++chats === 1 ? { ...completion('', [{ id: 'native-call-1', function: { name: 'inspect_design', arguments: {} } }]), message: { ...completion('', [{ id: 'native-call-1', function: { name: 'inspect_design', arguments: {} } }]).message, thinking: 'private-local-thought' } } : completion('', [{ id: 'native-call-2', function: { name: 'propose_design_patch', arguments: {} } }]));
     const { app, session, run, body } = await runApp(local.config);
     expect(run.status).toBe('awaiting_approval'); expect(run.mode).toBe('ollama'); expect(run.provider).toBe('ollama');
     expect(run.proposal!.document.input.travelMm).toBe(25); expect(session.document.input.travelMm).toBe(20);
@@ -82,8 +82,8 @@ describe('local-only Ollama adapter against a fake loopback HTTP runtime; never 
     expect(chat[0]!.body).toMatchObject({ stream: false, think: false, truncate: false, shift: false, options: { num_ctx: 8192, num_predict: 1024 }, tools: expect.any(Array) });
     const messages = chat[1]!.body!.messages as { role: string; thinking?: string; tool_name?: string; tool_call_id?: string; content: string }[];
     expect(messages.at(-2)?.thinking).toBe('private-local-thought');
-    expect(messages.at(-1)).toMatchObject({ role: 'tool', tool_name: 'propose_design_patch', tool_call_id: 'native-call-1' });
-    expect(JSON.parse(messages.at(-1)!.content)).toMatchObject({ candidateTravelMm: 25, applied: false });
+    expect(messages.at(-1)).toMatchObject({ role: 'tool', tool_name: 'inspect_design', tool_call_id: 'native-call-1' });
+    expect(JSON.parse(messages.at(-1)!.content)).toMatchObject({ document: { input: { travelMm: 20 } } });
     expect(JSON.stringify(publicRun(run))).not.toContain('private-local-thought');
     const approved = app.runs.approve(session, run.proposal!.id, { requestId: body.requestId, baseRevision: body.baseRevision, baseHash: body.baseHash });
     expect(approved.document.input.travelMm).toBe(25); expect(approved.document.revision).toBe(2);
