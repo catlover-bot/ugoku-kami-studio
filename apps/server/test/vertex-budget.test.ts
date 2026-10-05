@@ -22,9 +22,10 @@ describe('Vertex usage estimates and next-call reservations (no live requests)',
     budget.settle(ticket, complete); // Cannot retroactively release a settled unknown call.
     expect(budget.snapshot().reservedUsd).toBe(0.556032);
   });
-  it('releases reservations only for complete usage and charges thinking, unclassified totals and cached input conservatively', () => {
+  it('settles consistent itemized usage without charging tool/cache tokens twice', () => {
     expect(vertexUsageCostUsd(complete)).toBe(0.0002625);
-    expect(vertexUsageCostUsd({ ...complete, cachedContentTokenCount: 90, toolUsePromptTokenCount: 2, totalTokenCount: 120 })).toBe(0.000303);
+    expect(vertexUsageCostUsd({ ...complete, cachedContentTokenCount: 90, toolUsePromptTokenCount: 2, totalTokenCount: 117 })).toBe(0.0002655);
+    expect(vertexUsageCostUsd({ ...complete, toolUsePromptTokenCount: 2, totalTokenCount: 120 })).toBeNull();
     const budget = new VertexBudget(0.56, 32768, 2048), first = budget.reserve();
     budget.settle(first, complete); const second = budget.reserve();
     expect(budget.snapshot()).toMatchObject({ callsReserved: 2, callsWithCompleteUsage: 1, callsPending: 1, accountedUsd: 0.5562945 });
@@ -42,7 +43,7 @@ describe('Vertex usage estimates and next-call reservations (no live requests)',
   });
   it('retains partial numeric observations, distinguishes explicit zero from missing, and drops all nonnumeric/arbitrary metadata', () => {
     const partial = { promptTokenCount: 100, candidatesTokenCount: 10, totalTokenCount: 110, thoughtsTokenCount: undefined, text: 'not public', promptTokensDetails: [{ text: 'not public' }] };
-    expect(vertexUsageDiagnostics(partial)).toEqual({ source: 'sdk-usage-metadata', metadataPresent: true, observed: { promptTokenCount: 100, candidatesTokenCount: 10, totalTokenCount: 110 }, missingRequired: ['thoughtsTokenCount'], invalidFields: [], inconsistencies: [] });
+    expect(vertexUsageDiagnostics(partial)).toMatchObject({ source: 'sdk-usage-metadata', metadataPresent: true, observed: { promptTokenCount: 100, candidatesTokenCount: 10, totalTokenCount: 110 }, missingRequired: ['thoughtsTokenCount'], invalidFields: [], inconsistencies: [] });
     expect(vertexUsageCostUsd(partial)).toBeNull();
     expect(vertexUsageDiagnostics({ ...partial, thoughtsTokenCount: 0 }).missingRequired).toEqual([]);
     expect(vertexUsageCostUsd({ ...partial, thoughtsTokenCount: 0 })).toBe(0.000225);
@@ -83,19 +84,19 @@ describe('Vertex usage estimates and next-call reservations (no live requests)',
     await expect(provider.generate([{ role: 'user', text: 'no automatic retry' }], new AbortController().signal)).rejects.toMatchObject({ code: 'model_budget_limit' });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
-  it('marks partial Vertex usage unknown in public run meters and exposes reservations separately from usage estimates', async () => {
+  it('keeps an incomplete display breakdown while exposing a conservative aggregate estimate separately', async () => {
     vi.spyOn(GoogleAuth.prototype, 'getRequestHeaders').mockResolvedValue(new Headers({ authorization: 'Bearer synthetic-test-only' }));
     const fetch = vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { role: 'model', parts: [{ text: '模擬の応答です。' }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 10, totalTokenCount: 110 } }), { headers: { 'content-type': 'application/json' } })); vi.stubGlobal('fetch', fetch);
     const app = await createApp({ config: readConfig(settings) }); apps.push(app);
     const document = createDesign(SAMPLE_INPUT), created = app.sessions.create(document);
     const session = app.sessions.authorize(created.sessionId, `Bearer ${created.token}`);
     const run = app.runs.start(session, { requestId: 'budget-incomplete-1', prompt: '距離を15mmにしてください', baseRevision: document.revision, baseHash: document.designHash }); await run.done;
-    expect(run.modelUsage[0]).toMatchObject({ received: true, usageComplete: false, usage: null, modelCost: { kind: 'reservation', usageEstimateUsd: null, reservationUsd: 0.556032 } });
+    expect(run.modelUsage[0]).toMatchObject({ received: true, usageComplete: false, usage: null, modelCost: { kind: 'aggregate-upper-estimate', usageEstimateUsd: null, estimateUsd: 0.000825, reservationUsd: 0.556032 } });
     const publicResult = (await app.inject({ url: `/api/sessions/${created.sessionId}/runs/${run.id}`, headers: { authorization: `Bearer ${created.token}` } })).json();
-    expect(publicResult.run.modelUsage[0].usageDiagnostics).toEqual({ source: 'sdk-usage-metadata', metadataPresent: true, observed: { promptTokenCount: 100, candidatesTokenCount: 10, totalTokenCount: 110 }, missingRequired: ['thoughtsTokenCount'], invalidFields: [], inconsistencies: [] });
+    expect(publicResult.run.modelUsage[0].usageDiagnostics).toMatchObject({ source: 'sdk-usage-metadata', metadataPresent: true, observed: { promptTokenCount: 100, candidatesTokenCount: 10, totalTokenCount: 110 }, missingRequired: ['thoughtsTokenCount'], invalidFields: [], inconsistencies: [] });
     expect(run.usage.responsesWithoutUsage).toBe(1); expect(run.usage.responsesWithUsage).toBe(0);
     const status = (await app.inject('/api/status')).json();
-    expect(status.modelBudget).toMatchObject({ callsWithUnknownUsage: 1, reservedUsd: 0.556032, scope: 'this-provider-instance' });
+    expect(status.modelBudget).toMatchObject({ callsWithAggregateEstimate: 1, aggregateUpperEstimateUsd: 0.000825, reservedUsd: 0, scope: 'this-provider-instance' });
     expect(JSON.stringify(status)).not.toMatch(/synthetic-test|offline-project/);
     expect(session.document).toEqual(document);
   });

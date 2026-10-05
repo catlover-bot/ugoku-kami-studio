@@ -1,9 +1,10 @@
 import { GoogleGenAI, type Content, type ThinkingLevel } from '@google/genai';
+import { randomUUID } from 'node:crypto';
 import { DEFAULT_MODEL, GEMINI_ENDPOINT, VERTEX_ENDPOINT, VERTEX_MODEL, type ServerConfig } from './config.js';
 import { AppError } from './errors.js';
 import { declarations } from './tools.js';
-import { VertexBudget, vertexUsageCostUsd } from './vertex-budget.js';
-import type { AssistantMessage, ConversationMessage, ModelProvider, ProviderResponse } from './conversation.js';
+import { VertexBudget, assessVertexUsage, vertexCallReserveUsd, vertexUsageDiagnostics } from './vertex-budget.js';
+import type { AssistantMessage, ConversationMessage, ModelCallContext, ModelObservation, ModelProvider, ProviderResponse } from './conversation.js';
 export type { AssistantMessage, ConversationMessage, ModelProvider, ProviderResponse, ToolCall, ToolResult } from './conversation.js';
 
 export const SYSTEM_INSTRUCTION = `あなたは「うごく紙工房」の設計補助です。日本語で簡潔に答えます。
@@ -38,6 +39,27 @@ export function assertModelInput(config: ServerConfig, messages: ConversationMes
   if (bytes > config.maxInputBytes) throw new AppError('input_limit', 'AIへ送る設計と会話履歴が入力上限に達しました。設計は変更されていません。');
   return bytes;
 }
+const record = (value: unknown): Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
+const safeLabel = (value: unknown, pattern: RegExp) => typeof value === 'string' && pattern.test(value) ? value : null;
+/** Read only a bounded clone. Never retain/log the JSON or its content parts. */
+async function usageEnvelope(response: Response): Promise<Record<string, unknown>> {
+  const reader = response.clone().body?.getReader();
+  if (!reader) return {};
+  const chunks: Uint8Array[] = []; let bytes = 0;
+  try {
+    while (true) {
+      const next = await reader.read(); if (next.done) break;
+      bytes += next.value.length;
+      if (bytes > 512 * 1024) { void reader.cancel().catch(() => {}); return {}; }
+      chunks.push(next.value);
+    }
+    const body = record(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+    const candidate = Array.isArray(body.candidates) ? record(body.candidates[0]) : {};
+    // The returned object has no content, thought, signature, headers or error.
+    return { usageMetadata: body.usageMetadata, responseId: body.responseId, modelVersion: body.modelVersion, finishReason: candidate.finishReason };
+  } catch { return {}; }
+  finally { reader.releaseLock(); }
+}
 /** No fallback. Original SDK Content remains private and is replayed byte-for-byte structurally. */
 class GoogleContentProvider implements ModelProvider {
   private originals = new WeakMap<AssistantMessage, Content>();
@@ -53,24 +75,48 @@ class GoogleContentProvider implements ModelProvider {
     });
   }
   inputBytes(messages: ConversationMessage[]): number { return Buffer.byteLength(JSON.stringify(geminiRequest(this.config, this.contents(messages))), 'utf8'); }
-  async generate(messages: ConversationMessage[], signal: AbortSignal): Promise<ProviderResponse> {
+  async generate(messages: ConversationMessage[], signal: AbortSignal, context?: ModelCallContext): Promise<ProviderResponse> {
     signal.throwIfAborted(); assertModelInput(this.config, messages, this);
     const request = geminiRequest(this.config, this.contents(messages));
-    const ticket = this.budget?.reserve(); // Synchronous reservation before ADC/HTTP dispatch.
+    const vertex = this.config.provider === 'vertex';
+    const identity = { attemptId: context?.attemptId ?? randomUUID(), call: context?.call ?? 1 };
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(identity.attemptId) || !Number.isSafeInteger(identity.call) || identity.call < 1) throw new AppError('invalid_attempt', 'モデル呼び出しの識別子が不正です。');
+    const reservationUsd = vertexCallReserveUsd(this.config.maxInputBytes, this.config.maxOutputTokens);
+    let ticket: number | undefined, httpAttempts = 0;
+    const observe = async (source: ModelObservation['source'], envelope: Record<string, unknown>) => {
+      const usage = envelope.usageMetadata;
+      if (ticket !== undefined) this.budget!.settle(ticket, usage);
+      const observation: ModelObservation = { ...identity, source, observedAt: new Date().toISOString(), sdkVersion: '2.27.0', model: this.config.model, modelVersion: safeLabel(envelope.modelVersion, /^gemini-[A-Za-z0-9._-]{1,96}$/), responseId: safeLabel(envelope.responseId, /^[A-Za-z0-9._:-]{1,256}$/), finishReason: safeLabel(envelope.finishReason, /^[A-Z_]{1,64}$/), aborted: signal.aborted, usageDiagnostics: { ...vertexUsageDiagnostics(usage), source: source === 'http-response' ? 'http-usage-metadata' : 'sdk-usage-metadata' }, modelCost: { ...assessVertexUsage(usage), reservationUsd } };
+      try { await context?.onObservation?.(observation); }
+      catch { throw new AppError('usage_record_failed', 'モデル使用量の記録を完了できませんでした。追加の呼び出しを停止します。'); }
+      return observation;
+    };
+    const fetchObserved = async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (httpAttempts++ !== 0) throw new AppError('unexpected_retry', '追加のHTTP送信を停止しました。');
+      signal.throwIfAborted();
+      ticket = this.budget?.reserve();
+      try {
+        await context?.beforeDispatch?.(); signal.throwIfAborted();
+        await context?.onDispatch?.({ ...identity, dispatchedAt: new Date().toISOString() }); signal.throwIfAborted();
+      } catch (error) { if (ticket !== undefined) this.budget!.releaseNotSent(ticket); throw error; }
+      const response = await globalThis.fetch(input, init);
+      await observe('http-response', await usageEnvelope(response));
+      return response;
+    };
     let response;
     try {
-      response = await this.client.models.generateContent({ ...request, config: { ...request.config, abortSignal: signal, httpOptions: { timeout: this.config.runTimeoutMs, retryOptions: { attempts: 1 } } } });
-      if (ticket !== undefined) this.budget!.settle(ticket, signal.aborted ? undefined : response.usageMetadata);
+      response = await this.client.models.generateContent({ ...request, config: { ...request.config, abortSignal: signal, httpOptions: { timeout: this.config.runTimeoutMs, retryOptions: { attempts: 1 }, ...(vertex ? { fetch: fetchObserved } : {}) } } });
+      if (vertex) await observe('sdk-response', { usageMetadata: response.usageMetadata, responseId: response.responseId, modelVersion: response.modelVersion, finishReason: response.candidates?.[0]?.finishReason });
     } catch (error) {
-      if (ticket !== undefined) this.budget!.settle(ticket); // Failed/aborted requests do not become free.
+      if (ticket !== undefined) this.budget!.settle(ticket); // No observed usage means a retained reservation.
       throw error;
     }
+    signal.throwIfAborted(); // Usage is retained first; a late response never becomes a new candidate.
     const candidate = response.candidates?.[0], content = candidate?.content;
     if (content && Buffer.byteLength(JSON.stringify(content), 'utf8') > 100_000) throw new AppError('invalid_output', 'AIの応答が大きすぎます。');
     const message: AssistantMessage = { role: 'assistant', text: content?.parts?.filter(part => !part.thought && part.text).map(part => part.text).join('\n') ?? '', calls: content?.parts?.flatMap(part => part.functionCall ? [{ name: part.functionCall.name || '', args: part.functionCall.args ?? {}, ...(part.functionCall.id ? { id: part.functionCall.id } : {}) }] : []) ?? [] };
     if (content) this.originals.set(message, structuredClone(content));
-    const usageEstimateUsd = this.budget && !signal.aborted ? vertexUsageCostUsd(response.usageMetadata) : null;
-    return { message, finishReason: candidate?.finishReason, refusal: !!response.promptFeedback?.blockReason, usageMetadata: response.usageMetadata, modelVersion: response.modelVersion, ...(this.budget ? { modelCost: { kind: usageEstimateUsd === null ? 'reservation' as const : 'usage-estimate' as const, usageEstimateUsd, reservationUsd: this.budget.snapshot().nextCallReserveUsd } } : {}) };
+    return { message, finishReason: candidate?.finishReason, refusal: !!response.promptFeedback?.blockReason, usageMetadata: response.usageMetadata, modelVersion: response.modelVersion, ...(vertex ? { modelCost: { ...assessVertexUsage(response.usageMetadata), reservationUsd } } : {}) };
   }
 }
 
