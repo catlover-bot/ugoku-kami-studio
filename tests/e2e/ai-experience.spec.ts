@@ -127,10 +127,12 @@ test.describe('Goal005 AI experience — offline HTTP fixtures', () => {
     await expect(page.locator('.connection')).toHaveText('模擬AI（テスト）');
     await openRequest(page);
     await requestButton(page).click();
-    await expect(page.getByRole('dialog',{name:'設定',exact:true})).toBeVisible();
-    await expect(page.locator('.ai-panel').getByRole('status',{includeHidden:true})).toContainText('アクセスコードを入力');
+    // Missing AI access keeps the editor usable; settings open only on request.
+    await expect(page.getByRole('dialog',{name:'設定',exact:true})).toBeHidden();
+    await expect(page.locator('.ai-panel').getByRole('status')).toContainText('AIだけにアクセスコードが必要');
     expect(calls).toBe(0);
-
+    await page.locator('.ai-panel').getByRole('button', { name: 'AIの設定を開く', exact: true }).click();
+    await expect(page.getByRole('dialog',{name:'設定',exact:true})).toBeVisible();
     await expect(page.locator('.ai-settings')).toContainText('実モデルへの送信はありません');
     await page.getByLabel('AIアクセスコード').fill(ACCESS); await page.getByRole('dialog', {name: '設定', exact: true}).getByRole('button', {name: '閉じる', exact: true}).click();
     const distance = page.getByRole('textbox', { name: '動く距離（mm）', exact: true });
