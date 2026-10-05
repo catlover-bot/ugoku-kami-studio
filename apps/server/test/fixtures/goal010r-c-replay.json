@@ -1,0 +1,793 @@
+{
+  "provenance": {
+    "kind": "reconstructed-provider-fixture-from-preserved-real-tool-events",
+    "sourceSha": "653a0c7a33f065570b4beed0a803242ceace7ebc",
+    "sourceRunFileSha256": "c00d93c7ec4f5f406a73d4354113a728834ee9827a2c34c2d02046aa63258c18",
+    "sourceProjectFileSha256": "37f3fa97a214396bc4d3dce5732273bbf322dfde16f2292cbaea2f8ad963ab54",
+    "originalNetworkPayloadAvailable": false,
+    "description": "Actual recorded tool names/arguments/order and design hashes are preserved. Neutral provider envelopes, call IDs and empty text are reconstructed locally to test textless handoff. This is not a new live model evaluation or an exact raw HTTP replay."
+  },
+  "project": {
+    "format": "ugoku-kami-project",
+    "document": {
+      "schemaVersion": 1,
+      "designId": "goal009-comparison-fish",
+      "revision": 3,
+      "designHash": "5b3d233852f77d3d47610aecb9fbf49a8b61c345b6faa8f0236252850b18fdd8",
+      "unit": "mm",
+      "mechanism": "single-pull-tab",
+      "input": {
+        "title": "fish",
+        "image": {
+          "id": "a32fa7b1fd681c4a8220f23486fa682efea5c73ad205969623ec376fc36c355f",
+          "widthPx": 800,
+          "heightPx": 550,
+          "mimeType": "image/png"
+        },
+        "selection": {
+          "x": 350,
+          "y": 170,
+          "width": 300,
+          "height": 210
+        },
+        "direction": "right",
+        "travelMm": 30,
+        "widthMm": 160,
+        "heightMm": 110,
+        "maxSheets": 1,
+        "paperThicknessMm": 0.25,
+        "clearanceMm": 0.8,
+        "locks": [
+          "clearanceMm",
+          "heightMm",
+          "maxSheets",
+          "paperThicknessMm",
+          "selection",
+          "widthMm"
+        ]
+      },
+      "artwork": {
+        "placement": {
+          "x": 0,
+          "y": 0,
+          "width": 160,
+          "height": 110
+        },
+        "selectionMm": {
+          "x": 70,
+          "y": 34,
+          "width": 60,
+          "height": 42
+        },
+        "mask": "white-rectangle"
+      },
+      "motion": {
+        "direction": "right",
+        "axis": {
+          "x": 1,
+          "y": 0
+        },
+        "minMm": 0,
+        "maxMm": 30,
+        "connector": {
+          "x": 100,
+          "y": 55
+        },
+        "guideCenters": [
+          {
+            "x": 57,
+            "y": 55
+          },
+          {
+            "x": 82,
+            "y": 55
+          }
+        ],
+        "slot": {
+          "x": 95,
+          "y": 53.5,
+          "width": 40,
+          "height": 3
+        }
+      },
+      "parts": [
+        {
+          "id": "B1",
+          "label": "固定台紙",
+          "role": "base",
+          "widthMm": 160,
+          "heightMm": 110,
+          "layer": "base",
+          "assembly": {
+            "x": 0,
+            "y": 0,
+            "width": 160,
+            "height": 110
+          },
+          "attachedTo": [],
+          "cuts": [
+            {
+              "x": 95,
+              "y": 53.5,
+              "width": 40,
+              "height": 3
+            }
+          ],
+          "folds": [],
+          "glue": [
+            {
+              "rect": {
+                "x": 52,
+                "y": 42.2,
+                "width": 10,
+                "height": 5
+              },
+              "label": "BACK: guide foot"
+            },
+            {
+              "rect": {
+                "x": 52,
+                "y": 62.8,
+                "width": 10,
+                "height": 5
+              },
+              "label": "BACK: guide foot"
+            },
+            {
+              "rect": {
+                "x": 77,
+                "y": 42.2,
+                "width": 10,
+                "height": 5
+              },
+              "label": "BACK: guide foot"
+            },
+            {
+              "rect": {
+                "x": 77,
+                "y": 62.8,
+                "width": 10,
+                "height": 5
+              },
+              "label": "BACK: guide foot"
+            }
+          ]
+        },
+        {
+          "id": "M1",
+          "label": "可動する絵",
+          "role": "artwork",
+          "widthMm": 60,
+          "heightMm": 42,
+          "layer": "front",
+          "assembly": {
+            "x": 70,
+            "y": 34,
+            "width": 60,
+            "height": 42
+          },
+          "attachedTo": [
+            "C1"
+          ],
+          "cuts": [],
+          "folds": [],
+          "glue": []
+        },
+        {
+          "id": "T1",
+          "label": "引っぱりタブ",
+          "role": "pull-tab",
+          "widthMm": 164,
+          "heightMm": 14,
+          "layer": "back",
+          "assembly": {
+            "x": 14,
+            "y": 48,
+            "width": 164,
+            "height": 14
+          },
+          "attachedTo": [
+            "C1",
+            "S1",
+            "S2"
+          ],
+          "cuts": [],
+          "folds": [],
+          "glue": [
+            {
+              "rect": {
+                "x": 82,
+                "y": 7,
+                "width": 8,
+                "height": 6
+              },
+              "label": "C1 bottom"
+            },
+            {
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 8,
+                "height": 14
+              },
+              "label": "S1 after threading"
+            },
+            {
+              "rect": {
+                "x": 73,
+                "y": 0,
+                "width": 8,
+                "height": 14
+              },
+              "label": "S2 after threading"
+            }
+          ]
+        },
+        {
+          "id": "G1",
+          "label": "ガイド 1",
+          "role": "guide",
+          "widthMm": 10,
+          "heightMm": 27.6,
+          "layer": "back",
+          "assembly": {
+            "x": 52,
+            "y": 42.2,
+            "width": 10,
+            "height": 25.6
+          },
+          "attachedTo": [
+            "B1"
+          ],
+          "cuts": [],
+          "folds": [
+            {
+              "from": {
+                "x": 0,
+                "y": 5
+              },
+              "to": {
+                "x": 10,
+                "y": 5
+              }
+            },
+            {
+              "from": {
+                "x": 0,
+                "y": 6
+              },
+              "to": {
+                "x": 10,
+                "y": 6
+              }
+            },
+            {
+              "from": {
+                "x": 0,
+                "y": 21.6
+              },
+              "to": {
+                "x": 10,
+                "y": 21.6
+              }
+            },
+            {
+              "from": {
+                "x": 0,
+                "y": 22.6
+              },
+              "to": {
+                "x": 10,
+                "y": 22.6
+              }
+            }
+          ],
+          "glue": [
+            {
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 10,
+                "height": 5
+              },
+              "label": "B1 back ONLY"
+            },
+            {
+              "rect": {
+                "x": 0,
+                "y": 22.6,
+                "width": 10,
+                "height": 5
+              },
+              "label": "B1 back ONLY"
+            }
+          ]
+        },
+        {
+          "id": "G2",
+          "label": "ガイド 2",
+          "role": "guide",
+          "widthMm": 10,
+          "heightMm": 27.6,
+          "layer": "back",
+          "assembly": {
+            "x": 77,
+            "y": 42.2,
+            "width": 10,
+            "height": 25.6
+          },
+          "attachedTo": [
+            "B1"
+          ],
+          "cuts": [],
+          "folds": [
+            {
+              "from": {
+                "x": 0,
+                "y": 5
+              },
+              "to": {
+                "x": 10,
+                "y": 5
+              }
+            },
+            {
+              "from": {
+                "x": 0,
+                "y": 6
+              },
+              "to": {
+                "x": 10,
+                "y": 6
+              }
+            },
+            {
+              "from": {
+                "x": 0,
+                "y": 21.6
+              },
+              "to": {
+                "x": 10,
+                "y": 21.6
+              }
+            },
+            {
+              "from": {
+                "x": 0,
+                "y": 22.6
+              },
+              "to": {
+                "x": 10,
+                "y": 22.6
+              }
+            }
+          ],
+          "glue": [
+            {
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 10,
+                "height": 5
+              },
+              "label": "B1 back ONLY"
+            },
+            {
+              "rect": {
+                "x": 0,
+                "y": 22.6,
+                "width": 10,
+                "height": 5
+              },
+              "label": "B1 back ONLY"
+            }
+          ]
+        },
+        {
+          "id": "S1",
+          "label": "抜け止め・最大位置",
+          "role": "stopper",
+          "widthMm": 8,
+          "heightMm": 22,
+          "layer": "back",
+          "assembly": {
+            "x": 14,
+            "y": 44,
+            "width": 8,
+            "height": 22
+          },
+          "attachedTo": [
+            "T1"
+          ],
+          "cuts": [],
+          "folds": [],
+          "glue": [
+            {
+              "rect": {
+                "x": 0,
+                "y": 4,
+                "width": 8,
+                "height": 14
+              },
+              "label": "T1 ONLY"
+            }
+          ]
+        },
+        {
+          "id": "S2",
+          "label": "抜け止め・開始位置",
+          "role": "stopper",
+          "widthMm": 8,
+          "heightMm": 22,
+          "layer": "back",
+          "assembly": {
+            "x": 87,
+            "y": 44,
+            "width": 8,
+            "height": 22
+          },
+          "attachedTo": [
+            "T1"
+          ],
+          "cuts": [],
+          "folds": [],
+          "glue": [
+            {
+              "rect": {
+                "x": 0,
+                "y": 4,
+                "width": 8,
+                "height": 14
+              },
+              "label": "T1 ONLY"
+            }
+          ]
+        },
+        {
+          "id": "C1",
+          "label": "絵とタブの接続片",
+          "role": "connector",
+          "widthMm": 8,
+          "heightMm": 14,
+          "layer": "back",
+          "assembly": {
+            "x": 96,
+            "y": 49,
+            "width": 8,
+            "height": 12
+          },
+          "attachedTo": [
+            "M1",
+            "T1"
+          ],
+          "cuts": [],
+          "folds": [
+            {
+              "from": {
+                "x": 0,
+                "y": 6
+              },
+              "to": {
+                "x": 8,
+                "y": 6
+              }
+            },
+            {
+              "from": {
+                "x": 0,
+                "y": 8
+              },
+              "to": {
+                "x": 8,
+                "y": 8
+              }
+            }
+          ],
+          "glue": [
+            {
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 8,
+                "height": 6
+              },
+              "label": "M1 back"
+            },
+            {
+              "rect": {
+                "x": 0,
+                "y": 8,
+                "width": 8,
+                "height": 6
+              },
+              "label": "T1 front"
+            }
+          ]
+        }
+      ],
+      "layout": {
+        "pageWidthMm": 210,
+        "pageHeightMm": 297,
+        "marginMm": 10,
+        "sheets": 1,
+        "placements": [
+          {
+            "partId": "B1",
+            "page": 1,
+            "xMm": 10,
+            "yMm": 35,
+            "rotated": false
+          },
+          {
+            "partId": "M1",
+            "page": 1,
+            "xMm": 10,
+            "yMm": 152,
+            "rotated": false
+          },
+          {
+            "partId": "T1",
+            "page": 1,
+            "xMm": 10,
+            "yMm": 201,
+            "rotated": false
+          },
+          {
+            "partId": "G1",
+            "page": 1,
+            "xMm": 181,
+            "yMm": 201,
+            "rotated": false
+          },
+          {
+            "partId": "G2",
+            "page": 1,
+            "xMm": 10,
+            "yMm": 235.6,
+            "rotated": false
+          },
+          {
+            "partId": "S1",
+            "page": 1,
+            "xMm": 27,
+            "yMm": 235.6,
+            "rotated": false
+          },
+          {
+            "partId": "S2",
+            "page": 1,
+            "xMm": 42,
+            "yMm": 235.6,
+            "rotated": false
+          },
+          {
+            "partId": "C1",
+            "page": 1,
+            "xMm": 57,
+            "yMm": 235.6,
+            "rotated": false
+          }
+        ],
+        "unplacedPartIds": [],
+        "algorithm": "deterministic-shelf-v1"
+      },
+      "checks": [
+        {
+          "id": "part-dimensions",
+          "status": "pass",
+          "message": "可動絵は14 × 16 mm以上、全部品は正の有限寸法である必要があります。",
+          "partIds": [
+            "B1",
+            "M1",
+            "T1",
+            "G1",
+            "G2",
+            "S1",
+            "S2",
+            "C1"
+          ],
+          "scope": "全生成部品の寸法",
+          "designHash": "5b3d233852f77d3d47610aecb9fbf49a8b61c345b6faa8f0236252850b18fdd8",
+          "suggestion": "選択範囲または作品サイズを大きくしてください。"
+        },
+        {
+          "id": "guides-on-base",
+          "status": "pass",
+          "message": "G1・G2の接着足は台紙の縁から3 mm以上内側に必要です。",
+          "partIds": [
+            "B1",
+            "G1",
+            "G2"
+          ],
+          "scope": "ガイドの接着足の全領域",
+          "designHash": "5b3d233852f77d3d47610aecb9fbf49a8b61c345b6faa8f0236252850b18fdd8",
+          "suggestion": "移動距離を短くするか、選択範囲を台紙の中央付近へ移してください。"
+        },
+        {
+          "id": "guide-engagement",
+          "status": "pass",
+          "message": "全移動区間 0〜30 mmでT1がG1・G2の両方を通ります。",
+          "partIds": [
+            "T1",
+            "G1",
+            "G2"
+          ],
+          "scope": "連続区間 [0, 30] mm：線形不等式による端点と区間全体の検査",
+          "designHash": "5b3d233852f77d3d47610aecb9fbf49a8b61c345b6faa8f0236252850b18fdd8"
+        },
+        {
+          "id": "slot-contained",
+          "status": "pass",
+          "message": "B1の切り込みは接続片8 mm＋移動30 mm＋両端各1 mm。台紙内に3 mmの縁を残します。",
+          "partIds": [
+            "B1",
+            "C1"
+          ],
+          "scope": "全移動区間 [0, 30] mm",
+          "designHash": "5b3d233852f77d3d47610aecb9fbf49a8b61c345b6faa8f0236252850b18fdd8",
+          "suggestion": "距離を短くするか、動かす部分を縁から離してください。"
+        },
+        {
+          "id": "back-layer-clearance",
+          "status": "pass",
+          "message": "接続片C1の移動区間と背面ガイドは同じ層で重なりません。絵と台紙の投影上の重なりは許容します。",
+          "partIds": [
+            "C1",
+            "G1",
+            "G2"
+          ],
+          "scope": "背面の連続移動区間 [0, 30] mm",
+          "designHash": "5b3d233852f77d3d47610aecb9fbf49a8b61c345b6faa8f0236252850b18fdd8"
+        },
+        {
+          "id": "stopper-range",
+          "status": "pass",
+          "message": "S1は最大位置でG1に、S2は開始位置でG2に当たり、タブの抜けを防ぎます。",
+          "partIds": [
+            "S1",
+            "S2",
+            "G1",
+            "G2"
+          ],
+          "scope": "理想化された剛体平面で0 mmと最大位置の接触",
+          "designHash": "5b3d233852f77d3d47610aecb9fbf49a8b61c345b6faa8f0236252850b18fdd8"
+        },
+        {
+          "id": "page-fit",
+          "status": "pass",
+          "message": "すべての部品を余白付きA4に原寸配置しました。",
+          "partIds": [],
+          "scope": "単純棚詰め配置。すべての配置が不可能であることの証明ではありません。",
+          "designHash": "5b3d233852f77d3d47610aecb9fbf49a8b61c345b6faa8f0236252850b18fdd8",
+          "suggestion": "作品サイズや移動距離を小さくしてください。"
+        },
+        {
+          "id": "sheet-budget",
+          "status": "pass",
+          "message": "型紙は1枚、使用可能な紙は1枚です。説明ページは別です。",
+          "partIds": [
+            "B1",
+            "M1",
+            "T1",
+            "G1",
+            "G2",
+            "S1",
+            "S2",
+            "C1"
+          ],
+          "scope": "固定台紙・可動絵・ガイド・タブ・接続片・抜け止めを含む全パーツ",
+          "designHash": "5b3d233852f77d3d47610aecb9fbf49a8b61c345b6faa8f0236252850b18fdd8",
+          "suggestion": "用紙枚数を増やすか作品サイズを小さくしてください。"
+        },
+        {
+          "id": "locks-preserved",
+          "status": "pass",
+          "message": "固定条件: clearanceMm, heightMm, maxSheets, paperThicknessMm, selection, widthMm。変更時は元の設計と照合します。",
+          "partIds": [],
+          "scope": "この版の入力。パッチ適用時に元の固定値と照合",
+          "designHash": "5b3d233852f77d3d47610aecb9fbf49a8b61c345b6faa8f0236252850b18fdd8"
+        },
+        {
+          "id": "physical-operation",
+          "status": "unknown",
+          "message": "実物未検証。紙厚・摩擦・接着剤・折り精度・耐久性は実物で確認してください。",
+          "partIds": [
+            "B1",
+            "M1",
+            "T1",
+            "G1",
+            "G2",
+            "S1",
+            "S2",
+            "C1"
+          ],
+          "scope": "幾何検査では実際の動作・強度を保証しません",
+          "designHash": "5b3d233852f77d3d47610aecb9fbf49a8b61c345b6faa8f0236252850b18fdd8"
+        }
+      ],
+      "assumptions": [
+        "紙厚0.25 mm、横すき間片側0.8 mm、ガイド高さ1 mmは未実測の設計仮定です。",
+        "可動絵の元位置は白い矩形で覆います。背景補完ではありません。",
+        "C1は6 / 2 / 6 mmのZ折り。G1・G2の足だけをB1の裏に接着し、T1の通路には糊を付けません。",
+        "紙面配置は決定的な棚詰め法で、配置の最適性は保証しません。"
+      ],
+      "physicalValidation": "unverified"
+    },
+    "imageDataUrl": "data:image/png;base64,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",
+    "records": [],
+    "version": 2
+  },
+  "prompt": "動く距離を70mmにしたい。絵の大きさと紙の枚数は変えない",
+  "responses": [
+    {
+      "message": {
+        "role": "assistant",
+        "text": "",
+        "calls": [
+          {
+            "id": "fixture-c-1",
+            "name": "propose_design_patch",
+            "args": {
+              "maxSheets": 1,
+              "travelMm": 70
+            }
+          }
+        ]
+      },
+      "finishReason": "STOP"
+    },
+    {
+      "message": {
+        "role": "assistant",
+        "text": "",
+        "calls": [
+          {
+            "id": "fixture-c-2",
+            "name": "propose_design_patch",
+            "args": {
+              "maxSheets": 1,
+              "travelMm": 45
+            }
+          }
+        ]
+      },
+      "finishReason": "STOP"
+    },
+    {
+      "message": {
+        "role": "assistant",
+        "text": "",
+        "calls": [
+          {
+            "id": "fixture-c-3",
+            "name": "propose_design_patch",
+            "args": {
+              "maxSheets": 1,
+              "travelMm": 35
+            }
+          }
+        ]
+      },
+      "finishReason": "STOP"
+    }
+  ],
+  "expectedToolDesignHashes": [
+    "2fcad734b149f5c9f3c2544ca73549f9d8cb6d4474a66cc4c4b7416e1a47595a",
+    "a5c6719ecafc71df5bdad394de153c95573236fe5f3b21e7232da8a36755655e",
+    "b7393b7dceb656b8bebc0f83c076d2b40279db69dd5bbedcf9f1f10e6489e1d5"
+  ],
+  "historicalOutcome": {
+    "status": "failed",
+    "error": "model_limit",
+    "adoptableProposal": false,
+    "modelCalls": 3
+  },
+  "expectedAfterFix": {
+    "modelCalls": 3,
+    "toolCalls": 3,
+    "status": "awaiting_approval",
+    "fulfillsRequested": false,
+    "travelMm": 35,
+    "requestedTravelMm": 70
+  }
+}

@@ -8,14 +8,21 @@ import './AiPanel.css';
 import RequestInterpretation from './RequestInterpretation';
 
 type RunCorrection = {runId: string; requestId: string; changes: InterpretationCorrection};
-class ApiRequestError extends Error { constructor(message: string, readonly code?: string) {super(message);} }
+class ApiRequestError extends Error { constructor(message: string, readonly code?: string, readonly retryAt?: number) {super(message);} }
 type Session = {sessionId: string; token: string; designId: string};
 type PollContext = {session: Session; runId: string; base: DesignDocument; ticket: number; prompt: string; requestedAt: string; access: string};
 async function request<T>(url: string, method: string, body?: unknown, token?: string, access?: string): Promise<T> {
   const hasBody = body !== undefined;
   const response = await fetch(url, {method, headers: {...(hasBody ? {'Content-Type': 'application/json'} : {}), ...(token ? {Authorization: `Bearer ${token}`} : {}), ...(access ? {'X-AI-Access': access} : {})}, ...(hasBody ? {body: JSON.stringify(body)} : {})});
   const result = await response.json() as T & {error?: {message?: string; code?: string} | string; message?: string};
-  if (!response.ok) throw new ApiRequestError(typeof result.error === 'string' ? result.error : result.error?.message ?? result.message ?? '通信に失敗しました。接続を確認して再試行してください。', typeof result.error === 'object' ? result.error.code : undefined);
+  if (!response.ok) {
+    // Only an actual 429 Retry-After header supplies a waiting deadline. A
+    // concurrency limit without this header must not invent a retry interval.
+    const header = response.status === 429 ? response.headers.get('Retry-After') : null;
+    const seconds = header && /^\d+$/.test(header) ? Number(header) : undefined;
+    const retryAt = seconds !== undefined && Number.isSafeInteger(seconds) ? Date.now() + seconds * 1000 : header ? Date.parse(header) : undefined;
+    throw new ApiRequestError(typeof result.error === 'string' ? result.error : result.error?.message ?? result.message ?? '通信に失敗しました。接続を確認して再試行してください。', typeof result.error === 'object' ? result.error.code : undefined, retryAt !== undefined && Number.isFinite(retryAt) && retryAt > Date.now() ? retryAt : undefined);
+  }
   return result;
 }
 
@@ -38,6 +45,9 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
   const promptRef = useRef(prompt); promptRef.current = prompt;
   const previousPrompt = useRef(prompt);
   const [access, setAccess] = useState('');
+  const [codeRequired, setCodeRequired] = useState(false);
+  const [retryAt, setRetryAt] = useState<number | null>(null);
+  const [retrySeconds, setRetrySeconds] = useState(0);
   const [run, setRun] = useState<Run | null>(null);
   const [busy, setBusyState] = useState(false);
   const busyRef = useRef(false);
@@ -158,6 +168,18 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     return () => clearInterval(interval);
   }, [busy, pollInterrupted]);
 
+  useEffect(() => {
+    if (retryAt === null) return;
+    let timeout: ReturnType<typeof setTimeout>;
+    const update = () => {
+      const remaining = Math.max(0, Math.ceil((retryAt - Date.now()) / 1000));
+      setRetrySeconds(remaining);
+      if (remaining > 0) timeout = setTimeout(update, 1000);
+    };
+    update();
+    return () => clearTimeout(timeout);
+  }, [retryAt]);
+
   function editPrompt(value: string) {
     if (value === promptRef.current) return;
     previousPrompt.current = value; promptRef.current = value;
@@ -176,7 +198,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     if (candidate.status === 'running') {
       pollContext.current = context;
       timer.current = setTimeout(() => void poll(context), 650);
-    } else {pollContext.current = null; setBusy(false);}
+    } else {clearTimeout(timer.current); pollContext.current = null; setBusy(false);}
   }
   async function poll(context: PollContext) {
     if (context.ticket !== generation.current || !isCurrent(context.base, context.prompt)) return;
@@ -197,9 +219,10 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     await poll(context);
   }
   async function start(correction?: RunCorrection) {
-    if (busyRef.current || cancellingRef.current || !selectionReady || draftRef.current || pollContext.current) return;
+    if (busyRef.current || cancellingRef.current || !selectionReady || draftRef.current || pollContext.current || retryAt !== null && Date.now() < retryAt) return;
     if (!connection.enabled) {setMessage(connection.unreachable ? 'サーバーに接続できません。現在の作品は残っています。手動での編集と出力は続けられます。' : 'AIは未接続です。寸法から案をつくり、保存・印刷まで進められます。'); return;}
-    if (!access.trim()) {setMessage('設定でAIアクセスコードを入力してから、案をつくってください。'); onOpenSettings?.(); return;}
+    if (!access.trim()) {setCodeRequired(true); setMessage('AIだけにアクセスコードが必要です。手動での制作・保存・印刷はそのまま使えます。'); return;}
+    setCodeRequired(false); setRetryAt(null); setRetrySeconds(0);
     if (correction) {
       // The server replaces a live proposal atomically with its bound correction.
       // A preceding DELETE would revoke that source before correction validation.
@@ -221,7 +244,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
       if (ticket !== generation.current || !isCurrent(base, submittedPrompt)) return;
       const result = await request<{run: Run}>(`/api/sessions/${session.sessionId}/runs`, 'POST', {requestId: crypto.randomUUID(), prompt: submittedPrompt, baseRevision: base.revision, baseHash: base.designHash, ...(correction ? {correction} : {})}, session.token, submittedAccess);
       await receive(result.run, {session, runId: result.run.id, base, ticket, prompt: submittedPrompt, requestedAt, access: submittedAccess});
-    } catch (error) {if (ticket === generation.current) {if (releaseExpiredSession(error)) return; sessionRef.current = null; setUnsupported(error instanceof ApiRequestError && error.code === 'unsupported_motion'); setMessage(error instanceof ApiRequestError && error.code === 'instance_limit' ? 'AIへの依頼が続いています。時間をおいて再度お試しください。作品は変更していません。' : error instanceof Error ? error.message : '実行に失敗しました。'); setBusy(false);}}
+    } catch (error) {if (ticket === generation.current) {if (releaseExpiredSession(error)) return; sessionRef.current = null; setUnsupported(error instanceof ApiRequestError && error.code === 'unsupported_motion'); setMessage(error instanceof ApiRequestError && error.code === 'instance_limit' ? 'AIへの依頼が続いています。時間をおいて再度お試しください。作品は変更していません。' : error instanceof Error ? error.message : '実行に失敗しました。'); if (error instanceof ApiRequestError && error.retryAt !== undefined) {setRetryAt(error.retryAt); setRetrySeconds(Math.max(0, Math.ceil((error.retryAt - Date.now()) / 1000)));} setCodeRequired(error instanceof ApiRequestError && error.code === 'access_denied'); setBusy(false);}}
   }
   async function correctInterpretation(changes: InterpretationChanges) {
     const current = runRef.current;
@@ -284,13 +307,13 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     {connection.enabled ? <>
       <p>{connection.mode === 'injected-test' ? 'テスト用の模擬AIです。実モデルへの送信はありません。' : connection.mode === 'ollama' ? 'アプリのサーバー内で動くOllamaを使う設定です。外部の推論APIへ自動で切り替えません。設定済みの表示だけでは、接続成功を確認していません。' : connection.mode === 'vertex' ? 'Vertex AIを使う設定です。認証はサーバー側で行います。設定済みの表示だけでは、接続成功を確認していません。' : 'Gemini Developer APIを使う設定です。設定済みの表示だけでは、接続成功を確認していません。'}</p>
       {connection.mode === 'injected-test' && connection.provider === 'vertex' && <p className="field-note">接続方式：Vertex AI（模擬）</p>}
-      <label className="field">AIアクセスコード<input type="password" value={access} onChange={event => setAccess(event.target.value)} autoComplete="off" spellCheck={false} /><small>この画面のメモリだけで扱い、作品には保存しません。</small></label>
+      <label className="field">AIアクセスコード<input type="password" value={access} onChange={event => {setAccess(event.target.value); if (event.target.value.trim()) setCodeRequired(false);}} autoComplete="off" spellCheck={false} /><small>この画面のメモリだけで扱い、作品には保存しません。</small></label>
       {connection.model && <p className="field-note">モデル：{connection.model}</p>}{connection.endpoint && <p className="field-note">接続先：<code>{connection.endpoint}</code></p>}{connection.contextLength && <p className="field-note">コンテキスト上限：{connection.contextLength} / {connection.toolMode}</p>}{limits && <p className="field-note">1依頼の上限：モデル{limits.modelCalls}回・ツール{limits.toolCalls}回・{limits.timeoutMs / 1000}秒</p>}
       <p className="field-note">{connection.mode === 'ollama' ? '推論にはアプリのサーバーの計算資源と電力を使います。外部推論APIへの課金はありません。モデルの初回取得には外部通信が必要です。' : connection.mode === 'injected-test' ? '模擬実行の結果は、実モデルの性能確認にはなりません。' : '外部推論APIの利用料が発生する場合があります。'}</p>
     </> : <p>{connection.unreachable ? 'サーバーの状態を確認できません。' : 'このサイトではAIは無効です。'} 方向・距離の操作や、寸法からの案づくりを続けられます。</p>}
     <p className="field-note">案をつくる操作をしたときだけ、希望・寸法・選択範囲を送ります。画像そのものは送信しません。</p>
   </section>;
-  const action = <button data-design-action onClick={() => {onActivate?.(); void start();}} disabled={busy || cancelling || pollInterrupted || interpretationDraft || !prompt.trim() || !selectionReady || inputDraftActive} className="secondary">{cancelling ? '中断要求を確認中…' : run?.status === 'failed' ? 'AIを再試行する' : busy ? 'AIの案を待っています…' : 'AIで案をつくる'}</button>;
+  const action = <button data-design-action onClick={() => {onActivate?.(); void start();}} disabled={busy || cancelling || retrySeconds > 0 || pollInterrupted || interpretationDraft || !prompt.trim() || !selectionReady || inputDraftActive} className="secondary">{cancelling ? '中断要求を確認中…' : run?.status === 'failed' ? 'AIを再試行する' : busy ? 'AIの案を待っています…' : 'AIで案をつくる'}</button>;
   const failedValidation = run?.status === 'failed' && run.error?.code === 'validation_failed'
     && message === (run.error.message ?? run.message) && !!run.validationIssues?.length;
   const distance = run?.requestInterpretation?.interpretation.distance;
@@ -308,6 +331,8 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     <section className="ai-panel" aria-label="AIの調整結果" hidden={!visible}>
     {(busy || pollInterrupted) && <div className="ai-wait"><p>{pollInterrupted ? '通信の確認が必要です。現在の作品は変わっていません。' : run?.status === 'awaiting_approval' ? '採用の結果を確認しています。' : '候補を待っています。現在の作品は変わっていません。'}</p><p>経過 {waitSeconds}秒 · 中断して手動で調整できます。</p><div className="button-row">{pollInterrupted && <button className="secondary" onClick={() => void resumePolling()}>状況を確認する</button>}<button onClick={() => void cancel()} className="text-button">中断する</button></div></div>}
     {statusMessage && !busy && <p role="status" className={`notice ${unsupported || run?.status === 'failed' ? 'warning' : ''}`}>{statusMessage}</p>}
+    {codeRequired && onOpenSettings && <button className="text-button" onClick={onOpenSettings}>AIの設定を開く</button>}
+    {retryAt !== null && <p className="field-note" role="status">{retrySeconds > 0 ? `サーバーの案内による待機：あと約${retrySeconds}秒。` : '案内された待機時間が過ぎました。必要なら、もう一度ボタンを押してください。'} 自動では再送信しません。</p>}
     {connection.unreachable && <button className="secondary" disabled={checkingConnection} onClick={() => void checkConnection(true)}>{checkingConnection ? '接続状態を確認中…' : '接続状態を再確認する'}</button>}
     {unsupported && <button className="text-button" onClick={() => { editPrompt('引っぱりタブでまっすぐ動く距離を調整したい'); setUnsupported(false); setMessage('代案を入力しました。実行するか、手動で調整してください。'); }}>代案「まっすぐ動かす」を選ぶ</button>}
 

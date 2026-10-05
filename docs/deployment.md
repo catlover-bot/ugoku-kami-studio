@@ -2,6 +2,8 @@
 
 ## 権限の境界
 
+現在は別の明示承認で[Goal011公開版](public-operation-011.md)を稼働しています。手動制作は一般公開、AIはコード必須、Cloud Run東京＋Vertex＋非公開GCS台帳です。合格版を12月1日または管理停止条件まで維持します。Goal008向けの下記手順・削除済み状態は当時の履歴であり、公開中のGoal011を削除する指示ではありません。
+
 2026-10-05 JST、本人の明示許可に基づく非公開の限定試験と片付けを実施した。Cloud Build・Registry・Secret・専用IAM・Cloud Runを使用し、試験サービスと専用リソースは削除済み。審査用の公開URLはなく、一般公開・継続運用・YouTube投稿・提出は今回の許可に含めない。初回AIの時間切れと中断不具合が見つかり、公開運用にはまだ進めない。[限定試験記録](cloud-trial-008.md)に実測、修正した版、再試験の未実施、費用とsoft delete残存を記録した。以下は再利用可能な準備手順であり、新たな実行許可ではない。
 
 ## コンテナ
@@ -97,7 +99,7 @@ npm run deploy:plan -- --ollama --output artifacts/goal008/reviewed-deployment
 
 公開判定には、新規ブラウザで実Gemma→実検査→比較→本人採用→同版PDF/ガイド→保存再開をPCと狭幅で実行し、不成立・中断・session失効時の原本保持、冷間／温間時間も記録する。別端末からの確認は実施した場合だけ記録する。health、stage、YAML形状検査、既存WSL実行だけでは公開AI合格にならない。検証失敗時は公開URLを提出しない。停止・費用・12月1日までの保全は承認した運用計画に従い、公開撤回とinstance停止を別操作として確認する。
 
-公式参照は2026-10-04確認。Cloud Runの[コンテナ契約](https://docs.cloud.google.com/run/docs/container-contract)、[health check](https://docs.cloud.google.com/run/docs/configuring/healthchecks)に基づく構成は限定試験でadmission・実起動まで確認した。2026-10-05 JST時点の公開判定は不合格のままで、中断修正後のCloud再試験も未実施。[実測と片付け](cloud-trial-008.md)を過去の準備状態より優先して参照する。
+公式参照は2026-10-04確認。Cloud Runの[コンテナ契約](https://docs.cloud.google.com/run/docs/container-contract)、[health check](https://docs.cloud.google.com/run/docs/configuring/healthchecks)に基づく構成は限定試験でadmission・実起動まで確認した。Goal008試験時点の公開判定は不合格で、Gemma経路の中断修正後Cloud再試験は未実施。[実測と片付け](cloud-trial-008.md)を過去の準備状態より優先して参照する。
 
 ## 有料AIを有効化する前に
 

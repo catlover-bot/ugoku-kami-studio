@@ -158,7 +158,9 @@ test('Injected AI: a bound interpretation correction replaces the actual server 
     await writeFile(info.outputPath('adopted.ugoku.json'),JSON.stringify(adopted,null,2));
     await writeFile(info.outputPath('server-runs.json'),JSON.stringify({mode:'injected-test',realGemini:false,requests:bodies,runs},null,2));
     await downloadKit(page,adopted.document,info.outputDir);
-    expect(calls).toBe(4);
+    // Two calls expose the initial interpretation conflict. The corrected
+    // request hands off after its one checked patch, without a summary round.
+    expect(calls).toBe(3);
   } finally {try {await page.context().close();} finally {await app.close();}}
 });
 
@@ -240,7 +242,9 @@ test('Injected AI: bodyless proposal rejection and session deletion reach the ac
     }, credentials);
     expect(deleted).toEqual({status: 200, body: {deleted: true}});
     expect(app.sessions.sessions.has(credentials.sessionId)).toBe(false);
-    expect(calls).toBe(2);
+    // The checked textless patch is already sufficient; rejection needs no
+    // additional model summary and both DELETE routes remain bodyless.
+    expect(calls).toBe(1);
   } finally {try {await page.context().close();} finally {await app.close();}}
 });
 

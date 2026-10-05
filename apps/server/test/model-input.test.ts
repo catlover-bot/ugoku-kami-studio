@@ -114,14 +114,14 @@ describe('bounded completion after real deterministic tool outcomes', () => {
     expect(document.checks.find(check => check.id === 'physical-operation')?.status).toBe('unknown');
   });
 
-  it('retains tool-only continuation and assistant identity, call IDs, exact complete payload accounting', async () => {
-    const response = reply([call('inspect_design'), call('propose_design_patch')]);
-    const h = harness([response, reply([], '候補を確認してください。')]); await h.run.done;
+  it('retains read-tool continuation and assistant identity, call IDs, exact complete payload accounting', async () => {
+    const response = reply([call('inspect_design'), call('validate_design')]);
+    const h = harness([response, reply([call('propose_design_patch')])]); await h.run.done;
     expect(h.run.status).toBe('awaiting_approval'); expect(h.run.modelCalls).toBe(2);
     expect(h.histories[1]![1]).toBe(response.message);
     const tool = h.histories[1]![2]; expect(tool.role).toBe('tool');
     if (tool.role !== 'tool') throw new Error('Expected complete tool results');
-    expect(tool.results.map(r => r.id)).toEqual(['id-inspect_design', 'id-propose_design_patch']);
+    expect(tool.results.map(r => r.id)).toEqual(['id-inspect_design', 'id-validate_design']);
     expect(tool.results[0]!.response.document).toEqual(modelDesign(h.document));
     for (const [index, history] of h.histories.entries()) expect(h.run.modelUsage[index]!.inputBytes).toBe(modelRequestBytes(config(), history));
     expect(h.run.proposal!.document.parts[0]!.glue.length).toBeGreaterThan(0);
@@ -141,10 +141,10 @@ describe('bounded completion after real deterministic tool outcomes', () => {
     expect(h.session.document).toEqual(h.document);
   });
 
-  it.each([70, 15])('does not call a %smm failure/alternative a fulfilled25mm request or skip its continuation', async travelMm => {
+  it.each([70, 15])('does not call a %smm failure/alternative a fulfilled25mm request', async travelMm => {
     const prompt = travelMm === 70 ? '動く距離を70mmにして' : '動く距離を25mmにして';
     const h = harness([reply([call('propose_design_patch', { travelMm })], '希望通り成功です')], prompt); await h.run.done;
-    expect(h.run.modelCalls).toBe(2); expect(h.session.document).toEqual(h.document);
+    expect(h.run.modelCalls).toBe(travelMm === 70 ? 2 : 1); expect(h.session.document).toEqual(h.document);
     if (travelMm === 70) { expect(h.run.status).toBe('failed'); expect(h.run.validationIssues.length).toBeGreaterThan(0); expect(h.run.proposal).toBeUndefined(); }
     else { expect(h.run.proposal!.fulfillsRequested).toBe(false); expect(h.run.message).toContain('希望は25mm'); }
   });

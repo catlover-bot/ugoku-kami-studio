@@ -38,7 +38,9 @@ for (const caseId of ['L1', 'L2', 'L3'] as LiveCase[]) test(`Goal004 ${caseId}: 
     const result = await runBrowserCase({ page, origin, projectPath, accessSecret: access, caseId, outDir, timeoutMs: 15_000, mode: 'injected-test' });
     expect(result.mode).toBe('injected-test');
     expect(result.status).toBe(caseId === 'L1' ? 'adopted-and-pdf-verified' : caseId === 'L2' ? 'condition-change-offered-original-preserved' : 'unsupported-by-server-no-model-call');
-    expect(calls).toBe(caseId === 'L1' ? 2 : caseId === 'L2' ? 4 : 0);
+    // L1's complete passing tool batch hands off immediately, without a second
+    // summary call. L2 still needs its failed/verified conditional-advice rounds.
+    expect(calls).toBe(caseId === 'L1' ? 1 : caseId === 'L2' ? 4 : 0);
     expect(result.physicalValidation).toBe('unverified');
   } finally {
     // Release browser connections before awaiting the server owned by this test.

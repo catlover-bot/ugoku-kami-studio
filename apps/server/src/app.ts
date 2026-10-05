@@ -11,26 +11,49 @@ import { OllamaProvider } from './ollama.js';
 import { publicRun, RunManager } from './runs.js';
 import { SessionStore, secretMatches } from './sessions.js';
 import { verifyTrialPermit } from './trial-permit.js';
+import { PublicLedger } from './public-ledger.js';
+import { GcsLedgerStore } from './gcs-ledger-store.js';
 
 export type App = FastifyInstance & { sessions: SessionStore; runs: RunManager };
-export type AppOptions = { config?: ServerConfig; provider?: ModelProvider; staticRoot?: string; logger?: boolean };
+export type AppOptions = { config?: ServerConfig; provider?: ModelProvider; publicLedger?: PublicLedger; staticRoot?: string; logger?: boolean };
 const DocumentBody = z.object({ document: z.unknown() }).strict();
 const Params = z.object({ id: z.string().uuid(), runId: z.string().uuid().optional(), proposalId: z.string().uuid().optional() });
 
 export async function createApp(options: AppOptions = {}): Promise<App> {
   if (options.provider && process.env.NODE_ENV !== 'test') throw new Error('Provider injection is test-only');
+  if (options.publicLedger && process.env.NODE_ENV !== 'test') throw new Error('Ledger injection is test-only');
   const config = options.config ?? readConfig();
-  const app = Fastify({ logger: options.logger ?? false, bodyLimit: 256 * 1024, requestTimeout: 15_000, trustProxy: false }) as unknown as App;
+  const app = Fastify({ logger: config.publicRelease ? false : options.logger ?? false, bodyLimit: 256 * 1024, requestTimeout: 15_000, trustProxy: false }) as unknown as App;
   const sessions = new SessionStore(config);
   const provider = options.provider ?? (config.aiEnabled ? config.provider === 'ollama' ? new OllamaProvider(config) : config.provider === 'gemini' ? new GeminiProvider(config) : config.provider === 'vertex' ? new VertexProvider(config) : undefined : undefined);
-  const runs = new RunManager(config, provider);
+  const ledger = config.publicRelease ? options.publicLedger ?? new PublicLedger(new GcsLedgerStore(config.publicRelease)) : undefined;
+  const runs = new RunManager(config, provider, ledger);
   app.decorate('sessions', sessions); app.decorate('runs', runs);
   let imageActive = 0;
   let imageStarts: number[] = [];
   let apiStarts: number[] = [];
+  let badAccessStarts: number[] = [];
+  let responseWindow = Date.now(), responseBytes = 0;
+
+  app.addHook('onSend', async (_request, reply, payload) => {
+    if (!config.publicRelease) return payload;
+    const now = Date.now();
+    if (now - responseWindow >= 3_600_000) { responseWindow = now; responseBytes = 0; }
+    // Bounds normal static/image responses within an instance. The cloud cost
+    // monitor remains authoritative across restarts and platform-generated logs.
+    const length = typeof payload === 'string' ? Buffer.byteLength(payload) : Buffer.isBuffer(payload) ? payload.length : Number(reply.getHeader('content-length') ?? 0);
+    if (length > 0 && responseBytes + length > 256 * 1024 * 1024) {
+      reply.removeHeader('content-length'); reply.removeHeader('content-encoding');
+      reply.code(429).header('Content-Type', 'application/json').header('Retry-After', Math.ceil((responseWindow + 3_600_000 - now) / 1000));
+      return JSON.stringify({ error: { code: 'transfer_limit', message: 'アクセスが集中しています。時間をおいて再度開いてください。' } });
+    }
+    responseBytes += Math.max(0, length);
+    return payload;
+  });
 
   app.addHook('onRequest', async (request, reply) => {
     reply.header('X-Content-Type-Options', 'nosniff').header('Referrer-Policy', 'no-referrer').header('X-Frame-Options', 'DENY');
+    if (config.publicRelease && Date.now() >= Date.parse(config.publicRelease.deadline) && !['/health', '/api/health'].includes(request.url)) throw new AppError('release_ended', '公開期間が終了しました。保存済みの作品ファイルは保持されています。', 503);
     if (request.url.startsWith('/api/')) {
       reply.header('Cache-Control', 'no-store');
       const now = Date.now(); apiStarts = apiStarts.filter(time => now - time < 60_000);
@@ -56,7 +79,12 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
   function access(request: FastifyRequest) {
     if (!config.aiEnabled) throw new AppError('ai_disabled', 'AI未接続です。手動で設計できます。', 503);
     const key = request.headers['x-ai-access'];
-    if (typeof key !== 'string' || !config.accessSecret || !secretMatches(key, config.accessSecret)) throw new AppError('access_denied', 'AIのアクセスコードが一致しません。', 401);
+    const now = Date.now(); badAccessStarts = badAccessStarts.filter(time => now - time < 60_000);
+    if (badAccessStarts.length >= 20) throw new AppError('access_limit', 'コード確認の上限です。時間をおいて再試行してください。', 429);
+    if (typeof key !== 'string' || key.length > 256 || !config.accessSecret || !secretMatches(key, config.accessSecret)) {
+      badAccessStarts.push(now);
+      throw new AppError('access_denied', 'AIのアクセスコードが一致しません。', 401);
+    }
   }
   function checkedDocument<T>(operation: () => T): T {
     try { return operation(); } catch (error) {
@@ -70,7 +98,7 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
   app.get('/api/status', async () => {
     const status = publicStatus(config);
     if (options.provider && config.aiEnabled) status.ai = { ...status.ai, mode: 'injected-test', reason: 'テスト用の模擬通信です。実AIへは接続しません。' };
-    return { ...status, ...(provider instanceof VertexProvider ? { modelBudget: provider.budgetStatus() } : {}) };
+    return { ...status, ...(!config.publicRelease && provider instanceof VertexProvider ? { modelBudget: provider.budgetStatus() } : {}) };
   });
   app.post('/api/images', { bodyLimit: 8 * 1024 * 1024 }, async request => {
     const now = Date.now(); imageStarts = imageStarts.filter(time => now - time < 60_000);
@@ -94,6 +122,10 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
   });
   app.post('/api/sessions/:id/runs', async (request, reply) => {
     const current = session(request); access(request);
+    if (config.publicRelease) {
+      if (request.headers['x-ai-trial-permit'] !== undefined) throw new AppError('invalid_public_permit', 'この公開版では外部からの送信許可を受け付けません。', 403);
+      return reply.code(202).send({ run: publicRun(await runs.startPublic(current, request.body)) });
+    }
     const input = request.body as Record<string, unknown> | null;
     const permit = config.vertex.trialPermitsRequired ? verifyTrialPermit(request.headers['x-ai-trial-permit'], config.accessSecret, {
       sessionId: current.id, requestId: input?.requestId, baseRevision: input?.baseRevision, baseHash: input?.baseHash, sourceSha: config.vertex.trialSourceSha!,
