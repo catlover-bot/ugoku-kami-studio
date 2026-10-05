@@ -14,13 +14,16 @@ const PhaseSchema = z.enum(['cancel', 'recovery', 'infeasible']);
 const BudgetSchema = z.object({ grossLimitNanoUsd: Nano, modelPoolNanoUsd: Nano, priorInfrastructureNanoUsd: Nano, additionalInfrastructureNanoUsd: Nano, safetyNanoUsd: Nano, callReserveNanoUsd: Nano, maxRequests: z.literal(4), maxCalls: z.literal(24) }).strict();
 const HistorySchema = z.object({ requestId: Id, reservationId: Id, runId: Id, sourceSha: z.string().regex(/^[a-f0-9]{40}$/), originalLedgerHash: Hash, evidenceHashes: z.array(Hash).min(1), reservedCalls: z.number().int().min(1).max(6), sentUnknownCalls: z.number().int().min(0).max(6), priorRunSeconds: z.number().nonnegative(), priorBuildSeconds: z.number().nonnegative() }).strict();
 const InitialSchema = z.object({ trialId: Id, budget: BudgetSchema, historicalReconciliation: HistorySchema }).strict();
-const RequestSchema = z.object({ requestId: Id, phase: PhaseSchema, maxCalls: z.number().int().min(1).max(6), binding: BindingSchema }).strict();
+const RequestSchema = z.object({ requestId: Id, phase: PhaseSchema, maxCalls: z.number().int().min(1).max(6), binding: BindingSchema, authorizationId: Id.optional(), retryOfRequestId: Id.optional() }).strict();
 const GrantSchema = RequestSchema.extend({ grantId: z.string().uuid(), callIds: z.array(z.string().uuid()).min(1).max(6), priorCommittedNanoUsd: Nano, reservedNanoUsd: Nano });
 const CostSchema = z.discriminatedUnion('kind', [z.object({ kind: z.literal('sent-unknown') }).strict(), z.object({ kind: z.enum(['usage-estimate', 'aggregate-upper-estimate']), usd: z.number().finite().nonnegative() }).strict()]);
 const AttemptSchema = z.object({ attemptId: z.string().uuid(), dispatch: z.enum(['sent', 'possibly-sent']), cost: CostSchema, observationHashes: z.array(Hash).min(1) }).strict();
 const ReportSchema = z.object({ requestId: Id, grantId: z.string().uuid(), binding: BindingSchema, dispatchClosed: z.literal(true), completeAttemptList: z.literal(true), sdkFetchRetryGuard: z.literal(1), serverIdentity: Id, proofHashes: z.array(Hash).min(1), attempts: z.array(AttemptSchema).max(6) }).strict();
 const RejectionSchema = z.object({ requestId: Id, grantId: z.string().uuid(), binding: BindingSchema, httpStatus: z.literal(429), errorCode: z.literal('instance_limit'), classification: z.literal('audited-before-run-rejection'), proofHashes: z.array(Hash).min(1), serverIdentity: Id }).strict();
-const EventSchema = z.object({ version: z.literal(1), sequence: z.number().int().nonnegative(), previousHash: Hash.nullable(), at: z.string().datetime(), type: z.enum(['initialize', 'reserve', 'forward', 'reconcile', 'close-unforwarded', 'reject-before-run']), payload: z.unknown(), hash: Hash }).strict();
+const SupplementalSchema = z.object({ authorizationId: Id, purpose: z.literal('goal010r-c-only'), authorizationDocumentHash: Hash, proofHashes: z.array(Hash).min(1), priorHeadHash: Hash,
+  inherited: z.object({ requestsConsumed: z.literal(4), callPermitsConsumed: z.literal(9), committedNanoUsd: Nano }).strict(),
+  additionalBusinessRequests: z.literal(1), maxPostAttempts: z.literal(2), maxModelCalls: z.literal(6), retryOnlyAfter: z.literal('audited-before-run-rejection') }).strict();
+const EventSchema = z.object({ version: z.literal(1), sequence: z.number().int().nonnegative(), previousHash: Hash.nullable(), at: z.string().datetime(), type: z.enum(['initialize', 'reserve', 'forward', 'reconcile', 'close-unforwarded', 'reject-before-run', 'authorize-supplemental']), payload: z.unknown(), hash: Hash }).strict();
 export type LedgerInitial = z.infer<typeof InitialSchema>;
 export type TrialBinding = z.infer<typeof BindingSchema>;
 export type TrialPhase = z.infer<typeof PhaseSchema>;
@@ -30,9 +33,11 @@ export type ClosureReport = z.infer<typeof ReportSchema>;
 export type VerifyClosure = (report: Readonly<ClosureReport>, grant: Readonly<TrialGrant>) => boolean;
 export type RejectedRequestReport = z.infer<typeof RejectionSchema>;
 export type VerifyRejectedRequest = (report: Readonly<RejectedRequestReport>, grant: Readonly<TrialGrant>) => boolean;
+export type SupplementalAuthorization = z.infer<typeof SupplementalSchema>;
+export type VerifySupplementalAuthorization = (report: Readonly<SupplementalAuthorization>) => boolean;
 type Call = { id: string; state: 'reserved-not-sent' | 'possibly-sent' | 'sent-unknown' | 'usage-estimate' | 'aggregate-upper-estimate' | 'released-not-sent'; committedNanoUsd: number };
 type StoredGrant = { grant: TrialGrant; forwarded: boolean; closed: boolean; calls: Call[]; closure?: ClosureReport; rejection?: RejectedRequestReport; localClosureReason?: string };
-type State = { initial: LedgerInitial; grants: StoredGrant[] };
+type State = { initial: LedgerInitial; grants: StoredGrant[]; supplementalAuthorization?: SupplementalAuthorization };
 type Event = z.infer<typeof EventSchema>;
 const clone = <T>(value: T): T => structuredClone(value);
 const canonical = (value: unknown): string => JSON.stringify(value, (_key, item: unknown) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item);
@@ -41,6 +46,11 @@ const same = (a: unknown, b: unknown) => canonical(a) === canonical(b);
 const checkedSum = (values: number[]): number => { const total = values.reduce((sum, n) => sum + n, 0); if (!Number.isSafeInteger(total)) throw Error('Accounting overflow'); return total; };
 const nanoUsd = (usd: number): number => { const scaled = usd * 1e9, rounded = Math.round(scaled); if (!Number.isSafeInteger(rounded) || Math.abs(scaled - rounded) > 0.000001) throw Error('Cost precision exceeds nanodollars'); return rounded; };
 function committed(state: State): number { return checkedSum([state.initial.historicalReconciliation.sentUnknownCalls * state.initial.budget.callReserveNanoUsd, ...state.grants.flatMap(g => g.calls.map(c => c.committedNanoUsd))]); }
+function consumedCalls(state: State): number { return state.initial.historicalReconciliation.sentUnknownCalls + state.grants.reduce((n, g) => n + g.grant.maxCalls, 0); }
+function grantRequest(grant: TrialGrant): ReserveRequest {
+  const { grantId: _id, callIds: _calls, priorCommittedNanoUsd: _prior, reservedNanoUsd: _reserved, ...request } = grant;
+  return RequestSchema.parse(request);
+}
 function validateInitial(input: unknown): LedgerInitial {
   const initial = InitialSchema.parse(input), { budget: b, historicalReconciliation: h } = initial;
   if (h.sentUnknownCalls > h.reservedCalls || !b.callReserveNanoUsd || !b.modelPoolNanoUsd) throw Error('Invalid historical reservation');
@@ -51,22 +61,32 @@ function validateInitial(input: unknown): LedgerInitial {
 function validateReservation(state: State, request: ReserveRequest) {
   if (request.requestId === state.initial.historicalReconciliation.requestId) throw Error('Historical request ID cannot be reused');
   const b = state.initial.budget, phases: TrialPhase[] = ['cancel', 'recovery', 'infeasible'];
-  if (state.grants.length + 1 >= b.maxRequests || request.phase !== phases[state.grants.length]) throw Error('Request/phase limit or order');
   if (state.grants.some(g => !g.closed)) throw Error('Previous dispatch is not verified closed');
+  if (request.authorizationId !== undefined) {
+    const authorization = state.supplementalAuthorization, prior = state.grants.filter(g => g.grant.authorizationId !== undefined);
+    if (!authorization || authorization.authorizationId !== request.authorizationId || request.phase !== 'infeasible' || prior.length >= authorization.maxPostAttempts) throw Error('Supplemental authorization or attempt limit');
+    if (prior.length === 0) { if (request.retryOfRequestId !== undefined) throw Error('First supplemental request is not a retry'); }
+    else if (request.retryOfRequestId !== prior[0].grant.requestId || !prior[0].rejection || !same(request.binding, prior[0].grant.binding)) throw Error('Retry requires audited application rejection of the same supplemental request');
+  } else if (request.retryOfRequestId !== undefined || state.grants.length + 1 >= b.maxRequests || request.phase !== phases[state.grants.length]) throw Error('Request/phase limit or order');
   const cap = request.phase === 'cancel' ? 1 : request.phase === 'recovery' ? 3 : 6;
   if (request.maxCalls > cap) throw Error('Phase call cap exceeded');
-  if (state.initial.historicalReconciliation.sentUnknownCalls + state.grants.reduce((n, g) => n + g.grant.maxCalls, 0) + request.maxCalls > b.maxCalls) throw Error('Cumulative call permits exceeded');
+  if (consumedCalls(state) + request.maxCalls > b.maxCalls) throw Error('Cumulative call permits exceeded');
   const remainingPhases = request.phase === 'cancel' ? 2 : request.phase === 'recovery' ? 1 : 0;
   if (checkedSum([committed(state), (request.maxCalls + remainingPhases) * b.callReserveNanoUsd]) > b.modelPoolNanoUsd) throw Error('Request would consume the later-phase minimum or exceed model pool');
 }
-function transition(prior: State | undefined, type: Event['type'], payload: unknown): State {
+function transition(prior: State | undefined, type: Event['type'], payload: unknown, previousHash: string | null = null): State {
   if (type === 'initialize') { if (prior) throw Error('Duplicate initialization'); return { initial: validateInitial(payload), grants: [] }; }
   if (!prior) throw Error('Missing initial event');
   const state = clone(prior);
+  if (type === 'authorize-supplemental') {
+    const report = SupplementalSchema.parse(payload);
+    if (state.supplementalAuthorization || state.grants.some(g => !g.closed) || report.priorHeadHash !== previousHash || report.inherited.requestsConsumed !== 1 + state.grants.length || report.inherited.callPermitsConsumed !== consumedCalls(state) || report.inherited.committedNanoUsd !== committed(state)) throw Error('Supplemental authorization does not match closed inherited history');
+    state.supplementalAuthorization = report; return state;
+  }
   if (type === 'reserve') {
     const g = GrantSchema.parse(payload);
     if (state.grants.some(x => x.grant.requestId === g.requestId || x.grant.grantId === g.grantId)) throw Error('Duplicate grant');
-    validateReservation(state, RequestSchema.parse({ requestId: g.requestId, phase: g.phase, maxCalls: g.maxCalls, binding: g.binding }));
+    validateReservation(state, grantRequest(g));
     if (g.callIds.length !== g.maxCalls || new Set(g.callIds).size !== g.callIds.length || state.grants.some(x => x.grant.callIds.some(id => g.callIds.includes(id)))) throw Error('Duplicate or missing call permits');
     if (g.priorCommittedNanoUsd !== committed(state) || g.reservedNanoUsd !== g.maxCalls * state.initial.budget.callReserveNanoUsd) throw Error('Reservation amount mismatch');
     state.grants.push({ grant: g, forwarded: false, closed: false, calls: g.callIds.map(id => ({ id, state: 'reserved-not-sent', committedNanoUsd: state.initial.budget.callReserveNanoUsd })) }); return state;
@@ -130,7 +150,7 @@ export class Ledger {
       for (const line of text.slice(0, -1).split('\n')) {
         const event = EventSchema.parse(JSON.parse(line)), { hash, ...body } = event;
         if (event.sequence !== ledger.events.length || event.previousHash !== (ledger.events.at(-1)?.hash ?? null) || digest(body) !== hash) throw Error('Ledger hash chain mismatch');
-        ledger.state = transition(ledger.events.length ? ledger.state : undefined, event.type, event.payload); ledger.events.push(event);
+        ledger.state = transition(ledger.events.length ? ledger.state : undefined, event.type, event.payload, event.previousHash); ledger.events.push(event);
       }
       ledger.fd = openSync(ledger.path, 'a'); return ledger;
     } catch (error) { ledger.close(); throw error; }
@@ -145,7 +165,7 @@ export class Ledger {
   }
   private assertOpen() { if (this.fd === undefined || this.poisoned) throw Error('Ledger closed or write uncertain; reopen and verify before further work'); }
   private append(type: Event['type'], payload: unknown) {
-    this.assertOpen(); const state = transition(this.events.length ? this.state : undefined, type, payload);
+    this.assertOpen(); const state = transition(this.events.length ? this.state : undefined, type, payload, this.events.at(-1)?.hash ?? null);
     const body = { version: 1 as const, sequence: this.events.length, previousHash: this.events.at(-1)?.hash ?? null, at: new Date().toISOString(), type, payload: clone(payload) };
     const event: Event = { ...body, hash: digest(body) };
     try { writeAll(this.fd!, Buffer.from(canonical(event) + '\n')); fsyncSync(this.fd!); syncDirectory(this.path); }
@@ -156,12 +176,14 @@ export class Ledger {
     this.assertOpen(); const b = this.state.initial.budget, amount = committed(this.state);
     return clone({ trialId: this.state.initial.trialId, headHash: this.events.at(-1)!.hash, eventCount: this.events.length, budget: b,
       committedNanoUsd: amount, remainingModelNanoUsd: b.modelPoolNanoUsd - amount, grossCommittedAndInfraNanoUsd: checkedSum([amount, b.priorInfrastructureNanoUsd, b.additionalInfrastructureNanoUsd, b.safetyNanoUsd]),
-      requestsConsumed: 1 + this.state.grants.length, callPermitsConsumed: this.state.initial.historicalReconciliation.sentUnknownCalls + this.state.grants.reduce((n, g) => n + g.grant.maxCalls, 0),
+      requestsConsumed: 1 + this.state.grants.length, callPermitsConsumed: consumedCalls(this.state),
+      ...(this.state.supplementalAuthorization ? { supplementalAuthorization: this.state.supplementalAuthorization,
+        supplementalRequestsConsumed: this.state.grants.filter(g => g.grant.authorizationId !== undefined).length } : {}),
       historicalReconciliation: this.state.initial.historicalReconciliation, historicalAmounts: { reservedBeforeNanoUsd: this.state.initial.historicalReconciliation.reservedCalls * b.callReserveNanoUsd, retainedSentUnknownNanoUsd: this.state.initial.historicalReconciliation.sentUnknownCalls * b.callReserveNanoUsd, releasedNotSentNanoUsd: (this.state.initial.historicalReconciliation.reservedCalls - this.state.initial.historicalReconciliation.sentUnknownCalls) * b.callReserveNanoUsd }, grants: this.state.grants });
   }
   reserveRequest(input: ReserveRequest): TrialGrant {
     this.assertOpen(); const request = RequestSchema.parse(input), prior = this.state.grants.find(g => g.grant.requestId === request.requestId);
-    if (prior) { if (!same(request, { requestId: prior.grant.requestId, phase: prior.grant.phase, maxCalls: prior.grant.maxCalls, binding: prior.grant.binding })) throw Error('Conflicting duplicate request'); return clone(prior.grant); }
+    if (prior) { if (!same(request, grantRequest(prior.grant))) throw Error('Conflicting duplicate request'); return clone(prior.grant); }
     validateReservation(this.state, request);
     const grant = { ...request, grantId: randomUUID(), callIds: Array.from({ length: request.maxCalls }, () => randomUUID()), priorCommittedNanoUsd: committed(this.state), reservedNanoUsd: request.maxCalls * this.state.initial.budget.callReserveNanoUsd };
     this.append('reserve', grant); return clone(grant);
@@ -191,6 +213,15 @@ export class Ledger {
     if (!prior || typeof verify !== 'function' || verify(clone(report), clone(prior.grant)) !== true) throw Error('Audited before-run rejection proof rejected');
     if (prior.rejection) { if (same(prior.rejection, report)) return; throw Error('Conflicting duplicate rejection settlement'); }
     this.append('reject-before-run', report);
+  }
+  /** Explicit user-authorized C continuation only; changes no historical event,
+   * monetary policy, consumed permit or resource-time authority. The optional
+   * second POST requires a separate audited rejection of this new first POST. */
+  authorizeSupplementalRequest(input: SupplementalAuthorization, verify: VerifySupplementalAuthorization) {
+    this.assertOpen(); const report = SupplementalSchema.parse(input);
+    if (typeof verify !== 'function' || verify(clone(report)) !== true) throw Error('Explicit supplemental authorization rejected');
+    if (this.state.supplementalAuthorization) { if (same(this.state.supplementalAuthorization, report)) return; throw Error('Conflicting duplicate supplemental authorization'); }
+    this.append('authorize-supplemental', report);
   }
   close() {
     if (!this.ownsLock) return;
