@@ -46,6 +46,8 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
   const [interpretationDraft, setInterpretationDraft] = useState(false);
   const [unsupported, setUnsupported] = useState(false);
   const [pollInterrupted, setPollInterrupted] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const cancellingRef = useRef(false);
   const [waitSeconds, setWaitSeconds] = useState(0);
   const waitStarted = useRef<number | null>(null);
   const [evidence, setEvidence] = useState<AiEvidence[]>([]);
@@ -81,7 +83,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     const key = `${session.sessionId}:${runId}`;
     if (cancellationSent.current.has(key)) return;
     cancellationSent.current.add(key);
-    try {const result = await request<{run: Run}>(`/api/sessions/${session.sessionId}/runs/${runId}`, 'DELETE', undefined, session.token, accessCode); rememberResponse(result.run);}
+    try {const result = await request<{run: Run}>(`/api/sessions/${session.sessionId}/runs/${runId}`, 'DELETE', undefined, session.token, accessCode); rememberResponse(result.run); return result.run;}
     catch (error) {cancellationSent.current.delete(key); throw error;}
   }
   function endGeneration(kind: 'cancelled' | 'stale' | 'expired') {
@@ -195,7 +197,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     await poll(context);
   }
   async function start(correction?: RunCorrection) {
-    if (busyRef.current || !selectionReady || draftRef.current || pollContext.current) return;
+    if (busyRef.current || cancellingRef.current || !selectionReady || draftRef.current || pollContext.current) return;
     if (!connection.enabled) {setMessage(connection.unreachable ? 'サーバーに接続できません。現在の作品は残っています。手動での編集と出力は続けられます。' : 'AIは未接続です。寸法から案をつくり、保存・印刷まで進められます。'); return;}
     if (!access.trim()) {setMessage('設定でAIアクセスコードを入力してから、案をつくってください。'); onOpenSettings?.(); return;}
     if (correction) {
@@ -231,15 +233,20 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     await start({runId: current.id, requestId: current.requestId, changes: {...changes, binding}});
   }
   async function cancel() {
+    if (cancellingRef.current) return;
     const current = runRef.current, session = sessionRef.current;
     endGeneration('cancelled'); const ticket = generation.current;
     if (current) decide(current.id, 'cancelled', undefined, '画面で中断しました。届いた結果は反映しません。送信済みの処理が止まったかは実行記録で確認します。');
     setRun(null); runRef.current = null;
+    let confirmed = false;
     if (current && session) {
-      try {await cancelServerRun(session, current.id, access);}
+      cancellingRef.current = true; setCancelling(true);
+      setMessage('中断を要求しています。現在の作品は変わっていません。手動の編集は続けられます。');
+      try {confirmed = (await cancelServerRun(session, current.id, access))?.status === 'cancelled';}
       catch (error) {if (ticket === generation.current && !releaseExpiredSession(error)) setMessage('画面での待機を中断しました。サーバーへの中断要求は届きませんでした。送信済みの呼び出しは取り消せないことがあります。'); return;}
+      finally {cancellingRef.current = false; setCancelling(false);}
     }
-    if (ticket === generation.current) setMessage('中断しました。届いた結果は反映しません。編集内容と実行記録は残っています。');
+    if (ticket === generation.current) setMessage(confirmed ? '中断しました。届いた結果は反映しません。サーバーが中断要求を確認しました。別の依頼を実行できます。送信済みのAPI処理や課金の停止は保証しません。' : '画面での待機を中断しました。届いた結果は反映しません。サーバー側の中断はまだ確認できていません。');
   }
   async function resolveProposal(accept: boolean) {
     const session = sessionRef.current;
@@ -283,7 +290,7 @@ export default function AiPanel({document, imageDataUrl, backgroundImageDataUrl,
     </> : <p>{connection.unreachable ? 'サーバーの状態を確認できません。' : 'このサイトではAIは無効です。'} 方向・距離の操作や、寸法からの案づくりを続けられます。</p>}
     <p className="field-note">案をつくる操作をしたときだけ、希望・寸法・選択範囲を送ります。画像そのものは送信しません。</p>
   </section>;
-  const action = <button data-design-action onClick={() => {onActivate?.(); void start();}} disabled={busy || pollInterrupted || interpretationDraft || !prompt.trim() || !selectionReady || inputDraftActive} className="secondary">{run?.status === 'failed' ? 'AIを再試行する' : busy ? 'AIの案を待っています…' : 'AIで案をつくる'}</button>;
+  const action = <button data-design-action onClick={() => {onActivate?.(); void start();}} disabled={busy || cancelling || pollInterrupted || interpretationDraft || !prompt.trim() || !selectionReady || inputDraftActive} className="secondary">{cancelling ? '中断要求を確認中…' : run?.status === 'failed' ? 'AIを再試行する' : busy ? 'AIの案を待っています…' : 'AIで案をつくる'}</button>;
   const repeatsValidationIssue = run?.status === 'failed' && run.error?.code === 'validation_failed'
     && message === (run.error.message ?? run.message)
     && run.validationIssues?.some(issue => issue.message && message.includes(issue.message));
