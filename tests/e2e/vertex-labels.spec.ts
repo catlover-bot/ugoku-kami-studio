@@ -53,8 +53,8 @@ class VertexHttpFixture {
       if (path.includes('/runs/') && method === 'DELETE') {
         this.cancelHeaders = await request.allHeaders();
         expect(request.postData()).toBeNull();
-        this.run = { ...this.run!, status: 'cancelled', proposal: undefined };
-        return json({ run: this.run });
+        this.run = { ...this.run!, status: 'cancelled', proposal: undefined, dispatchClosed: true, cancellation: {requestedAt: '2026-10-05T00:00:00.000Z', previousStatus: this.run!.status, dispatchClosedBeforeCancel: false, abortSignalAborted: true, toolCallsAtRequest: this.run!.toolCalls} };
+        return json({ run: {...this.run, cancellation: {...this.run.cancellation, authorization: 'fixture-private-field-must-not-be-exported'}} });
       }
       throw new Error(`Unexpected fixture API path: ${method} ${path}`);
     });
@@ -138,5 +138,8 @@ test('Vertex mock cancellation retains the source and the bodyless DELETE fix', 
   expect(exported.records[0]!.execution.provider).toBe('vertex');
   expect(exported.records[0]!.decision.status).toBe('cancelled');
   expect(exported.records[0]!.serverRun.status).toBe('cancelled');
+  expect(exported.records[0]!.serverRun.dispatchClosed).toBe(true);
+  expect(exported.records[0]!.serverRun.cancellation).toEqual(fixture.run!.cancellation);
+  expect(JSON.stringify(exported)).not.toContain('fixture-private-field-must-not-be-exported');
   expect(fixture.starts).toBe(1);
 });

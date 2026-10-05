@@ -7,6 +7,8 @@ export type AiRun = {
   localModel?: {digest: string; quantization: string; contextLength: number; runtimeVersion: string; toolMode?: 'native' | 'json-actions'};
   status: 'running' | 'awaiting_approval' | 'clarification_required' | 'succeeded' | 'failed' | 'cancelled';
   message: string;
+  dispatchClosed?: boolean;
+  cancellation?: {requestedAt: string; previousStatus: AiRun['status']; dispatchClosedBeforeCancel: boolean; abortSignalAborted: boolean; toolCallsAtRequest: number};
   events: { sequence?: number; type?: string; tool?: string; name?: string; message?: string; designHash?: string; patch?: DesignPatch; checkStatuses?: {id: string; status: string}[]; durationMs?: number }[];
   proposal?: { id: string; requestId?: string; baseRevision?: number; baseHash?: string; patch: DesignPatch; document: DesignDocument; addedLocks?: string[]; protectedConditions?: string[]; requestedTravelMm?: number; fulfillsRequested?: boolean };
   requestInterpretation?: Pick<DesignIntent, 'binding' | 'interpretation' | 'clarifications' | 'summary' | 'approvalRequired'>;
@@ -35,6 +37,8 @@ export function publicRunSnapshot(run: AiRun): AiRun {
   return structuredClone({
     id: run.id, requestId: run.requestId, baseRevision: run.baseRevision, baseHash: run.baseHash,
     mode: run.mode, provider: run.provider, model: run.model, localModel: run.localModel, status: run.status, message: run.message,
+    dispatchClosed: run.dispatchClosed,
+    cancellation: run.cancellation ? {requestedAt: run.cancellation.requestedAt, previousStatus: run.cancellation.previousStatus, dispatchClosedBeforeCancel: run.cancellation.dispatchClosedBeforeCancel, abortSignalAborted: run.cancellation.abortSignalAborted, toolCallsAtRequest: run.cancellation.toolCallsAtRequest} : undefined,
     events: run.events.map(event => ({sequence: event.sequence, type: event.type, tool: event.tool, name: event.name, message: event.message, designHash: event.designHash, patch: event.patch, checkStatuses: event.checkStatuses, durationMs: event.durationMs})),
     proposal: run.proposal ? {id: run.proposal.id, requestId: run.proposal.requestId, baseRevision: run.proposal.baseRevision, baseHash: run.proposal.baseHash, patch: run.proposal.patch, document: run.proposal.document, addedLocks: run.proposal.addedLocks, protectedConditions: run.proposal.protectedConditions, requestedTravelMm: run.proposal.requestedTravelMm, fulfillsRequested: run.proposal.fulfillsRequested} : undefined,
     requestInterpretation: run.requestInterpretation, intentSummary: run.intentSummary, validationIssues: run.validationIssues, constraintSuggestions: run.constraintSuggestions,
