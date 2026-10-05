@@ -59,7 +59,7 @@ describe('durably reserved private-trial call grants (offline transport)', () =>
     const current = f.app.sessions.authorize(f.session.sessionId, f.headers.authorization), run = current.runs.get(started.json().run.id)!;
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
     const cancelled = await f.app.inject({ method: 'DELETE', url: f.url + '/runs/' + run.id, headers: f.headers });
-    expect(cancelled.json().run).toMatchObject({ status: 'cancelled', dispatchClosed: true, toolCalls: 0, cancellation: { previousStatus: 'running', dispatchClosedBeforeCancel: false, abortSignalAborted: true } });
+    expect(cancelled.json().run).toMatchObject({ status: 'cancelled', dispatchClosed: true, toolCalls: 0, cancellation: { previousStatus: 'running', dispatchClosedBeforeCancel: false, abortSignalAborted: true, toolCallsAtRequest: 0 } });
     finish(response());
     await vi.waitFor(() => expect(run.modelUsage[0].observations?.length).toBeGreaterThan(0));
     expect(run).toMatchObject({ status: 'cancelled', dispatchClosed: true, toolCalls: 0, modelCalls: 1 });

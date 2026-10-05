@@ -42,7 +42,7 @@ export type Run = {
   modelCalls: number; toolCalls: number; elapsedMs: number; usage: TokenUsage & { responsesWithUsage: number; responsesWithoutUsage: number };
   controller: AbortController; done?: Promise<void>;
   dispatchClosed?: boolean; dispatchClosedAt?: string;
-  cancellation?: { requestedAt: string; previousStatus: RunState; dispatchClosedBeforeCancel: boolean; abortSignalAborted: boolean };
+  cancellation?: { requestedAt: string; previousStatus: RunState; dispatchClosedBeforeCancel: boolean; abortSignalAborted: boolean; toolCallsAtRequest: number };
   trialDispatch?: { permitId: string; callIds: string[]; sourceSha: string; sessionId: string; sdkRetryAttempts: 1 };
 };
 
@@ -164,7 +164,7 @@ export class RunManager {
       run.status = 'cancelled'; run.proposal = undefined;
       run.message = (run.mode === 'gemini' || run.mode === 'vertex') ? '中断しました。送信済みのAPI呼び出しの課金取消しは保証されません。' : '中断しました。後続の検査・候補適用を停止しました。送信済みの推論が停止したとは限りません。';
       run.controller.abort(new AppError('cancelled', '利用者が中断しました。'));
-      run.cancellation ??= { requestedAt: new Date().toISOString(), previousStatus, dispatchClosedBeforeCancel, abortSignalAborted: run.controller.signal.aborted };
+      run.cancellation ??= { requestedAt: new Date().toISOString(), previousStatus, dispatchClosedBeforeCancel, abortSignalAborted: run.controller.signal.aborted, toolCallsAtRequest: run.toolCalls };
     }
     return run;
   }
