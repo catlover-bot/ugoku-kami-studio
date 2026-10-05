@@ -137,7 +137,18 @@ export class RunManager {
     if ([...session.runs.values()].some(run => run.status === 'running' && run !== previous)) throw new AppError('run_active', 'この設計はすでに実行中です。', 409);
     const now = Date.now();
     this.starts = this.starts.filter(time => now - time < 3_600_000);
-    if (this.active >= this.config.maxConcurrentRuns || this.starts.length >= this.config.runsPerHour || this.starts.filter(time => now - time < 60_000).length >= this.config.runsPerMinute) throw new AppError('instance_limit', '現在の実行上限です。時間をおいて再試行してください。', 429);
+    // Concurrency has no known release time. Do not promise a retry time even
+    // when a starts window also happens to be full.
+    if (this.active >= this.config.maxConcurrentRuns) throw new AppError('instance_limit', '現在の実行上限です。時間をおいて再試行してください。', 429);
+    const windows: [number, number][] = [[3_600_000, this.config.runsPerHour], [60_000, this.config.runsPerMinute]];
+    const releases = windows.flatMap(([windowMs, limit]) => {
+      const starts = this.starts.filter(time => now - time < windowMs).sort((a, b) => a - b);
+      return starts.length >= limit ? [starts[starts.length - limit]! + windowMs] : [];
+    });
+    if (releases.length) {
+      const retryAt = Math.max(...releases);
+      throw new AppError('instance_limit', '現在の実行上限です。時間をおいて再試行してください。', 429, { retryAfterMs: retryAt - now, retryAt: new Date(retryAt).toISOString() });
+    }
     if (previous) this.cancel(previous);
     for (const older of session.runs.values()) if (older.status === 'awaiting_approval') this.cancel(older);
     const run: Run = { id: randomUUID(), requestId: input.requestId, baseRevision: input.baseRevision, baseHash: input.baseHash, fingerprint, model: this.config.model, provider: this.config.provider, mode: this.provider instanceof VertexProvider ? 'vertex' : this.provider instanceof GeminiProvider ? 'gemini' : this.provider instanceof OllamaProvider ? 'ollama' : 'injected-test', modelUsage: [], prompt: input.prompt, authorCorrection, interpretationProposal: structuredClone(previous?.interpretationProposal ?? intent.interpretation), requestInterpretation: interpretationView(intent), intent: structuredClone(intent), intentSummary: { protections: protectionLabels(session.document, intent), notes: [...intent.notes] }, status: 'running', message: '現在の設計と、守る条件を確認しています。', events: [], validationIssues: [], constraintSuggestions: [], modelCalls: 0, toolCalls: 0, elapsedMs: 0, usage: { promptTokens: 0, outputTokens: 0, thinkingTokens: 0, cachedInputTokens: 0, toolPromptTokens: 0, totalTokens: 0, responsesWithUsage: 0, responsesWithoutUsage: 0 }, controller: new AbortController() };
