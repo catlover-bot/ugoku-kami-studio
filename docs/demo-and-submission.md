@@ -2,7 +2,7 @@
 
 ## Goal010限定試験後の提出状態
 
-公開版候補はCloud Run東京のWeb/API＋Vertex AI、ローカル開発はWSLのOllama＋Gemmaです。[Goal010](goals/010-metering-and-final-trial.md)の実試験は2026-10-05、配信SHA `6b6e98bd33f9f125e0301865da98024167ef9fab` のIAM非公開サービスで行いました。結果記録を含む最終main統合・CIは別途確認します。
+公開版候補はCloud Run東京のWeb/API＋Vertex AI、ローカル開発はWSLのOllama＋Gemmaです。[Goal010](goals/010-metering-and-final-trial.md)の実試験は2026-10-05、配信SHA `6b6e98bd33f9f125e0301865da98024167ef9fab` のIAM非公開サービスで行いました。結果記録を含む最終main SHA・同SHAのCIは `artifacts/submission/private/goal010/main-integration.json` に記録します。
 
 | ケース | 実際の結果 | 確認の範囲 |
 |---|---|---|

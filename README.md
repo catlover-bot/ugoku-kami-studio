@@ -14,7 +14,7 @@
 
 [Goal 009](docs/goals/009-vertex-comparison.md)では、公開候補としてCloud RunのWeb/API＋Vertex AIを準備しています。明示した`AI_PROVIDER=vertex`とADCを使う専用アダプターを追加し、接続表示と模擬通信を確認しました。**非公開Vertex試験では1依頼が約6.3秒で候補表示まで進み、採用・同版PDF・保存再開を確認しました。使用量の欠測により費用予約を維持し、残り3件は開始せず片付けました。** [実測・費用・片付け結果](docs/vertex-trial-009.md)を参照してください。既存Gemmaの実測・動画は別の記録です。[構成比較・料金根拠・次の限定試験案](docs/vertex-comparison-009.md)を参照してください。
 
-[Goal010](docs/goals/010-metering-and-final-trial.md)では、配信SHA `6b6e98b` の非公開Cloud Run＋Vertex AIで、実HTTP送信開始後のUI中断と原本保持を確認しました。これは提供者側の計算・課金停止の保証ではありません。同じブラウザで別依頼を続け、**25→30mmの候補をUI待機8.429秒・モデル3回で生成し、第3版へ採用、同版PDF5ページ・ガイド・保存再読込まで確認しました**。この時間は1件の実測です。3件目は試験スクリプトが毎分2件制限の待機を入れなかったため、HTTP429 `instance_limit` で推論前に拒否されました。70mmの不成立検査は未実施で、再試行していません。[実結果と残る制約](docs/vertex-trial-010.md)を参照してください。結果記録を含む最終main統合・CIは別途確認します。
+[Goal010](docs/goals/010-metering-and-final-trial.md)では、配信SHA `6b6e98b` の非公開Cloud Run＋Vertex AIで、実HTTP送信開始後のUI中断と原本保持を確認しました。これは提供者側の計算・課金停止の保証ではありません。同じブラウザで別依頼を続け、**25→30mmの候補をUI待機8.429秒・モデル3回で生成し、第3版へ採用、同版PDF5ページ・ガイド・保存再読込まで確認しました**。この時間は1件の実測です。3件目は試験スクリプトが毎分2件制限の待機を入れなかったため、HTTP429 `instance_limit` で推論前に拒否されました。70mmの不成立検査は未実施で、再試行していません。[実結果と残る制約](docs/vertex-trial-010.md)を参照してください。結果記録を含む最終main SHA・同SHAのCIは `artifacts/submission/private/goal010/main-integration.json` に記録します。
 
 追加素材は `artifacts/submission/public/goal010/` の**82.840秒**の字幕付き編集動画、実画面5枚、採用第3版PDFです。実録と静止画を区別したローカル提出候補で、約3分の完成版・YouTube投稿・公開URL・実物完成は意味しません。既存WSLの180秒動画・画像は保全しています。
 
