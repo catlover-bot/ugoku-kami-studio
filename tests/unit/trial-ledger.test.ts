@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { Ledger, type ClosureReport, type LedgerInitial, type TrialGrant, type TrialPhase } from '../../scripts/trial-ledger.js';
+import { Ledger, type ClosureReport, type LedgerInitial, type TrialGrant, type TrialPhase, type RejectedRequestReport, type VerifyRejectedRequest } from '../../scripts/trial-ledger.js';
 vi.mock('node:fs', async (importOriginal) => { const actual = await importOriginal<typeof import('node:fs')>(); return { ...actual, fsyncSync: vi.fn(actual.fsyncSync) }; });
 const dirs: string[] = [], opened: Ledger[] = [];
 const HASH = 'a'.repeat(64);
@@ -16,6 +16,12 @@ function reopen(p: string) { const ledger = Ledger.open(p); opened.push(ledger);
 function reserve(ledger: Ledger, phase: TrialPhase, maxCalls: number) { return ledger.reserveRequest({ requestId: 'request-' + phase, phase, maxCalls, binding }); }
 function report(grant: TrialGrant, count: number, usd?: number): ClosureReport { return { requestId: grant.requestId, grantId: grant.grantId, binding: grant.binding, dispatchClosed: true, completeAttemptList: true, sdkFetchRetryGuard: 1, serverIdentity: 'verified-server', proofHashes: [HASH], attempts: grant.callIds.slice(0, count).map(attemptId => ({ attemptId, dispatch: 'sent', cost: usd === undefined ? { kind: 'sent-unknown' } : { kind: 'usage-estimate', usd }, observationHashes: [HASH] })) }; }
 function finish(ledger: Ledger, grant: TrialGrant, count: number, usd?: number) { expect(ledger.markForwarded(grant)).toBe(true); ledger.reconcile(report(grant, count, usd), () => true); }
+function rejection(grant: TrialGrant): RejectedRequestReport { return { requestId: grant.requestId, grantId: grant.grantId, binding: grant.binding, httpStatus: 429, errorCode: 'instance_limit', classification: 'audited-before-run-rejection', proofHashes: [HASH, 'f'.repeat(64)], serverIdentity: 'audited-pinned-service-source' }; }
+function prepareC() {
+  const ledger = create(); finish(ledger, reserve(ledger, 'cancel', 1), 1);
+  const b = reserve(ledger, 'recovery', 3), r = report(b, 3, .0277275); r.attempts.forEach(a => { a.cost = { kind: 'aggregate-upper-estimate', usd: .0277275 }; }); ledger.markForwarded(b); ledger.reconcile(r, () => true);
+  return { ledger, c: reserve(ledger, 'infeasible', 3) };
+}
 afterEach(() => { vi.restoreAllMocks(); for (const ledger of opened.splice(0)) ledger.close(); for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true }); });
 
 describe('durable bounded trial ledger', () => {
@@ -81,6 +87,33 @@ describe('durable bounded trial ledger', () => {
   it('rejects a cost estimate for possibly-sent records and keeps the reservation after cancellation', () => {
     const ledger = create(), a = reserve(ledger, 'cancel', 1); ledger.markForwarded(a); const r = report(a, 1, .001); r.attempts[0].dispatch = 'possibly-sent';
     expect(() => ledger.reconcile(r, () => true)).toThrow(); r.attempts[0].cost = { kind: 'sent-unknown' }; ledger.reconcile(r, () => true); expect(ledger.getSnapshot().committedNanoUsd).toBe(1_668_096_000);
+  });
+  it('appends an audited pre-run C rejection without inventing a run closure or restoring request/call permits', () => {
+    const { ledger, c } = prepareC(); ledger.markForwarded(c); const before = ledger.getSnapshot(), bytes = fs.readFileSync(ledger.path);
+    expect(before.committedNanoUsd).toBe(3_419_374_500);
+    ledger.reconcileRejectedRequest(rejection(c), (r, g) => r.classification === 'audited-before-run-rejection' && g.grantId === c.grantId);
+    const after = ledger.getSnapshot(); expect(after.committedNanoUsd).toBe(1_751_278_500); expect(after.requestsConsumed).toBe(4); expect(after.callPermitsConsumed).toBe(9);
+    expect(after.historicalAmounts).toEqual(before.historicalAmounts); expect(after.grants.slice(0, 2)).toEqual(before.grants.slice(0, 2));
+    expect(after.grants[2]).toMatchObject({ forwarded: true, closed: true, rejection: rejection(c) }); expect(after.grants[2].closure).toBeUndefined();
+    expect(after.grants[2].calls.every(call => call.state === 'released-not-sent' && call.committedNanoUsd === 0)).toBe(true);
+    expect(fs.readFileSync(ledger.path).subarray(0, bytes.length)).toEqual(bytes);
+    expect(() => ledger.reserveRequest({ requestId: 'retry-forbidden', phase: 'infeasible', maxCalls: 1, binding })).toThrow();
+    ledger.close(); const restored = reopen(ledger.path); expect(restored.getSnapshot()).toEqual(after); expect(restored.markForwarded(c)).toBe(false);
+  });
+  it('requires exact matching pre-run rejection evidence and a literal trusted verifier result', () => {
+    const { ledger, c } = prepareC(), r = rejection(c); expect(() => ledger.reconcileRejectedRequest(r, () => true)).toThrow(); ledger.markForwarded(c);
+    const bytes = fs.readFileSync(ledger.path);
+    for (const verify of [undefined, () => false, () => Promise.resolve(true)]) expect(() => ledger.reconcileRejectedRequest(r, verify as unknown as VerifyRejectedRequest)).toThrow();
+    for (const change of [{ httpStatus: 503 }, { errorCode: 'provider_quota' }, { proofHashes: [] }, { binding: { ...binding, baseRevision: 2 } }, { requestId: 'unknown' }, { dispatchClosed: true }, { classification: 'assumed-not-sent' }]) expect(() => ledger.reconcileRejectedRequest({ ...r, ...change } as RejectedRequestReport, () => true)).toThrow();
+    expect(fs.readFileSync(ledger.path)).toEqual(bytes); expect(ledger.getSnapshot().committedNanoUsd).toBe(3_419_374_500);
+  });
+  it('makes exact rejection evidence idempotent and refuses changed evidence or overwriting a real run settlement', () => {
+    const { ledger, c } = prepareC(); ledger.markForwarded(c); const r = rejection(c); ledger.reconcileRejectedRequest(r, () => true); const bytes = fs.readFileSync(ledger.path);
+    ledger.reconcileRejectedRequest(r, () => true); expect(fs.readFileSync(ledger.path)).toEqual(bytes);
+    expect(() => ledger.reconcileRejectedRequest({ ...r, proofHashes: ['e'.repeat(64)] }, () => true)).toThrow('Conflicting');
+    expect(() => ledger.reconcileRejectedRequest(r, undefined as unknown as VerifyRejectedRequest)).toThrow();
+    expect(() => ledger.reconcileRejectedRequest(rejection(ledger.getSnapshot().grants[1].grant), () => true)).toThrow();
+    expect(() => ledger.reconcile(report(c, 0), () => true)).toThrow(); expect(fs.readFileSync(ledger.path)).toEqual(bytes);
   });
   it('fails closed on torn lines, hash changes and simultaneous writers', () => {
     const ledger = create(), p = ledger.path; expect(() => Ledger.open(p)).toThrow(); const lock = JSON.parse(fs.readFileSync(p + '.lock', 'utf8')); expect(() => Ledger.clearAbandonedLock(p, lock)).toThrow('alive');

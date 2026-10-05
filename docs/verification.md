@@ -1,5 +1,17 @@
 # 検証記録
 
+## Goal010 — 使用量・永続予約・中断後の実Vertex復帰
+
+2026-10-05 JST、SHA `6b6e98bd33f9f125e0301865da98024167ef9fab` を同じCloud Run東京へ非公開で配信した。AはSDK HTTP送信後の中断、原本・保存保持・後続ツール0を確認。Bは同じブラウザで別の30mm依頼がUI待ち8.429秒・モデル3回で成立し、比較・採用・同版の第3版PDF/ガイド・保存再開まで成功した。Cは試験手順の毎分2開始制限への待機不足でHTTP429となり、実モデルの不成立対応は未検証。失敗を含む依頼上限4件を消費したため、追加試行はしていない。[試験結果・費用・削除・残る課題](vertex-trial-010.md)。
+
+BのHTTPとSDKはともに思考/cache/toolのusage値が欠落していた。欠測を0にせず総tokenによる上方見積もりを算出する。旧2送信とAの予約は保持し、旧4未送信枠とCのRun作成前拒否3枠を別の証拠で精算した。元台帳を保存し、永続ハッシュ連鎖台帳はクラッシュ・再起動・二重精算でも依頼枠を復活させない。監査後の費用推計＋保持予約は旧分込み$2.088387487、実請求額は未取得。専用資源は削除済みで、ソースの7日削除保管と共有履歴を残す。
+
+配信前の `npm run check` は327件、全体Chromium E2Eは180件、保存専用は29件成功。ローカルWebKitはOSライブラリ不足で起動できず、配信SHAと一致する [Check](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37287867097) / [WebKit](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37287866808) のCI成功を別途確認した。試験後の開始間隔計算と拒否監査精算を含む最終ローカル `npm run check` は333件・lint・型検査・build成功。実SDK→provider→run→永続精算→再読込の合成fixtureも含み、実応答との区別を維持する。試験後の補助コードは再デプロイしていない。
+
+最終main SHA、同SHAのCI、作業ツリーの確認結果は `artifacts/submission/private/goal010/main-integration.json` に記録する。最新台帳snapshotは `ledger-after-rejection-snapshot.json` で、削除直後の `ledger-final-snapshot.json` はCの監査精算前の履歴として保全している。
+
+82.840秒のローカル動画、画像5枚、採用第3版PDFを `artifacts/submission/public/goal010/` に作成した。動画の全編等速再生・デコードと字幕画面、PDFの全5ページ描画を確認した。物理印刷・組立、公開URL、YouTube URL、Zenn最終提出は未完了。
+
 ## Goal009 — 非公開Vertex試験と使用量診断
 
 2026-10-05 JST、新しい一括承認に基づきSHA `4f43b25`をCloud Run東京へ非公開で配信しました。実Vertex `gemini-3.8-flash`の最初の1依頼はUI待ち6.305秒・モデル2呼出しで、20→25mmの候補を検査・比較・採用し、同版の5ページPDF、ガイド、保存再開まで成功しました。使用量が完全に取得できず、次の予約が管理枠に収まらないため残り3依頼は未実施。試験資源は削除済みです。費用管理合計$3.507861には未確定のモデル予約$3.336192を含み、実請求ではありません。[結果と残る課題](vertex-trial-009.md)。
