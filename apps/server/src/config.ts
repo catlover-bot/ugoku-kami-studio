@@ -28,7 +28,7 @@ export type ServerConfig = {
   /** Derived from provider; never an independent enabling flag. */
   aiEnabled: boolean;
   ollama: { baseUrl: string; model: string; digest: string; contextLength: number; toolMode: 'native' | 'json-actions' };
-  vertex: { project: string; location: 'global'; model: string; endpoint: string; apiVersion: 'v1'; modelBudgetUsd?: number };
+  vertex: { project: string; location: 'global'; model: string; endpoint: string; apiVersion: 'v1'; modelBudgetUsd?: number; trialPermitsRequired?: boolean; trialSourceSha?: string };
   apiKey: string;
   accessSecret: string;
   model: string;
@@ -71,6 +71,9 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   if (vertex && env.VERTEX_LOCATION !== 'global') throw new Error('VERTEX_LOCATION must explicitly be global');
   if (vertex && env.VERTEX_MODEL !== VERTEX_MODEL) throw new Error('VERTEX_MODEL must explicitly be gemini-3.8-flash');
   const modelBudget = vertex && env.VERTEX_MODEL_BUDGET_USD ? Number(env.VERTEX_MODEL_BUDGET_USD) : undefined;
+  const trialPermitsRequired = vertex && env.VERTEX_TRIAL_PERMITS_REQUIRED === 'true';
+  if (vertex && env.VERTEX_TRIAL_PERMITS_REQUIRED && !['true', 'false'].includes(env.VERTEX_TRIAL_PERMITS_REQUIRED)) throw Error('VERTEX_TRIAL_PERMITS_REQUIRED must be true or false');
+  if (trialPermitsRequired && (!/^[a-f0-9]{40}$/.test(env.VERTEX_TRIAL_SOURCE_SHA ?? '') || modelBudget !== 3.9)) throw Error('Trial permits require exact source SHA and model budget3.9');
   if (modelBudget !== undefined && (!/^\d+(?:\.\d{1,6})?$/.test(env.VERTEX_MODEL_BUDGET_USD!) || !Number.isFinite(modelBudget) || modelBudget <= 0 || modelBudget > 100)) throw new Error('VERTEX_MODEL_BUDGET_USD must be a positive amount up to 100 with at most 6 decimal places');
   const local = provider === 'ollama';
   const localModel = local ? validateOllamaModel(env.OLLAMA_MODEL || '') : '';
@@ -81,7 +84,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const config: ServerConfig = {
     provider: provider as ServerConfig['provider'],
     aiEnabled: provider !== 'none',
-    vertex: { project: vertexProject, location: 'global', model: VERTEX_MODEL, endpoint: VERTEX_ENDPOINT, apiVersion: 'v1', ...(modelBudget !== undefined ? { modelBudgetUsd: modelBudget } : {}) },
+    vertex: { project: vertexProject, location: 'global', model: VERTEX_MODEL, endpoint: VERTEX_ENDPOINT, apiVersion: 'v1', ...(modelBudget !== undefined ? { modelBudgetUsd: modelBudget } : {}), ...(trialPermitsRequired ? { trialPermitsRequired: true, trialSourceSha: env.VERTEX_TRIAL_SOURCE_SHA } : {}) },
     ollama: { baseUrl: localUrl, model: localModel, digest: local ? env.OLLAMA_MODEL_DIGEST?.replace(/^sha256:/, '') || '' : '', contextLength: integer(env.OLLAMA_CONTEXT_LENGTH, 8192, 2048, 32768, 'OLLAMA_CONTEXT_LENGTH'), toolMode: toolMode as 'native' | 'json-actions' },
     apiKey: provider === 'gemini' ? env.GEMINI_API_KEY?.trim() || '' : '',
     accessSecret: env.AI_ACCESS_SECRET || '',

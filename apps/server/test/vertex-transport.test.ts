@@ -84,7 +84,10 @@ describe('Vertex v1 installed-SDK wire contract (offline intercepts only)', () =
     const fetch = vi.fn(async () => json({ candidates: [{ content: { role: 'model', parts: [{ functionCall: { name: 'propose_design_patch', id: 'truncated-call', args: { travelMm: 15 } } }] }, finishReason: 'MAX_TOKENS' }], usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 20, thoughtsTokenCount: 492, totalTokenCount: 612 } })); vi.stubGlobal('fetch', fetch);
     const s = await session(), run = s.app.runs.start(s.current, s.body); await run.done;
     expect(run).toMatchObject({ status: 'failed', error: { code: 'invalid_output' }, toolCalls: 0, modelCalls: 1 });
-    expect(run.usage.thinkingTokens).toBe(492); expect(run.modelUsage[0]?.finishReason).toBe('MAX_TOKENS');
+    expect(run.usage.responsesWithUsage).toBe(0); expect(run.modelUsage[0]?.usage).toBeNull();
+    expect(run.modelUsage[0]?.usageDiagnostics?.observed.thoughtsTokenCount).toBe(492);
+    expect(run.modelUsage[0]?.modelCost?.kind).toBe('usage-estimate');
+    expect(run.modelUsage[0]?.finishReason).toBe('MAX_TOKENS');
     expect(run.proposal).toBeUndefined(); expect(s.current.document).toEqual(s.document); expect(fetch).toHaveBeenCalledTimes(1);
   });
   it('cancels via bodyless DELETE and ignores a late SDK result without another dispatch or adoption', async () => {
