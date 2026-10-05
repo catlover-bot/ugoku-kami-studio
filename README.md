@@ -4,15 +4,19 @@
 
 カメのサンプルや自分の画像から、引っぱりタブでまっすぐ動く工作を設計するWebアプリです。選択・プレビュー・条件検査・原寸PDF・材料・組み立て手順を同じ設計版から作ります。
 
-初期版の機構は直線運動だけです。回転・揺動・歩行・歯車・立体・モーターには対応しません。**実物未検証**で、紙質・摩擦・耐久性まで保証するものではありません。ソフトウェアはmainへ統合し、GitHub CIでDockerのビルド・実起動・手動操作・PDF取得を確認しました。Gemini Developer APIの実通信と一般公開は未確認です。Vertexは非公開の限定試験で1依頼の候補採用・同版PDF取得を確認し、試験サービスを削除しました。実行した検証と制約は [検証記録](docs/verification.md) を参照してください。
+初期版の機構は直線運動だけです。回転・揺動・歩行・歯車・立体・モーターには対応しません。**実物未検証**で、紙質・摩擦・耐久性まで保証するものではありません。ソフトウェアはmainへ統合し、GitHub CIでDockerのビルド・実起動・手動操作・PDF取得を確認しました。Gemini Developer APIの実通信と一般公開は未確認です。Vertexは非公開の限定試験で候補採用・同版PDF取得を確認し、Goal010では実送信後の中断と、同じブラウザでの別依頼への復帰も確認しました。不成立条件の確認はレート制限で未実施です。実行した検証と制約は [検証記録](docs/verification.md) を参照してください。
 
 [Goal 005](docs/goals/005-product-experience.md) の入力・保存・工程・組立体験を維持し、[Goal 006](docs/goals/006-request-understanding.md) では希望の読み取りと訂正を改善しました。統合の許可は [Goal 004-R](docs/goals/004-resume-and-main.md) から継続しています。確認済み変更のコミット・mainへの通常統合・push・通常CIは許可されています。実Gemini、実物、初見の人、実スマートフォン、Cloud Run公開の未確認状態は、ソフトウェア統合と分けて管理します。過去Goalのpush保留や全体blockedの記録は当時の状態であり、現在の統合を止める指示ではありません。
 
 [Goal 007-R](docs/goals/007r-local-ai-clean-ui.md) では、既存OllamaとローカルGemmaを使う接続を追加し、希望入力と候補の採否を同じ作業領域へ整理しました。Geminiを含むホスト型推論APIはこのGoalでは実行しません。設定・実測・WSLの起動方法は [AI接続の説明](docs/live-gemini.md) を参照してください。
 
-[Goal 008](docs/goals/008-submission-ready.md)では、条件変更の助言も提示前にコアで検査し、公開に備えた接続復帰と提出素材を準備しています。2026-10-05 JSTに、本人の許可で非公開のCloud Run＋Gemma限定試験を行い、試験サービスは削除しました。初回AIは180秒で時間切れ、同一依頼のキャッシュが温まった状態では78.5秒で候補を作成し、採用した同じ版のPDF・保存再開まで確認しました。中断のHTTP400は修正してローカル回帰を確認しましたが、Cloud再試験はしていません。**公開運用・審査可能なURLの提供にはまだ進めません。** [限定試験の結果・費用・残存保管](docs/cloud-trial-008.md)を参照してください。YouTube投稿・Zenn提出は未実施です。
+[Goal 008](docs/goals/008-submission-ready.md)では、条件変更の助言も提示前にコアで検査し、公開に備えた接続復帰と提出素材を準備しています。2026-10-05 JSTに、本人の許可で非公開のCloud Run＋Gemma限定試験を行い、試験サービスは削除しました。初回AIは180秒で時間切れ、同一依頼のキャッシュが温まった状態では78.5秒で候補を作成し、採用した同じ版のPDF・保存再開まで確認しました。中断のHTTP400は修正してローカル回帰を確認しました。Gemma経路のCloud再試験はしておらず、後述のGoal010は別のVertex経路での確認です。**公開運用・審査可能なURLの提供にはまだ進めません。** [限定試験の結果・費用・残存保管](docs/cloud-trial-008.md)を参照してください。YouTube投稿・Zenn提出は未実施です。
 
 [Goal 009](docs/goals/009-vertex-comparison.md)では、公開候補としてCloud RunのWeb/API＋Vertex AIを準備しています。明示した`AI_PROVIDER=vertex`とADCを使う専用アダプターを追加し、接続表示と模擬通信を確認しました。**非公開Vertex試験では1依頼が約6.3秒で候補表示まで進み、採用・同版PDF・保存再開を確認しました。使用量の欠測により費用予約を維持し、残り3件は開始せず片付けました。** [実測・費用・片付け結果](docs/vertex-trial-009.md)を参照してください。既存Gemmaの実測・動画は別の記録です。[構成比較・料金根拠・次の限定試験案](docs/vertex-comparison-009.md)を参照してください。
+
+[Goal010](docs/goals/010-metering-and-final-trial.md)では、配信SHA `6b6e98b` の非公開Cloud Run＋Vertex AIで、実HTTP送信開始後のUI中断と原本保持を確認しました。これは提供者側の計算・課金停止の保証ではありません。同じブラウザで別依頼を続け、**25→30mmの候補をUI待機8.429秒・モデル3回で生成し、第3版へ採用、同版PDF5ページ・ガイド・保存再読込まで確認しました**。この時間は1件の実測です。3件目は試験スクリプトが毎分2件制限の待機を入れなかったため、HTTP429 `instance_limit` で推論前に拒否されました。70mmの不成立検査は未実施で、再試行していません。[実結果と残る制約](docs/vertex-trial-010.md)を参照してください。結果記録を含む最終main統合・CIは別途確認します。
+
+追加素材は `artifacts/submission/public/goal010/` の**82.840秒**の字幕付き編集動画、実画面5枚、採用第3版PDFです。実録と静止画を区別したローカル提出候補で、約3分の完成版・YouTube投稿・公開URL・実物完成は意味しません。既存WSLの180秒動画・画像は保全しています。
 
 ## 起動
 
@@ -92,7 +96,7 @@ AIに送るのは入力文・設計寸法・選択座標・検査結果です。
 | 模擬プロバイダー | テストだけで依存注入。本番の代替成功応答には利用しない |
 | 実ローカルAI | 明示`AI_PROVIDER=ollama`。loopback・クラウド無効のOllamaへ接続。別モードへの自動切替なし |
 | Gemini Developer API | 明示`AI_PROVIDER=gemini`とAPIキー。初期状態は無効。実通信は未確認 |
-| Vertex AI | 明示`AI_PROVIDER=vertex`とADC。非公開Cloud Runで実推論1依頼・採用・PDFを確認。試験サービス削除済み、一般公開は未実施 |
+| Vertex AI | 明示`AI_PROVIDER=vertex`とADC。非公開Cloud Runで候補採用・PDF、実送信後の中断と別依頼への復帰を確認。不成立条件は未検証、一般公開は未実施 |
 
 希望入力は一つで、「寸法から案をつくる」「AIで案をつくる」を選べます。AIアクセスコード・モデル情報・実行記録は上部の「設定」にあり、コードは画面のメモリだけで扱います。`AI_PROVIDER`未設定は`none`で、保存済みGoogleキーや旧`AI_ENABLED=true`だけでは有効になりません。設定を入力しただけでは接続成功と表示しません。希望・設計・未確定入力が変われば、以前の候補や遅れて届く応答を反映しません。
 
@@ -124,10 +128,11 @@ AIの「実行の記録」から、モデル・実行ID・ツール・検査・�
 - [Goal 007-Rの全文と記録](docs/goals/007r-local-ai-clean-ui.md)
 - [Goal 008の非公開Cloud試験と残る課題](docs/cloud-trial-008.md)
 - [Goal 009の全文](docs/goals/009-vertex-comparison.md) / [Vertex比較候補・試験計画](docs/vertex-comparison-009.md)
+- [Goal010の全文](docs/goals/010-metering-and-final-trial.md) / [中断・復帰の実試験と未実施項目](docs/vertex-trial-010.md)
 - [アーキテクチャ](docs/architecture.md) / [図](docs/architecture.svg)
 - [検証記録・既知の制約](docs/verification.md)
 - [公式資料・依存バージョン・素材の出典](docs/sources-and-versions.md)
 - [実物確認の記録用紙と、同意を得て行う利用確認手順](docs/physical-validation.md)
-- [約3分のデモ台本・大会の公式要件確認](docs/demo-and-submission.md)
+- [デモ素材・提出状態・大会の公式要件確認](docs/demo-and-submission.md)
 
 サンプル絵はこのプロジェクトのための自作SVG。日本語フォント Zen Kaku Gothic New はSIL OFL 1.1で同梱し、著作権表示と全文を `apps/web/public/fonts/OFL.txt` に置いています。本リポジトリ全体へのライセンス付与は行っていません。
