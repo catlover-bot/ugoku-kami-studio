@@ -35,12 +35,28 @@ function targets(project: string, bucket: string) {
     schedules: ['ugoku-deadline-011', 'ugoku-monitor-011'].map(name => `https://cloudscheduler.googleapis.com/v1/projects/${project}/locations/${region}/jobs/${name}`),
   };
 }
+/** Resource-level deletion permission can disappear with the resource itself.
+ * Project-level read permission proves absence without widening delete scope.
+ * Three bounded attempts fit inside the existing three-second stop stage.
+ */
+async function safeDelete(deps: MonitorDependencies, url: string, signal: AbortSignal): Promise<CloudResult> {
+  const read = () => bounded(700, inner => deps.api('GET', url, AbortSignal.any([signal, inner])));
+  try {if ((await read()).absent) return {absent: true};} catch {signal.throwIfAborted();}
+  try {
+    return await bounded(1500, inner => deps.api('DELETE', url.includes('artifactregistry.') ? `${url}?force=true` : url, AbortSignal.any([signal, inner])));
+  } catch {
+    signal.throwIfAborted();
+    // A timeout/403 is not proof of deletion. Only a fresh GET404 is.
+    if ((await read()).absent) return {absent: true};
+    throw Error('Resource deletion unconfirmed');
+  }
+}
 async function stop(deps: MonitorDependencies, reason: string, owned: ReturnType<typeof targets>) {
-  // Dispatch DELETE first; unavailable or hung ledger writes cannot delay it.
+  // Prioritize the service; unavailable or hung ledger writes cannot delay it.
   let ledgerStopped = false, deletionAccepted = false;
   try {
     await bounded(STOP_STAGE_BUDGET_MS, async signal => {
-      const deletion = deps.api('DELETE', owned.service, signal);
+      const deletion = safeDelete(deps, owned.service, signal);
       const stopLedger = deps.ledger(signal).setStop({ai: true, whole: true}).then(() => {ledgerStopped = true;}).catch(() => {});
       const result = await deletion; deletionAccepted = true;
       deps.notice('release-stopped', {reason, deletionAccepted: true, operation: result.name ?? null});
@@ -48,13 +64,13 @@ async function stop(deps: MonitorDependencies, reason: string, owned: ReturnType
     });
   } catch {if (!deletionAccepted) throw Error('Service deletion unconfirmed');}
   deps.notice(ledgerStopped ? 'ledger-stop' : 'ledger-stop-unconfirmed', {confirmed: ledgerStopped});
-  await bounded(STOP_STAGE_BUDGET_MS, signal => Promise.all(owned.owned.map(url => deps.api('DELETE', url.includes('artifactregistry.') ? `${url}?force=true` : url, signal))));
+  await bounded(STOP_STAGE_BUDGET_MS, signal => Promise.all(owned.owned.map(url => safeDelete(deps, url, signal))));
   // DELETE may only accept an asynchronous operation. Keep the schedule until
   // the service and owned resources are confirmed absent by control-plane GET.
   const absent = await bounded(STOP_STAGE_BUDGET_MS, signal => Promise.all([owned.service, ...owned.owned].map(url => deps.api('GET', url, signal))));
   if (!ledgerStopped || absent.some(result => !result.absent)) {deps.notice('cleanup-pending', {reason: ledgerStopped ? 'Deletion accepted; remaining resources will be checked next time' : 'Service deletion accepted; persistent ledger stop will be retried'}); return;}
   // Deadline first, monitor last: a failed deadline deletion stays retryable.
-  for (const url of owned.schedules) await bounded(STOP_STAGE_BUDGET_MS, signal => deps.api('DELETE', url, signal));
+  for (const url of owned.schedules) await bounded(STOP_STAGE_BUDGET_MS, signal => safeDelete(deps, url, signal));
   deps.notice('release-cleanup', {serviceAbsent: true, repositoryAbsent: true, sourceAndSecretAbsent: true, schedulesAbsent: true, ledgerStopped, retained: 'private ledger and monitor objects, job definition, IAM, audit logs'});
 }
 

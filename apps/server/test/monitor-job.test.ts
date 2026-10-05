@@ -93,8 +93,9 @@ describe('independent monitor Job: injected control-plane APIs only', () => {
     const task = runMonitor(h.deps);
     await vi.advanceTimersByTimeAsync(OBSERVATION_BUDGET_MS);
     expect(readSignal?.aborted).toBe(true);
-    expect(h.requests[0]).toMatchObject({method: 'DELETE'});
+    expect(h.requests[0]).toMatchObject({method: 'GET'});
     expect(h.requests[0]!.url).toContain('/services/ugoku-kami-release-011');
+    expect(h.requests.find(request => request.method === 'DELETE')?.url).toContain('/services/ugoku-kami-release-011');
     await vi.advanceTimersByTimeAsync(STOP_STAGE_BUDGET_MS); await task;
     expect(h.notices.some(item => item.event === 'ledger-stop-unconfirmed')).toBe(true);
     expect(h.notices.at(-1)?.event).toBe('cleanup-pending');
@@ -131,6 +132,42 @@ describe('independent monitor Job: injected control-plane APIs only', () => {
     const h = harness(); h.deps.bucket = 'unrelated-bucket';
     await expect(runMonitor(h.deps)).rejects.toThrow('dedicated monitor target');
     expect(h.requests).toHaveLength(0); expect(h.stateStore.read).not.toHaveBeenCalled();
+  });
+  it('already absent resources skip DELETE even after their resource-level IAM bindings disappear', async () => {
+    const h = harness(); h.deps.now = () => Date.parse(RELEASE_DEADLINE);
+    const requests: {method: string; url: string}[] = [];
+    h.deps.api = async (method, url) => {requests.push({method, url}); if (method === 'DELETE') throw Error('403 deleted resource binding'); return {absent: true};};
+    await runMonitor(h.deps);
+    expect(requests.every(request => request.method === 'GET')).toBe(true);
+    expect(requests[0]!.url).toContain('/services/ugoku-kami-release-011');
+    expect(h.ledger.setStop).toHaveBeenCalledWith({ai: true, whole: true});
+    expect(h.notices.at(-1)?.event).toBe('release-cleanup');
+  });
+  for (const outcome of ['403', 'timeout'] as const) {
+    it(`DELETE ${outcome} resumes cleanup only after a fresh GET proves absence`, async () => {
+      vi.useFakeTimers(); const h = harness(); h.deps.now = () => Date.parse(RELEASE_DEADLINE);
+      const api = h.deps.api; let serviceDeleted = false, readCount = 0;
+      h.deps.api = async (method, url, signal) => {
+        if (url.includes('/services/')) {
+          if (method === 'GET') {readCount++; return serviceDeleted ? {absent: true} : {name: 'present'};}
+          serviceDeleted = true;
+          if (outcome === '403') throw Error('403 after deletion');
+          return new Promise(() => {});
+        }
+        return api(method, url, signal);
+      };
+      const task = runMonitor(h.deps);
+      await vi.advanceTimersByTimeAsync(STOP_STAGE_BUDGET_MS); await task;
+      expect(readCount).toBeGreaterThanOrEqual(3); // before, after failure, final absence
+      expect(h.notices.at(-1)?.event).toBe('release-cleanup');
+      expect(vi.getTimerCount()).toBe(0);
+    });
+  }
+  it('DELETE403 while the service still exists never becomes a successful cleanup', async () => {
+    const h = harness(); h.deps.now = () => Date.parse(RELEASE_DEADLINE);
+    h.deps.api = async method => {if (method === 'DELETE') throw Error('403'); return {name: 'still-present'};};
+    await expect(runMonitor(h.deps)).rejects.toThrow('incomplete');
+    expect(h.notices.some(item => item.event === 'release-cleanup')).toBe(false);
   });
 });
 
