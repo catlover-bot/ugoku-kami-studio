@@ -33,6 +33,16 @@ npm run deploy:plan
 
 実行許可後は、対象と費用上限を確定し、既存リソースを確認、コンテナをビルド・検査、承認したイメージを既存レジストリへ格納、認証必須でデプロイ、許可したアカウントからヘルス/UI/ダウンロードを確認する。IAM変更は必要な対象について別途明示許可を得る。計画は `--no-allow-unauthenticated` と `AI_PROVIDER=none` を初期設定にする。
 
+## Vertex比較候補（未デプロイ）
+
+[Goal009](goals/009-vertex-comparison.md)では、Cloud Run東京のWeb/APIのみ1 vCPU / 1 GiBからVertex AIへ接続する構成を準備しています。モデル重みとOllamaをCloud Runへ同梱せず、`AI_PROVIDER=vertex`、`VERTEX_PROJECT`、`VERTEX_LOCATION=global`、`VERTEX_MODEL=gemini-3.8-flash`を明示し、実行サービスアカウントのADCを使います。APIキーを使うDeveloper APIとは別経路です。Vertexのglobalはモデル処理の東京限定を意味しません。
+
+```sh
+npm run deploy:plan -- --vertex
+```
+
+これは**オフラインの計画表示・manifest生成だけ**です。認証情報を読み込まず、推論・クラウド書込み・デプロイを行いません。設定不足を表示し、同一projectの実行サービスアカウント、東京のimage digest、固定secret versionを検査します。`--execute`は拒否します。出力だけではIAM保護・全試験の呼出し枠・費用停止・片付けを実施したことになりません。実装と模擬検証はありますが、この構成の実認証・実推論・デプロイ・公開は未実施です。前回試験の許可は流用しません。[比較・料金・承認範囲と終了手順](vertex-comparison-009.md)を参照してください。
+
 ## 同一インスタンス内のGemma構成（限定試験後、未公開）
 
 `npm run deploy:plan -- --ollama` は、Cloud Runのapp＋Ollama構成をネットワークなしで検査・表示する。既定の手動版計画と同じく実行機能はなく、`--execute`を拒否する。対象が不足している間はmanifestを作らない。設定がそろった場合の `--output DIR` は、上書きを拒否してローカルへ `service.json`（YAMLとしても有効なJSON）と `plan.json` を出力する。
@@ -92,22 +102,22 @@ npm run deploy:plan -- --ollama --output artifacts/goal008/reviewed-deployment
 ## 有料AIを有効化する前に
 
 - 明示された利用許可の対象・呼び出し上限・期間を確認する。キーの存在だけを許可扱いしない。
-- `AI_PROVIDER=gemini`、`GEMINI_API_KEY`、`GEMINI_MODEL`、32文字以上の `AI_ACCESS_SECRET` をサーバー環境へ設定する。`VITE_`変数に秘密を入れない。
-- APIキーはGoogle用、AI_ACCESS_SECRETはアプリへのアクセス用。利用者のブラウザにはAPIキーを渡さない。アクセスシークレットはUIで入力し、保存しない。
-- 公開環境ではTLS・Cloud Runの認証境界・適切な共有方法を整える。Secret Managerから注入する。ソースやコンテナにキーを埋めない。
+- Developer APIは`AI_PROVIDER=gemini`と`GEMINI_API_KEY`・`GEMINI_MODEL`、Vertexは`AI_PROVIDER=vertex`と上記3つの`VERTEX_`設定・ADCを使う。両方とも32文字以上の`AI_ACCESS_SECRET`を別に必要とする。`VITE_`変数に秘密を入れない。
+- APIキー・ADCはGoogleへのサーバー側認証、AI_ACCESS_SECRETはアプリへのアクセス用。ブラウザにはGoogleキーや認可トークンを渡さない。アクセスシークレットはUIで入力し、保存しない。
+- 公開環境ではTLS・Cloud Runの認証境界・適切な共有方法を整える。アプリのアクセスコード等はSecret Managerから注入する。VertexのADCは付与した実行サービスアカウントを使い、ソースやコンテナにキーを埋めない。
 - 上限の既定は1実行6モデル呼び出し/12ツール/90秒。同時実行1、インスタンス内毎分6/毎時60。リトライもモデル呼び出しに数える。
 - これはインスタンス内制限であり、課金総額の保証ではない。再起動でカウンターは消える。複数インスタンスや再デプロイを含むサービス全体の認証・クォータ・費用監視を確認する。
 - セッションはメモリのみ。再起動後は新セッションで再実行する。複数インスタンスへの分散は未対応。ブラウザに保存した作業は独立して残る。
 
-## 限定ライブ確認
+## Developer APIの限定ライブ確認
 
-許可がない通常実行は必ずスキップする。
+以下は既存のDeveloper API用手順で、Vertexの試験手順・上限・許可とは別です。Vertexは[比較試験計画](vertex-comparison-009.md)を参照してください。許可がない通常実行は必ずスキップする。
 
 ```sh
 npm run smoke:live
 ```
 
-課金なしの設定・計画確認は `npm run doctor` と `npm run smoke:live -- --plan`。設定場所、既存キーの方式、公式モデル・料金根拠は [実Geminiの設定手順](live-gemini.md) を参照する。
+課金なしの設定・計画確認は `npm run doctor` と `npm run smoke:live -- --plan`。設定場所と既存キーの方式は[AI接続の設定手順](live-gemini.md)、料金根拠は[比較・試験計画](vertex-comparison-009.md)を参照する。
 
 許可を得た運用者だけが、接続設定とビルドを用意し、まずL1を1件実行する。1件最大6モデル呼び出し・12コアツール・90秒・各回入力65536bytes/出力4096tokens。限定確認全体は失敗・再試行を含め3件、18モデル・36ツール・AI処理270秒で、開始前に永続台帳へ枠を予約する。
 

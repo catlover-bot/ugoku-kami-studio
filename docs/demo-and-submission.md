@@ -1,5 +1,13 @@
 # デモ構成と提出準備
 
+## Goal009の追加素材（公開候補・未デプロイ）
+
+Cloud Run東京のWeb/API 1 vCPU / 1 GiB＋Vertex AI `gemini-3.8-flash` / `global` / ADCの比較案を準備しました。実装・模擬試験までで、この構成の実認証・実推論・デプロイ・公開は未実施です。[構成比較と次の試験計画](vertex-comparison-009.md)と[Goal009](goals/009-vertex-comparison.md)を参照してください。
+
+非公開の`artifacts/submission/private/goal009/`に、各800字以内の`vertex-introduction-draft.txt`・`vertex-architecture-draft.txt`と、`vertex-comparison-draft.svg`・PNGを保存しました。図には「公開候補・未デプロイ」と記し、現在のWSL Gemma実績と今後のVertex構成を分けています。画像本体をモデルへ送らないこと、ブラウザのIndexedDB、決定的コアの検査と本人採用、同版PDFの共通経路を示しています。
+
+既存のpublic MP4・4画像・manifestは変更せず、WSLの実録をCloud／Vertex成功の素材へ付け替えません。新しい公開URL、YouTube動画URL、Zenn提出実績はありません。以下のGoal008素材・実測は当時の記録として保全します。
+
 ## 旧デモ構成（Goal001時点の未撮影台本）
 
 - 0:00–0:25 「描いた絵を、手で動かせる工作へ」。カメのサンプルを開き、正面の動きを再生する。

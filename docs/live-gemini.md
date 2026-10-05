@@ -1,8 +1,16 @@
 # AI接続の設定と限定確認
 
+## Goal009: Vertex接続の実装と未確認範囲
+
+`AI_PROVIDER=none|ollama|gemini|vertex`で接続を明示し、既定は`none`。`gemini`はAPIキーを使うDeveloper API、`vertex`はADCを使う別アダプターです。いずれも失敗時に別の接続へ自動で切り替えません。Vertexは実装・模擬通信の検証までで、**実認証・実推論・新構成のデプロイ・公開は未実施**です。
+
+Vertexには`AI_PROVIDER=vertex`、対象の`VERTEX_PROJECT`、`VERTEX_LOCATION=global`、`VERTEX_MODEL=gemini-3.8-flash`を明示します。Google GenAI SDKのVertex API v1を使い、Cloud Runでは実行サービスアカウントのADCで認証する計画です。APIキーは使わず、秘密鍵を新規発行する手順も含めません。アプリ用の`AI_ACCESS_SECRET`は別に必要です。Cloud Run東京とVertexの`global`は異なり、モデル処理の東京限定を意味しません。
+
+通常の希望入力・候補比較・決定的検査・本人採用・同版PDFの経路は共通です。接続情報は既存の「設定」に置き、設定済み表示を接続成功とは扱いません。料金・予算・承認範囲・オフライン計画は[Vertex比較と次の限定試験](vertex-comparison-009.md)、依頼範囲は[Goal009](goals/009-vertex-comparison.md)にまとめます。以下のWSL実測とDeveloper API用smoke手順を、Vertexの実績や実行許可へ読み替えません。
+
 ## Goal 007-R: ローカルGemmaを使う
 
-今回はホスト型推論APIを呼ばない。`AI_PROVIDER=none|ollama|gemini` が唯一の選択設定で、未設定は `none`。旧 `AI_ENABLED=true` や保存済みGoogleキーだけではAIを有効にしない。`ollama` が失敗してもクラウドへ切り替えない。Geminiの既存アダプターと限定試験は残すが、今回の対象外。
+Goal007-Rではホスト型推論APIを呼ばなかった。当時の `AI_PROVIDER=none|ollama|gemini` が唯一の選択設定で、未設定は `none`。旧 `AI_ENABLED=true` や保存済みGoogleキーだけではAIを有効にしない。`ollama` が失敗してもクラウドへ切り替えない。Geminiの既存アダプターと限定試験は残すが、同Goalの対象外だった。
 
 このWSLでは既存の `/home/mhirotaka/.local/opt/ollama-0.33.3/bin/ollama` を再利用した。選定モデルは **`gemma4:e2b-it-qat` / Q4_0**、manifest digestは `07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c`。タグの必要版は0.30.5以上だが、アプリのローカル限定・履歴切捨て禁止のAPI仕様は0.33.3で確認したため、アダプターの最低版は0.33.3。モデルは[Apache 2.0](https://ai.google.dev/gemma/apache_2)、正確な容量・量子化は[公式タグ](https://ollama.com/library/gemma4:e2b-it-qat)を確認した。E2Bは実効パラメーターの名称で、ローカルmetadataは4.6B、画像用projectorも含む。
 
@@ -51,13 +59,13 @@ PIDは今回起動したプロセスの値で、再起動後は `ss -ltnp 'sport
 
 WSLローカル動作は、指定Google Cloud実行プロダクトやデプロイURLの要件を満たした証拠ではない。Cloud Runのlocalhostから利用者のWSLへは接続できない。トンネル・ポート開放・クラウド公開は行っていない。モデルAPI課金がないことと、端末・電力・保存や将来の公開費用がないことは別である。
 
-## 既存の実Gemini接続（今回は無効）
+## Gemini Developer API接続（実通信未確認）
 
 確認日: **2026-10-04**。実APIはまだ呼んでいない。下記のdoctor、plan、通常のcheck/E2E/CIは接続成功の証拠ではない。実物・初見参加者の確認とも区別する。
 
 ## 接続方式とモデル
 
-このアプリはサーバーの `@google/genai` **2.27.0** から **Gemini Developer API** の `models.generateContent` を使う。公式の `https://generativelanguage.googleapis.com/v1beta` に固定し、Vertex AI、ADC、Cloudプロジェクト自動作成へ切り替えない。SDK、API、権限を別系統へ作り直していない。[公式 generateContent API と JavaScript の例](https://ai.google.dev/api/generate-content)
+`AI_PROVIDER=gemini`のアダプターは、サーバーの `@google/genai` **2.27.0** から **Gemini Developer API** の `models.generateContent` を使う。公式の `https://generativelanguage.googleapis.com/v1beta` に固定する。Vertexは上記の別設定・ADCアダプターであり、この経路から自動切替やCloudプロジェクト作成は行わない。[公式 generateContent API と JavaScript の例](https://ai.google.dev/api/generate-content)
 
 既定値 `gemini-3.8-flash` は安定モデルとして掲載され、function callingに対応する。公式モデル上限は入力1,048,576、出力65,536トークン。モデルIDが正しいことと、手元のキーでそのモデルに接続できることは別で、後者は未確認。[公式モデル仕様](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash)
 
@@ -95,7 +103,7 @@ npm run smoke:live -- --plan
 
 doctorは秘密の有無、選択モデル、読込ファイル、実行上限、設定エラーを示す。キーの文字列やSDKエラー本文を表示しない。APIへ一切問い合わせないため、権限・モデル利用可否・残高は`not-tested`。`AI_PROVIDER=none`でdoctorが通るのは手動利用できるという意味で、ライブ準備完了とは表示しない。
 
-## 本人の許可後に行うこと
+## Developer APIで本人の許可後に行うこと
 
 最初は**L1を1件だけ**実行する。下記コマンドは明示許可後に本人が使用するもので、現時点では未実行。
 
@@ -114,25 +122,17 @@ L2/L3が必要になった場合も、L1の採用・PDF確認が成功した後�
 
 ## 費用の根拠と限界
 
-2026-10-04に確認したDeveloper API **Standard** の単価は、2026-12-31まで入力 **$0.75/100万tokens**、出力 **$3.75/100万tokens（thinkingを含む）**。2027-01-01からそれぞれ$1.50/$7.50。無料枠の適用は仮定しない。このアプリはSearch、Maps、ファイルアップロード、課金キャッシュ、Batch/Flex/Priorityを使用しない。[公式料金](https://ai.google.dev/gemini-api/docs/pricing#gemini-3.8-flash)
-
-| 計算用の仮定 | 6モデル呼出し | 18モデル呼出し |
-| --- | ---: | ---: |
-| 各回input10,000、output+thinking4,096 tokens | 約$0.14 | 約$0.41 |
-| 各回input65,536、output+thinking4,096 tokens | 約$0.39 | 約$1.16 |
-| モデル公表上限input1,048,576、output65,536を毎回使う想定 | 約$6.19 | 約$18.58 |
-
-計算は`Σ(input×0.75 + (output+thinking)×3.75)÷1,000,000`。税・換算・将来の価格変更は含めない。上の行は**見積用シナリオで、課金額の保証ではない**。UTF-8 byte数は正確なtokensではなく、`maxOutputTokens`をthinking込みの請求上限と断言しない。公式のtokenカウントAPIへの事前通信もdoctorでは行わない。公表モデル上限の行もアプリによるドル単位の課金遮断を意味しない。[生成設定・使用量仕様](https://ai.google.dev/api/generate-content#v1beta.GenerationConfig)、[トークン計数](https://ai.google.dev/gemini-api/docs/tokens)
+次のVertex Gemini 3.8試験の料金根拠と予算は、[Vertex比較と試験計画](vertex-comparison-009.md#標準料金換算の管理見積もり)へ集約します。上記のDeveloper API用smokeの呼出し枠はVertex試験の枠や実行許可ではありません。無料枠・クレジット適用を仮定せず、UTF-8 byte数を正確なtoken数や課金上限と扱いません。使用量が取得できない送信は費用不明として残します。
 
 SDKは`attempts:1`を明示して内部再試行を止める。中断はローカルの待機と後続tool/採用を止めるが、送信済み要求の課金取消しを保証しない。[公式retry設定](https://googleapis.github.io/js-genai/release_docs/interfaces/types.HttpRetryOptions.html)
 
 ## 記録とトラブル時
 
-`run.mode`は`ollama`、`gemini`または`injected-test`、`run.model`は設定モデル。各`modelUsage`に送信試行、入力byte数、出力上限、所要時間、受信有無、finishReason、返されたmodelVersion、使用量を残す。prompt/output/thinking/cached input/tool prompt/totalを区別する。使用量が返らない呼出しは`usage:null`と`responsesWithoutUsage`で不明として残し、0円とは扱わない。内部思考・thoughtSignature・認可トークン・アクセスコード・画像本体は公開記録へ含めない。
+`run.mode`は`ollama`、`gemini`、`vertex`または`injected-test`。`run.provider`で接続先を区別し、`run.model`に設定モデルを記録します。模擬実行を設定情報だけから実Vertex成功へ読み替えません。各`modelUsage`に送信試行、入力byte数、出力上限、所要時間、受信有無、finishReason、返されたmodelVersion、使用量を残す。prompt/output/thinking/cached input/tool prompt/totalを区別する。使用量が返らない呼出しは`usage:null`と`responsesWithoutUsage`で不明として残し、0円とは扱わない。内部思考・thoughtSignature・認可トークン・アクセスコード・画像本体は公開記録へ含めない。
 
-モデルContent全体、functionCallのID、opaqueなthoughtSignatureはサーバー内で保持し、実行したtoolの結果を次の要求へ返す。返答だけで成功とせず、候補作成・最終候補・採用を決定的コアで検査する。Goal006の構造化した解釈提案も同じツールループと上限を使う。手動で読み取れない言い方はAI経路へ渡せるが、固定条件や承認の保護は緩めない。未解決の重要条件は訂正待ちとし、明確な非対応動作だけはモデル呼出し前に拒否する。[公式function calling](https://ai.google.dev/gemini-api/docs/function-calling)
+GoogleのモデルContent全体、functionCallのID、opaqueなthoughtSignatureは各アダプターの内部で保持し、実行したtoolの結果を次の要求へ返す。返答だけで成功とせず、候補作成・最終候補・採用を決定的コアで検査する。Goal006の構造化した解釈提案も同じツールループと上限を使う。手動で読み取れない言い方はAI経路へ渡せるが、固定条件や承認の保護は緩めない。未解決の重要条件は訂正待ちとし、明確な非対応動作だけはモデル呼出し前に拒否する。[公式function calling](https://ai.google.dev/gemini-api/docs/function-calling)
 
-- `provider_auth`: 既存キーの権限・制限・対象APIを所有者が確認する。エラーを直すためのIAM変更を自動実行しない。
+- `provider_auth`: 選択した接続に応じ、Developer APIの既存キー、またはVertexのADC・実行サービスアカウントの権限を所有者が確認する。エラーを直すためのIAM変更を自動実行しない。
 - `provider_rate_limit`: API側429。時間を置き、残る限定枠を確認してから手動再試行する。
 - `input_limit`: 履歴が設定byte上限を超えたため、その回はGoogleへ送信していない。上限を黙って増やさない。
 - `timeout` / `invalid_output` / `model_limit` / `tool_limit`: 元の設計を保持。成功件数へ加えず記録を確認する。

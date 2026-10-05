@@ -1,5 +1,15 @@
 # 検証記録
 
+## Goal009 — Vertex接続の実装・模擬確認（実通信未実施）
+
+`AI_PROVIDER=vertex`を明示するADC専用アダプターと接続表示を追加しました。Developer APIの`gemini`経路とは別に、API v1・`VERTEX_PROJECT`・`VERTEX_LOCATION=global`・`VERTEX_MODEL=gemini-3.8-flash`を指定します。東京のCloud Run Web/APIから利用する公開候補であり、**Vertexの実認証・実推論・新構成のデプロイ・公開は未実施**です。[Goal009](goals/009-vertex-comparison.md)と[比較・試験計画](vertex-comparison-009.md)に、実装範囲・模擬検証・残る確認をまとめます。
+
+UIのHTTP fixture試験はPC/狭幅の4件が成功し、希望欄が一つのまま同じ領域で候補を比較できること、設定済みと接続成功を区別すること、実行記録の`provider=vertex`でも`mode=injected-test`を模擬のまま書き出すこと、中断時の原本保持と本文なしDELETEを確認しました。既存のAI・接続復帰・実行記録の関連21件もPCで成功しました。これらは実Vertex通信の確認ではありません。
+
+2026-10-05の統合作業ツリーでは、`npm run check`（25ファイル・266件、lint・型検査・build）と`npm run test:e2e`（178件）が成功しました。計画生成の対象照合を厳しくした後、その関連単体試験3件も成功しました。これらはローカル検証で、この段階のmain統合・同SHAのCI完了はまだ別途確認します。
+
+`npm run deploy:plan -- --vertex`はオフライン計画のみで、Cloud設定・IAM・推論を実行しません。過去のWSL Gemma動画・画像と以下のCloud Gemma実測は出所を保ち、Vertexの成功や性能へ読み替えません。
+
 ## Goal008 — 2026-10-05 JSTの非公開Cloud限定試験
 
 本人の明示許可で、東京のCloud Runにapp 1 vCPU/1 GiB＋Ollama 4 vCPU/8 GiBを配置し、同じGemmaを通常UIから3回だけ実行した。試験サービスと専用リソースは削除済みで、一般公開・提出・継続運用は行っていない。[試験結果・費用・残る課題](cloud-trial-008.md)を現在の記録とし、下の未認証・未実行記録は試験前の経過として残す。

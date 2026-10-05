@@ -4,13 +4,15 @@
 
 カメのサンプルや自分の画像から、引っぱりタブでまっすぐ動く工作を設計するWebアプリです。選択・プレビュー・条件検査・原寸PDF・材料・組み立て手順を同じ設計版から作ります。
 
-初期版の機構は直線運動だけです。回転・揺動・歩行・歯車・立体・モーターには対応しません。**実物未検証**で、紙質・摩擦・耐久性まで保証するものではありません。ソフトウェアはmainへ統合し、GitHub CIでDockerのビルド・実起動・手動操作・PDF取得を確認しました。実Gemini・Cloud Run公開は未確認です。実行した検証と制約は [検証記録](docs/verification.md) を参照してください。
+初期版の機構は直線運動だけです。回転・揺動・歩行・歯車・立体・モーターには対応しません。**実物未検証**で、紙質・摩擦・耐久性まで保証するものではありません。ソフトウェアはmainへ統合し、GitHub CIでDockerのビルド・実起動・手動操作・PDF取得を確認しました。Gemini Developer API・Vertex AIの実通信とCloud Run公開は未確認です。実行した検証と制約は [検証記録](docs/verification.md) を参照してください。
 
 [Goal 005](docs/goals/005-product-experience.md) の入力・保存・工程・組立体験を維持し、[Goal 006](docs/goals/006-request-understanding.md) では希望の読み取りと訂正を改善しました。統合の許可は [Goal 004-R](docs/goals/004-resume-and-main.md) から継続しています。確認済み変更のコミット・mainへの通常統合・push・通常CIは許可されています。実Gemini、実物、初見の人、実スマートフォン、Cloud Run公開の未確認状態は、ソフトウェア統合と分けて管理します。過去Goalのpush保留や全体blockedの記録は当時の状態であり、現在の統合を止める指示ではありません。
 
 [Goal 007-R](docs/goals/007r-local-ai-clean-ui.md) では、既存OllamaとローカルGemmaを使う接続を追加し、希望入力と候補の採否を同じ作業領域へ整理しました。Geminiを含むホスト型推論APIはこのGoalでは実行しません。設定・実測・WSLの起動方法は [AI接続の説明](docs/live-gemini.md) を参照してください。
 
 [Goal 008](docs/goals/008-submission-ready.md)では、条件変更の助言も提示前にコアで検査し、公開に備えた接続復帰と提出素材を準備しています。2026-10-05 JSTに、本人の許可で非公開のCloud Run＋Gemma限定試験を行い、試験サービスは削除しました。初回AIは180秒で時間切れ、同一依頼のキャッシュが温まった状態では78.5秒で候補を作成し、採用した同じ版のPDF・保存再開まで確認しました。中断のHTTP400は修正してローカル回帰を確認しましたが、Cloud再試験はしていません。**公開運用・審査可能なURLの提供にはまだ進めません。** [限定試験の結果・費用・残存保管](docs/cloud-trial-008.md)を参照してください。YouTube投稿・Zenn提出は未実施です。
+
+[Goal 009](docs/goals/009-vertex-comparison.md)では、公開候補としてCloud RunのWeb/API＋Vertex AIを準備しています。明示した`AI_PROVIDER=vertex`とADCを使う専用アダプターを追加し、接続表示と模擬通信を確認しました。**Vertexの実認証・実推論・この構成のデプロイは未実施です。** 既存のGemma実測・動画をVertex成功の証拠には使いません。[構成比較・料金根拠・次の限定試験案](docs/vertex-comparison-009.md)を参照してください。
 
 ## 起動
 
@@ -56,6 +58,7 @@ http://localhost:5173 を開きます。開発APIはポート3001、Viteが `/ap
 | `npm run smoke:local -- --case all` | 通常UIから実ローカルモデル3依頼と手動支援を比較。明示Ollama設定と起動済みモデルが必要 |
 | `npm run build && npm start` | ビルド後、UI/APIを同一オリジンで提供（既定3001、`PORT`対応） |
 | `npm run deploy:plan` | Cloud Runの計画を表示するだけ。デプロイしない |
+| `npm run deploy:plan -- --vertex` | Vertex接続を使う非公開比較試験のオフライン計画。認証・推論・デプロイなし |
 
 E2Eの初回は `npx playwright install chromium`（Linuxのライブラリ不足時は `npx playwright install --with-deps chromium`）が必要です。WebKitの代表試験は専用CIでブラウザとOS依存関係を導入します。ローカルで実行する場合はWebKitに必要なライブラリも必要です。PlaywrightのWebKit/タッチエミュレーションを実iPhone確認とは扱いません。PDFの目視確認には `pdftoppm`（poppler-utils）を使います。
 
@@ -79,7 +82,7 @@ pdftoppm -png -r 110 artifacts/examples/turtle.pdf artifacts/examples/turtle-pag
 
 プロジェクトファイル全体は45MB（UTF-8で45,000,000 bytes）、実物記録は1作品100件までです。記録の追加で上限を超える場合は下書きを残して知らせます。写真を減らすか小さい画像に選び直してから追加してください。ブラウザ内の保存容量はこれより小さい場合があり、書き出しと読込の容量制限とは別です。
 
-AIに送るのは入力文・設計寸法・選択座標・検査結果です。画像本体は送りません。APIキーはサーバー環境変数のみ。`VITE_`変数・ブラウザ・ログへ渡しません。秘密値のない `.env.example` を用意しています。`.env` はGit対象外です。
+AIに送るのは入力文・設計寸法・選択座標・検査結果です。画像本体は送りません。Developer APIのキーとVertexのADC認証はサーバー側だけで扱います。キー・認可トークンを`VITE_`変数・ブラウザ・ログへ渡しません。秘密値のない `.env.example` を用意しています。`.env` はGit対象外です。
 
 ## AIモード
 
@@ -88,7 +91,8 @@ AIに送るのは入力文・設計寸法・選択座標・検査結果です。
 | 手動 | APIキー不要。コアの決定的な検査を利用 |
 | 模擬プロバイダー | テストだけで依存注入。本番の代替成功応答には利用しない |
 | 実ローカルAI | 明示`AI_PROVIDER=ollama`。loopback・クラウド無効のOllamaへ接続。別モードへの自動切替なし |
-| 実Gemini | 公式SDKアダプター実装。初期状態は無効。実API確認は明示許可・認証待ち |
+| Gemini Developer API | 明示`AI_PROVIDER=gemini`とAPIキー。初期状態は無効。実通信は未確認 |
+| Vertex AI | 明示`AI_PROVIDER=vertex`とADC。専用アダプターと模擬試験まで。実通信・新構成のデプロイは未実施 |
 
 希望入力は一つで、「寸法から案をつくる」「AIで案をつくる」を選べます。AIアクセスコード・モデル情報・実行記録は上部の「設定」にあり、コードは画面のメモリだけで扱います。`AI_PROVIDER`未設定は`none`で、保存済みGoogleキーや旧`AI_ENABLED=true`だけでは有効になりません。設定を入力しただけでは接続成功と表示しません。希望・設計・未確定入力が変われば、以前の候補や遅れて届く応答を反映しません。
 
@@ -119,6 +123,7 @@ AIの「実行の記録」から、モデル・実行ID・ツール・検査・�
 - [Goal 005の全文](docs/goals/005-product-experience.md) / [Goal 006の全文](docs/goals/006-request-understanding.md)
 - [Goal 007-Rの全文と記録](docs/goals/007r-local-ai-clean-ui.md)
 - [Goal 008の非公開Cloud試験と残る課題](docs/cloud-trial-008.md)
+- [Goal 009の全文](docs/goals/009-vertex-comparison.md) / [Vertex比較候補・試験計画](docs/vertex-comparison-009.md)
 - [アーキテクチャ](docs/architecture.md) / [図](docs/architecture.svg)
 - [検証記録・既知の制約](docs/verification.md)
 - [公式資料・依存バージョン・素材の出典](docs/sources-and-versions.md)
