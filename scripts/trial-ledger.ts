@@ -43,6 +43,8 @@ const clone = <T>(value: T): T => structuredClone(value);
 const canonical = (value: unknown): string => JSON.stringify(value, (_key, item: unknown) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item);
 const digest = (value: unknown): string => createHash('sha256').update(canonical(value)).digest('hex');
 const same = (a: unknown, b: unknown) => canonical(a) === canonical(b);
+// A separately authorized retry may use a fresh browser session, but must target the exact same design and deployed source.
+const sameRetryTarget = (a: TrialGrant['binding'], b: TrialGrant['binding']) => a.baseRevision === b.baseRevision && a.baseHash === b.baseHash && a.sourceSha === b.sourceSha && a.revision === b.revision;
 const checkedSum = (values: number[]): number => { const total = values.reduce((sum, n) => sum + n, 0); if (!Number.isSafeInteger(total)) throw Error('Accounting overflow'); return total; };
 const nanoUsd = (usd: number): number => { const scaled = usd * 1e9, rounded = Math.round(scaled); if (!Number.isSafeInteger(rounded) || Math.abs(scaled - rounded) > 0.000001) throw Error('Cost precision exceeds nanodollars'); return rounded; };
 function committed(state: State): number { return checkedSum([state.initial.historicalReconciliation.sentUnknownCalls * state.initial.budget.callReserveNanoUsd, ...state.grants.flatMap(g => g.calls.map(c => c.committedNanoUsd))]); }
@@ -66,7 +68,7 @@ function validateReservation(state: State, request: ReserveRequest) {
     const authorization = state.supplementalAuthorization, prior = state.grants.filter(g => g.grant.authorizationId !== undefined);
     if (!authorization || authorization.authorizationId !== request.authorizationId || request.phase !== 'infeasible' || prior.length >= authorization.maxPostAttempts) throw Error('Supplemental authorization or attempt limit');
     if (prior.length === 0) { if (request.retryOfRequestId !== undefined) throw Error('First supplemental request is not a retry'); }
-    else if (request.retryOfRequestId !== prior[0].grant.requestId || !prior[0].rejection || !same(request.binding, prior[0].grant.binding)) throw Error('Retry requires audited application rejection of the same supplemental request');
+    else if (request.retryOfRequestId !== prior[0].grant.requestId || !prior[0].rejection || !sameRetryTarget(request.binding, prior[0].grant.binding)) throw Error('Retry requires audited application rejection of the same supplemental request');
   } else if (request.retryOfRequestId !== undefined || state.grants.length + 1 >= b.maxRequests || request.phase !== phases[state.grants.length]) throw Error('Request/phase limit or order');
   const cap = request.phase === 'cancel' ? 1 : request.phase === 'recovery' ? 3 : 6;
   if (request.maxCalls > cap) throw Error('Phase call cap exceeded');
