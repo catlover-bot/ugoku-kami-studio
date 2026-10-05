@@ -4,6 +4,11 @@ if (process.argv[2] === '--ollama') {
   await printCloudRunPlan(process.argv.slice(3));
   process.exit(0);
 }
+if (process.argv[2] === '--vertex') {
+  const { printVertexTrialPlan } = await import('./vertex-trial-plan.ts');
+  await printVertexTrialPlan(process.argv.slice(3));
+  process.exit(0);
+}
 const required = ['GCP_PROJECT', 'GCP_REGION', 'CLOUD_RUN_SERVICE', 'CONTAINER_IMAGE'];
 const missing = required.filter((key) => !process.env[key]);
 const identifier = /^[a-zA-Z0-9][a-zA-Z0-9._/:@-]*$/;
@@ -19,7 +24,7 @@ console.log(`未設定: ${missing.length ? missing.join(', ') : 'なし'}`);
 console.log('別途確認: 課金の明示許可、対象プロジェクト、認証アカウント、実行サービスアカウント、既存レジストリ、Secret Manager、認証付きアクセス。');
 console.log('計画（実行されません）:');
 console.log(['gcloud run deploy', service, '--project', project, '--region', region, '--image', image, '--port 8080', '--no-allow-unauthenticated', '--min-instances 0', '--max-instances 1', '--concurrency 8', '--set-env-vars AI_PROVIDER=none'].join(' '));
-console.log('ローカルGemmaの同一instance構成は --ollama で別途計画します。Geminiを選ぶ場合だけAPIキーが必要です。AIアクセスコードとサービス全体の費用対策を確認してください。インスタンス内制限は総課金上限ではありません。');
+console.log('ローカルGemmaは --ollama、Vertex AIの非公開比較試験は --vertex で別途計画します。VertexはADC、Developer APIのgemini経路はAPIキーを使います。AIアクセスコードとサービス全体の費用対策を確認してください。インスタンス内制限は総課金上限ではありません。');
 if (process.argv.includes('--execute')) {
   console.error('--execute は未対応です。確認した計画を、明示許可の対象内で運用者が実行してください。');
   process.exitCode = 1;
