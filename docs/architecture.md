@@ -14,8 +14,9 @@ flowchart LR
   W --> S[同一オリジン Fastify\n画像デコード検証 / セッション]
   S --> A[認証付き AI 実行\n上限・中断・版付き承認]
   A --> B[共通 ModelProvider\n会話・許可ツール・結果]
-  B --> O[Ollama adapter\n明示したループバック接続先]
-  B -. 明示設定時のみ .-> G[Gemini adapter / Google GenAI SDK\n署名付き応答は内部保持]
+  B --> O[Ollama adapter / Gemma\nローカル開発・ループバック接続]
+  B -. 明示設定時のみ .-> V[Vertex adapter / ADC\ngemini-3.8-flash・global]
+  B -. 明示設定時のみ .-> G[Gemini Developer API adapter\nAPIキー・別接続]
   A --> C
   A --> R[実ツール結果 / 差分 / 使用量]
   R --> W
@@ -37,11 +38,13 @@ flowchart LR
 
 制作画面は「絵を選ぶ」「動きをつける」「印刷して作る」の3工程。方向・距離は通常の操作で編集し、希望文は一か所で入力する。「寸法から案をつくる」は確定的な手動支援、「AIで案をつくる」だけがモデル実行を開始する。ドラッグ・再生・自動保存では推論しない。候補は同じ作品領域と操作欄を比較・差分・採否へ置き換え、モデル設定と詳細ログは設定画面へまとめる。
 
-`AI_PROVIDER=none|ollama|gemini` が唯一の選択設定で、未設定は `none`、不正値は起動時に拒否する。キーが保存されているだけではGeminiを構築・実行しない。Goal007-Rではホスト型推論APIを使用せず、Gemini adapterを互換性のために残す。ローカル接続が遅い・停止・失敗でも外部APIへ自動切替しない。
+`AI_PROVIDER=none|ollama|gemini|vertex` が唯一の選択設定で、未設定は `none`、不正値は起動時に拒否する。キーが保存されているだけではGeminiを構築・実行しない。Goal007-Rではホスト型推論APIを使用せず、Gemini adapterを互換性のために残す。ローカル接続が遅い・停止・失敗でも外部APIへ自動切替しない。
 
-共通の `ModelProvider` は会話・ツール要求・結果を正規化する。Geminiの署名を含むSDK応答、Ollamaのネイティブ応答は各adapter内に保持して当該providerへ戻し、共通履歴や別providerへ流さない。Ollamaはサーバー設定のループバックIP・ポートだけに接続し、クラウド無効状態・ローカルモデル・実行環境を確認する。モデルの自動取得、外部リダイレクト、任意URLの中継は行わない。
+公開版候補はCloud Run東京のWeb/API 1 vCPU / 1 GiBから、サービスアカウントのADCでVertex AI `gemini-3.8-flash` / `global`へ接続する構成。ローカル開発のGemmaとは別環境で、Developer APIへ自動切替しない。前回のIAM限定試験で1依頼の採用・同版PDFを確認し、サービスは削除済み。一般公開とGoal010の残る3ケースは未実施である。モデル処理の東京所在は保証しない。
 
-ネイティブtool callingと明示選択のJSON actionsは、どちらも既存の許可ツールと同じコア検査へ接続する。実行回数・時間・入力・出力の上限、認証、中断、設計版の照合は共通。候補は利用者が採用して初めて設計を更新し、その同じ版からPDF/SVGと組み立てガイドを生成する。`injected-test`、実ローカルAI、実Geminiは別の実行モードとして記録する。
+共通の `ModelProvider` は会話・ツール要求・結果を正規化する。Vertex / Geminiの署名を含むSDK応答、Ollamaのネイティブ応答は各adapter内に保持して当該providerへ戻し、共通履歴や別providerへ流さない。Ollamaはサーバー設定のループバックIP・ポートだけに接続し、クラウド無効状態・ローカルモデル・実行環境を確認する。モデルの自動取得、外部リダイレクト、任意URLの中継は行わない。
+
+ネイティブtool callingと明示選択のJSON actionsは、どちらも既存の許可ツールと同じコア検査へ接続する。実行回数・時間・入力・出力の上限、認証、中断、設計版の照合は共通。候補は利用者が採用して初めて設計を更新し、その同じ版からPDF/SVGと組み立てガイドを生成する。`injected-test`、実ローカルAI、実Gemini Developer API、実Vertexは別の実行モードとして記録する。
 
 ローカル推論は本機の計算資源・ディスク・電力を使う。モデル取得の外部通信とは分けて扱う。単一コンテナの公開準備とWSL上のローカル接続も別であり、Cloud Runのlocalhostが利用者のWSLへ自動接続する構成ではない。
 

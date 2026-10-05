@@ -1,10 +1,10 @@
 # AI接続の設定と限定確認
 
-## Goal009: Vertex接続の実装と未確認範囲
+## Vertex接続の実績と未確認範囲
 
-`AI_PROVIDER=none|ollama|gemini|vertex`で接続を明示し、既定は`none`。`gemini`はAPIキーを使うDeveloper API、`vertex`はADCを使う別アダプターです。いずれも失敗時に別の接続へ自動で切り替えません。Vertexは実装・模擬通信の検証までで、**実認証・実推論・新構成のデプロイ・公開は未実施**です。
+`AI_PROVIDER=none|ollama|gemini|vertex`で接続を明示し、既定は`none`。`gemini`はAPIキーを使うDeveloper API、`vertex`はADCを使う別アダプターです。いずれも失敗時に別の接続へ自動で切り替えません。[前回の非公開Vertex試験](vertex-trial-009.md)で実認証・実推論1依頼・候補採用・同版PDF・保存再開を確認し、試験サービスは削除しました。6.305秒はその1依頼のUI観測値です。**一般公開と、Goal010の中断・別依頼・不成立条件の3ケースは未実施**です。
 
-Vertexには`AI_PROVIDER=vertex`、対象の`VERTEX_PROJECT`、`VERTEX_LOCATION=global`、`VERTEX_MODEL=gemini-3.8-flash`を明示します。Google GenAI SDKのVertex API v1を使い、Cloud Runでは実行サービスアカウントのADCで認証する計画です。APIキーは使わず、秘密鍵を新規発行する手順も含めません。アプリ用の`AI_ACCESS_SECRET`は別に必要です。Cloud Run東京とVertexの`global`は異なり、モデル処理の東京限定を意味しません。
+Vertexには`AI_PROVIDER=vertex`、対象の`VERTEX_PROJECT`、`VERTEX_LOCATION=global`、`VERTEX_MODEL=gemini-3.8-flash`を明示します。Google GenAI SDKのVertex API v1を使い、非公開試験のCloud Runでは実行サービスアカウントのADCで認証しました。APIキーは使わず、秘密鍵を新規発行する手順も含めません。アプリ用の`AI_ACCESS_SECRET`は別に必要です。Cloud Run東京とVertexの`global`は異なり、モデル処理の東京限定を意味しません。
 
 通常の希望入力・候補比較・決定的検査・本人採用・同版PDFの経路は共通です。接続情報は既存の「設定」に置き、設定済み表示を接続成功とは扱いません。料金・予算・承認範囲・オフライン計画は[Vertex比較と次の限定試験](vertex-comparison-009.md)、依頼範囲は[Goal009](goals/009-vertex-comparison.md)にまとめます。以下のWSL実測とDeveloper API用smoke手順を、Vertexの実績や実行許可へ読み替えません。
 
