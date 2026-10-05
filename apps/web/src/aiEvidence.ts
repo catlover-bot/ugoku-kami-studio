@@ -1,6 +1,7 @@
 import { type CheckResult, type DesignDocument, type DesignPatch, type DesignIntent } from '@ugoku/core';
 import { designChanges } from './DesignComparison';
 
+type CoreValidation = {source: 'deterministic-core'; designHash: string; travelMm: number; checks: CheckResult[]};
 export type AiRun = {
   id: string; requestId: string; baseRevision: number; baseHash: string;
   mode?: 'ollama' | 'gemini' | 'vertex' | 'injected-test'; provider?: 'ollama' | 'gemini' | 'vertex'; model?: string;
@@ -10,10 +11,12 @@ export type AiRun = {
   dispatchClosed?: boolean;
   cancellation?: {requestedAt: string; previousStatus: AiRun['status']; dispatchClosedBeforeCancel: boolean; abortSignalAborted: boolean; toolCallsAtRequest: number};
   events: { sequence?: number; type?: string; tool?: string; name?: string; message?: string; designHash?: string; patch?: DesignPatch; checkStatuses?: {id: string; status: string}[]; durationMs?: number }[];
-  proposal?: { id: string; requestId?: string; baseRevision?: number; baseHash?: string; patch: DesignPatch; document: DesignDocument; addedLocks?: string[]; protectedConditions?: string[]; requestedTravelMm?: number; fulfillsRequested?: boolean };
+  proposal?: { id: string; requestId?: string; baseRevision?: number; baseHash?: string; patch: DesignPatch; document: DesignDocument; addedLocks?: string[]; protectedConditions?: string[]; requestedTravelMm?: number; fulfillsRequested?: boolean; summarySource?: 'deterministic-core' };
   requestInterpretation?: Pick<DesignIntent, 'binding' | 'interpretation' | 'clarifications' | 'summary' | 'approvalRequired'>;
   intentSummary?: {protections: string[]; notes: string[]};
   validationIssues?: CheckResult[];
+  requestedValidation?: CoreValidation;
+  candidateValidation?: CoreValidation;
   constraintSuggestions: {key: string; value: unknown; reason: string; source?: 'model'; verification?: {source: 'deterministic-core'; geometry: 'pass'; conditionsApproved: false; baseHash: string; baseRevision: number; comparedCandidateHash: string; contextPatch?: DesignPatch; hypotheticalDesignHash: string; checks: CheckResult[]}}[];
   error?: {code: string; message: string};
   modelCalls: number; toolCalls: number; elapsedMs: number;
@@ -40,7 +43,9 @@ export function publicRunSnapshot(run: AiRun): AiRun {
     dispatchClosed: run.dispatchClosed,
     cancellation: run.cancellation ? {requestedAt: run.cancellation.requestedAt, previousStatus: run.cancellation.previousStatus, dispatchClosedBeforeCancel: run.cancellation.dispatchClosedBeforeCancel, abortSignalAborted: run.cancellation.abortSignalAborted, toolCallsAtRequest: run.cancellation.toolCallsAtRequest} : undefined,
     events: run.events.map(event => ({sequence: event.sequence, type: event.type, tool: event.tool, name: event.name, message: event.message, designHash: event.designHash, patch: event.patch, checkStatuses: event.checkStatuses, durationMs: event.durationMs})),
-    proposal: run.proposal ? {id: run.proposal.id, requestId: run.proposal.requestId, baseRevision: run.proposal.baseRevision, baseHash: run.proposal.baseHash, patch: run.proposal.patch, document: run.proposal.document, addedLocks: run.proposal.addedLocks, protectedConditions: run.proposal.protectedConditions, requestedTravelMm: run.proposal.requestedTravelMm, fulfillsRequested: run.proposal.fulfillsRequested} : undefined,
+    proposal: run.proposal ? {id: run.proposal.id, requestId: run.proposal.requestId, baseRevision: run.proposal.baseRevision, baseHash: run.proposal.baseHash, patch: run.proposal.patch, document: run.proposal.document, addedLocks: run.proposal.addedLocks, protectedConditions: run.proposal.protectedConditions, requestedTravelMm: run.proposal.requestedTravelMm, fulfillsRequested: run.proposal.fulfillsRequested, summarySource: run.proposal.summarySource} : undefined,
+    requestedValidation: run.requestedValidation ? {source: run.requestedValidation.source, designHash: run.requestedValidation.designHash, travelMm: run.requestedValidation.travelMm, checks: run.requestedValidation.checks} : undefined,
+    candidateValidation: run.candidateValidation ? {source: run.candidateValidation.source, designHash: run.candidateValidation.designHash, travelMm: run.candidateValidation.travelMm, checks: run.candidateValidation.checks} : undefined,
     requestInterpretation: run.requestInterpretation, intentSummary: run.intentSummary, validationIssues: run.validationIssues, constraintSuggestions: run.constraintSuggestions,
     error: run.error, modelCalls: run.modelCalls, toolCalls: run.toolCalls, elapsedMs: run.elapsedMs, usage: run.usage, modelUsage: run.modelUsage,
   });
