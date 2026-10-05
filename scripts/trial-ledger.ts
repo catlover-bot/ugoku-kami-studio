@@ -19,7 +19,8 @@ const GrantSchema = RequestSchema.extend({ grantId: z.string().uuid(), callIds: 
 const CostSchema = z.discriminatedUnion('kind', [z.object({ kind: z.literal('sent-unknown') }).strict(), z.object({ kind: z.enum(['usage-estimate', 'aggregate-upper-estimate']), usd: z.number().finite().nonnegative() }).strict()]);
 const AttemptSchema = z.object({ attemptId: z.string().uuid(), dispatch: z.enum(['sent', 'possibly-sent']), cost: CostSchema, observationHashes: z.array(Hash).min(1) }).strict();
 const ReportSchema = z.object({ requestId: Id, grantId: z.string().uuid(), binding: BindingSchema, dispatchClosed: z.literal(true), completeAttemptList: z.literal(true), sdkFetchRetryGuard: z.literal(1), serverIdentity: Id, proofHashes: z.array(Hash).min(1), attempts: z.array(AttemptSchema).max(6) }).strict();
-const EventSchema = z.object({ version: z.literal(1), sequence: z.number().int().nonnegative(), previousHash: Hash.nullable(), at: z.string().datetime(), type: z.enum(['initialize', 'reserve', 'forward', 'reconcile', 'close-unforwarded']), payload: z.unknown(), hash: Hash }).strict();
+const RejectionSchema = z.object({ requestId: Id, grantId: z.string().uuid(), binding: BindingSchema, httpStatus: z.literal(429), errorCode: z.literal('instance_limit'), classification: z.literal('audited-before-run-rejection'), proofHashes: z.array(Hash).min(1), serverIdentity: Id }).strict();
+const EventSchema = z.object({ version: z.literal(1), sequence: z.number().int().nonnegative(), previousHash: Hash.nullable(), at: z.string().datetime(), type: z.enum(['initialize', 'reserve', 'forward', 'reconcile', 'close-unforwarded', 'reject-before-run']), payload: z.unknown(), hash: Hash }).strict();
 export type LedgerInitial = z.infer<typeof InitialSchema>;
 export type TrialBinding = z.infer<typeof BindingSchema>;
 export type TrialPhase = z.infer<typeof PhaseSchema>;
@@ -27,8 +28,10 @@ export type ReserveRequest = z.infer<typeof RequestSchema>;
 export type TrialGrant = z.infer<typeof GrantSchema>;
 export type ClosureReport = z.infer<typeof ReportSchema>;
 export type VerifyClosure = (report: Readonly<ClosureReport>, grant: Readonly<TrialGrant>) => boolean;
+export type RejectedRequestReport = z.infer<typeof RejectionSchema>;
+export type VerifyRejectedRequest = (report: Readonly<RejectedRequestReport>, grant: Readonly<TrialGrant>) => boolean;
 type Call = { id: string; state: 'reserved-not-sent' | 'possibly-sent' | 'sent-unknown' | 'usage-estimate' | 'aggregate-upper-estimate' | 'released-not-sent'; committedNanoUsd: number };
-type StoredGrant = { grant: TrialGrant; forwarded: boolean; closed: boolean; calls: Call[]; closure?: ClosureReport; localClosureReason?: string };
+type StoredGrant = { grant: TrialGrant; forwarded: boolean; closed: boolean; calls: Call[]; closure?: ClosureReport; rejection?: RejectedRequestReport; localClosureReason?: string };
 type State = { initial: LedgerInitial; grants: StoredGrant[] };
 type Event = z.infer<typeof EventSchema>;
 const clone = <T>(value: T): T => structuredClone(value);
@@ -77,6 +80,12 @@ function transition(prior: State | undefined, type: Event['type'], payload: unkn
     const p = z.object({ requestId: Id, grantId: z.string().uuid(), reason: z.string().min(1).max(200) }).strict().parse(payload), g = state.grants.find(x => x.grant.requestId === p.requestId);
     if (!g || g.grant.grantId !== p.grantId || g.forwarded || g.closed) throw Error('Cannot locally release a forwarded request');
     g.closed = true; g.localClosureReason = p.reason; g.calls.forEach(c => { c.state = 'released-not-sent'; c.committedNanoUsd = 0; }); return state;
+  }
+  if (type === 'reject-before-run') {
+    const report = RejectionSchema.parse(payload), g = state.grants.find(x => x.grant.requestId === report.requestId);
+    if (!g || g.grant.grantId !== report.grantId || !g.forwarded || g.closed || !same(g.grant.binding, report.binding)) throw Error('Before-run rejection binding/state mismatch');
+    g.closed = true; g.rejection = report;
+    g.calls.forEach(c => { c.state = 'released-not-sent'; c.committedNanoUsd = 0; }); return state;
   }
   const report = ReportSchema.parse(payload), g = state.grants.find(x => x.grant.requestId === report.requestId);
   if (!g || g.grant.grantId !== report.grantId || !g.forwarded || g.closed || !same(g.grant.binding, report.binding)) throw Error('Closure binding/state mismatch');
@@ -172,6 +181,16 @@ export class Ledger {
     if (prior?.closure) { if (same(prior.closure, report)) return; throw Error('Conflicting duplicate settlement'); }
     if (!prior || verifyClosure(clone(report), clone(prior.grant)) !== true) throw Error('Authenticated closure proof rejected');
     this.append('reconcile', report);
+  }
+  /** Separate from a run closure: no run ID or dispatchClosed is fabricated.
+   * The trusted audit must establish this exact source rejected the HTTP start
+   * BEFORE creating a run. HTTP 429 alone is insufficient. Request/call permits
+   * stay consumed, and all original reserve/forward evidence stays appended. */
+  reconcileRejectedRequest(input: RejectedRequestReport, verify: VerifyRejectedRequest) {
+    this.assertOpen(); const report = RejectionSchema.parse(input), prior = this.state.grants.find(g => g.grant.requestId === report.requestId);
+    if (!prior || typeof verify !== 'function' || verify(clone(report), clone(prior.grant)) !== true) throw Error('Audited before-run rejection proof rejected');
+    if (prior.rejection) { if (same(prior.rejection, report)) return; throw Error('Conflicting duplicate rejection settlement'); }
+    this.append('reject-before-run', report);
   }
   close() {
     if (!this.ownsLock) return;
