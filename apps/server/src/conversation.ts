@@ -6,7 +6,8 @@ export type ConversationMessage = { role: 'user'; text: string } | AssistantMess
 export type UsageMetadata = { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number; cachedContentTokenCount?: number; toolUsePromptTokenCount?: number; totalTokenCount?: number };
 export type LocalTiming = { loadMs: number; promptEvalMs: number; evalMs: number; totalMs: number };
 export type LocalModel = { digest: string; quantization: string; contextLength: number; runtimeVersion: string; toolMode: 'native' | 'json-actions' };
-export type ProviderResponse = { message: AssistantMessage; finishReason?: string; refusal?: boolean; usageMetadata?: UsageMetadata; modelVersion?: string; localTiming?: LocalTiming; localModel?: LocalModel };
+export type ModelCost = { kind: 'usage-estimate' | 'reservation'; usageEstimateUsd: number | null; reservationUsd: number };
+export type ProviderResponse = { message: AssistantMessage; finishReason?: string; refusal?: boolean; usageMetadata?: UsageMetadata; modelVersion?: string; localTiming?: LocalTiming; localModel?: LocalModel; modelCost?: ModelCost };
 export interface ModelProvider {
   generate(messages: ConversationMessage[], signal: AbortSignal): Promise<ProviderResponse>;
   inputBytes?(messages: ConversationMessage[]): number;

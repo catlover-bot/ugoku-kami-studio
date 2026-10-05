@@ -4,10 +4,10 @@ import { fileURLToPath } from 'node:url';
 import { readConfig } from '../apps/server/src/config.ts';
 
 export const VERTEX_TRIAL_LIMITS = Object.freeze({
-  realRequests: 4, modelCallsPerRequest: 2, toolCallsPerRequest: 4,
+  realRequests: 4, modelCallsPerRequest: 6, toolCallsPerRequest: 4,
   inputBytesPerCall: 32_768, configuredOutputTokensPerCall: 2_048, requestSeconds: 90,
   maxInstances: 1, concurrentInference: 1, cpu: 1, memoryGiB: 1,
-  runMinutes: 30, buildMinutes: 20, imageGiB: 1, sourceMiB: 50, cleanupHours: 24,
+  runMinutes: 120, buildMinutes: 60, imageGiB: 1, sourceMiB: 50, cleanupHours: 24,
   grossManagementTargetUSD: 5,
 });
 const required = ['GCP_PROJECT', 'GCP_REGION', 'CLOUD_RUN_SERVICE', 'CONTAINER_IMAGE', 'CLOUD_RUN_SERVICE_ACCOUNT', 'AI_ACCESS_SECRET_NAME', 'AI_ACCESS_SECRET_VERSION'] as const;
@@ -32,6 +32,7 @@ export function vertexTrialPlan(env: NodeJS.ProcessEnv) {
   const appEnv = {
     HOST: '0.0.0.0', AI_PROVIDER: 'vertex', VERTEX_PROJECT: env.GCP_PROJECT ?? '',
     VERTEX_LOCATION: 'global', VERTEX_MODEL: 'gemini-3.8-flash',
+    VERTEX_MODEL_BUDGET_USD: '3.9',
     AI_MAX_MODEL_CALLS: String(limits.modelCallsPerRequest), AI_MAX_TOOL_CALLS: String(limits.toolCallsPerRequest),
     AI_MAX_INPUT_BYTES: String(limits.inputBytesPerCall), AI_MAX_OUTPUT_TOKENS: String(limits.configuredOutputTokensPerCall),
     AI_TIMEOUT_MS: String(limits.requestSeconds * 1000), AI_MAX_CONCURRENT: '1', AI_RUNS_PER_MINUTE: '2', AI_MAX_RUNS_PER_HOUR: '4',
@@ -63,7 +64,7 @@ export function vertexTrialPlan(env: NodeJS.ProcessEnv) {
     limits, totals: { modelCalls: limits.realRequests * limits.modelCallsPerRequest, toolCalls: limits.realRequests * limits.toolCallsPerRequest, inputBytes: limits.realRequests * limits.modelCallsPerRequest * limits.inputBytesPerCall, configuredOutputTokens: limits.realRequests * limits.modelCallsPerRequest * limits.configuredOutputTokensPerCall, requestSeconds: limits.realRequests * limits.requestSeconds },
     auth: { method: 'ADC from attached Cloud Run service account', keysCreated: false, apiKeyUsed: false, privateIamRequired: true },
     iamProposal: { customRolePermissions: ['aiplatform.endpoints.predict', 'serviceusage.services.use'], projectScoped: true, modelScopeEnforcedBy: 'application allowlist; project IAM is not a model-only policy', secretAccessorScope: 'only the trial access-code secret' },
-    requiredExecutionChecks: ['new user approval with coupon evidence and costs', 'name collisions and build source SHA', 'actual image digest and <=1GiB size', 'IAM invoker check enabled and no public members', 'durable external four-request ledger including failures/retries', 'elapsed-time and estimated-cost stop; cleanup only trial-created resources'],
+    requiredExecutionChecks: ['user approval for this private trial with gross cash costs acknowledged; no credit deduction or coupon expiry/scope prerequisite', 'name collisions and build source SHA', 'actual image digest and <=1GiB size', 'IAM invoker check enabled and no public members', 'durable external four-request ledger including failures/retries and total 24 model calls', 'reserve the next model call before dispatch against cumulative usage and retained unknown-usage reservations', 'elapsed-time and estimated-cost stop; cleanup only trial-created resources'],
     caveats: ['No automatic fallback to Developer API or Ollama.', 'Global model processing is not Tokyo data residency.', 'Configured output limit is not represented as a verified Vertex thinking-inclusive billing ceiling.', 'Hourly/in-memory limits reset on restart; they do not enforce a four-request whole-trial cap or a financial hard stop.', 'Instance billing preserves the existing asynchronous run/poll design; min0 does not guarantee immediate shutdown.', 'Session affinity does not persist sessions or proposals across restart/scale-to-zero; keep the original work in browser storage.'],
   };
 }

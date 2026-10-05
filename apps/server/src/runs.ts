@@ -2,7 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { z } from 'zod';
 import { applyIntentPatch, assertRequestBinding, distanceTargetMm, InterpretationCorrectionSchema, interpretDesignRequest, interpretModelRequest, parseDesignDocument, validateDesign, type DesignDocument, type DesignPatch, type DesignIntent, type LockKey, type CheckResult, type InterpretationCorrection, type RequestInterpretation } from '@ugoku/core';
-import type { ConversationMessage, ToolResult, LocalTiming, LocalModel } from './conversation.js';
+import type { ConversationMessage, ToolResult, LocalTiming, LocalModel, ModelCost } from './conversation.js';
+import { vertexUsageCostUsd } from './vertex-budget.js';
 import { OllamaProvider } from './ollama.js';
 import type { ServerConfig } from './config.js';
 import { AppError, publicError } from './errors.js';
@@ -22,7 +23,7 @@ function interpretationView(intent: DesignIntent): PublicInterpretation {
 type Event = { sequence: number; type: 'model' | 'tool' | 'validation'; tool?: string; message: string; designHash?: string; patch?: DesignPatch; checkStatuses?: { id: string; status: string }[]; durationMs: number };
 export type Proposal = { id: string; requestId: string; baseRevision: number; baseHash: string; patch: DesignPatch; document: DesignDocument; addedLocks: LockKey[]; protectedConditions: string[]; requestedTravelMm?: number; fulfillsRequested: boolean };
 export type TokenUsage = { promptTokens: number; outputTokens: number; thinkingTokens: number; cachedInputTokens: number; toolPromptTokens: number; totalTokens: number };
-export type ModelUsage = { call: number; inputBytes: number; outputTokenLimit: number; durationMs: number; received: boolean; finishReason: string | null; modelVersion: string | null; usage: TokenUsage | null; localTiming?: LocalTiming; localModel?: LocalModel };
+export type ModelUsage = { call: number; inputBytes: number; outputTokenLimit: number; durationMs: number; received: boolean; finishReason: string | null; modelVersion: string | null; usage: TokenUsage | null; usageComplete?: boolean; modelCost?: ModelCost; localTiming?: LocalTiming; localModel?: LocalModel };
 function tokenUsage(usage: ProviderResponse['usageMetadata']): TokenUsage | null {
   if (!usage) return null;
   const count = (value: number | undefined) => Number.isSafeInteger(value) && value! >= 0 ? value! : 0;
@@ -241,7 +242,9 @@ export class RunManager {
         meter.finishReason = response.finishReason ?? null;
         meter.localTiming = response.localTiming; meter.localModel = response.localModel;
         meter.modelVersion = response.modelVersion?.slice(0, 128) ?? null;
-        meter.usage = tokenUsage(response.usageMetadata);
+        if (run.provider === 'vertex') meter.usageComplete = vertexUsageCostUsd(response.usageMetadata) !== null;
+        meter.usage = meter.usageComplete === false ? null : tokenUsage(response.usageMetadata);
+        meter.modelCost = response.modelCost;
         if (meter.usage) {
           run.usage.responsesWithUsage++; run.usage.responsesWithoutUsage--;
           for (const key of Object.keys(meter.usage) as (keyof TokenUsage)[]) run.usage[key] += meter.usage[key];

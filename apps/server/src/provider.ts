@@ -2,6 +2,7 @@ import { GoogleGenAI, type Content, type ThinkingLevel } from '@google/genai';
 import { DEFAULT_MODEL, GEMINI_ENDPOINT, VERTEX_ENDPOINT, VERTEX_MODEL, type ServerConfig } from './config.js';
 import { AppError } from './errors.js';
 import { declarations } from './tools.js';
+import { VertexBudget, vertexUsageCostUsd } from './vertex-budget.js';
 import type { AssistantMessage, ConversationMessage, ModelProvider, ProviderResponse } from './conversation.js';
 export type { AssistantMessage, ConversationMessage, ModelProvider, ProviderResponse, ToolCall, ToolResult } from './conversation.js';
 
@@ -40,7 +41,8 @@ export function assertModelInput(config: ServerConfig, messages: ConversationMes
 /** No fallback. Original SDK Content remains private and is replayed byte-for-byte structurally. */
 class GoogleContentProvider implements ModelProvider {
   private originals = new WeakMap<AssistantMessage, Content>();
-  constructor(private config: ServerConfig, private client: GoogleGenAI) {}
+  constructor(private config: ServerConfig, private client: GoogleGenAI, private budget?: VertexBudget) {}
+  budgetStatus() { return this.budget?.snapshot() ?? null; }
   private contents(messages: ConversationMessage[]): Content[] {
     return messages.map(message => {
       if (message.role === 'user') return { role: 'user', parts: [{ text: message.text }] };
@@ -54,12 +56,21 @@ class GoogleContentProvider implements ModelProvider {
   async generate(messages: ConversationMessage[], signal: AbortSignal): Promise<ProviderResponse> {
     signal.throwIfAborted(); assertModelInput(this.config, messages, this);
     const request = geminiRequest(this.config, this.contents(messages));
-    const response = await this.client.models.generateContent({ ...request, config: { ...request.config, abortSignal: signal, httpOptions: { timeout: this.config.runTimeoutMs, retryOptions: { attempts: 1 } } } });
+    const ticket = this.budget?.reserve(); // Synchronous reservation before ADC/HTTP dispatch.
+    let response;
+    try {
+      response = await this.client.models.generateContent({ ...request, config: { ...request.config, abortSignal: signal, httpOptions: { timeout: this.config.runTimeoutMs, retryOptions: { attempts: 1 } } } });
+      if (ticket !== undefined) this.budget!.settle(ticket, signal.aborted ? undefined : response.usageMetadata);
+    } catch (error) {
+      if (ticket !== undefined) this.budget!.settle(ticket); // Failed/aborted requests do not become free.
+      throw error;
+    }
     const candidate = response.candidates?.[0], content = candidate?.content;
     if (content && Buffer.byteLength(JSON.stringify(content), 'utf8') > 100_000) throw new AppError('invalid_output', 'AIの応答が大きすぎます。');
     const message: AssistantMessage = { role: 'assistant', text: content?.parts?.filter(part => !part.thought && part.text).map(part => part.text).join('\n') ?? '', calls: content?.parts?.flatMap(part => part.functionCall ? [{ name: part.functionCall.name || '', args: part.functionCall.args ?? {}, ...(part.functionCall.id ? { id: part.functionCall.id } : {}) }] : []) ?? [] };
     if (content) this.originals.set(message, structuredClone(content));
-    return { message, finishReason: candidate?.finishReason, refusal: !!response.promptFeedback?.blockReason, usageMetadata: response.usageMetadata, modelVersion: response.modelVersion };
+    const usageEstimateUsd = this.budget && !signal.aborted ? vertexUsageCostUsd(response.usageMetadata) : null;
+    return { message, finishReason: candidate?.finishReason, refusal: !!response.promptFeedback?.blockReason, usageMetadata: response.usageMetadata, modelVersion: response.modelVersion, ...(this.budget ? { modelCost: { kind: usageEstimateUsd === null ? 'reservation' as const : 'usage-estimate' as const, usageEstimateUsd, reservationUsd: this.budget.snapshot().nextCallReserveUsd } } : {}) };
   }
 }
 
@@ -82,6 +93,6 @@ export class VertexProvider extends GoogleContentProvider {
       // SDK construction does not resolve ADC or make a request.
       googleAuthOptions: { projectId: config.vertex.project, scopes: ['https://www.googleapis.com/auth/cloud-platform'] },
       httpOptions: { baseUrl: VERTEX_ENDPOINT, retryOptions: { attempts: 1 }, headers: { 'x-goog-user-project': config.vertex.project } },
-    }));
+    }), config.vertex.modelBudgetUsd === undefined ? undefined : new VertexBudget(config.vertex.modelBudgetUsd, config.maxInputBytes, config.maxOutputTokens));
   }
 }

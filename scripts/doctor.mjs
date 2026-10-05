@@ -44,6 +44,7 @@ const report = {
   vertexConfigurationReady: Boolean(config?.provider === 'vertex' && config.aiEnabled),
   // Syntactic readiness is not authentication, quota, credit or execution permission.
   vertexAuthenticationVerified: false,
+  vertexModelBudgetUsd: config?.provider === 'vertex' ? config.vertex.modelBudgetUsd ?? null : null,
   readyForExplicitLocalRun: Boolean(config?.provider === 'ollama' && config.aiEnabled),
   networkRequests: 0, paidApiCalls: 0,
 };

@@ -28,7 +28,7 @@ export type ServerConfig = {
   /** Derived from provider; never an independent enabling flag. */
   aiEnabled: boolean;
   ollama: { baseUrl: string; model: string; digest: string; contextLength: number; toolMode: 'native' | 'json-actions' };
-  vertex: { project: string; location: 'global'; model: string; endpoint: string; apiVersion: 'v1' };
+  vertex: { project: string; location: 'global'; model: string; endpoint: string; apiVersion: 'v1'; modelBudgetUsd?: number };
   apiKey: string;
   accessSecret: string;
   model: string;
@@ -70,6 +70,8 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   if (vertex && !/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(vertexProject)) throw new Error('VERTEX_PROJECT requires an explicit valid project ID');
   if (vertex && env.VERTEX_LOCATION !== 'global') throw new Error('VERTEX_LOCATION must explicitly be global');
   if (vertex && env.VERTEX_MODEL !== VERTEX_MODEL) throw new Error('VERTEX_MODEL must explicitly be gemini-3.8-flash');
+  const modelBudget = vertex && env.VERTEX_MODEL_BUDGET_USD ? Number(env.VERTEX_MODEL_BUDGET_USD) : undefined;
+  if (modelBudget !== undefined && (!/^\d+(?:\.\d{1,6})?$/.test(env.VERTEX_MODEL_BUDGET_USD!) || !Number.isFinite(modelBudget) || modelBudget <= 0 || modelBudget > 100)) throw new Error('VERTEX_MODEL_BUDGET_USD must be a positive amount up to 100 with at most 6 decimal places');
   const local = provider === 'ollama';
   const localModel = local ? validateOllamaModel(env.OLLAMA_MODEL || '') : '';
   const localUrl = local ? validateOllamaEndpoint(env.OLLAMA_BASE_URL || '') : '';
@@ -79,7 +81,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const config: ServerConfig = {
     provider: provider as ServerConfig['provider'],
     aiEnabled: provider !== 'none',
-    vertex: { project: vertexProject, location: 'global', model: VERTEX_MODEL, endpoint: VERTEX_ENDPOINT, apiVersion: 'v1' },
+    vertex: { project: vertexProject, location: 'global', model: VERTEX_MODEL, endpoint: VERTEX_ENDPOINT, apiVersion: 'v1', ...(modelBudget !== undefined ? { modelBudgetUsd: modelBudget } : {}) },
     ollama: { baseUrl: localUrl, model: localModel, digest: local ? env.OLLAMA_MODEL_DIGEST?.replace(/^sha256:/, '') || '' : '', contextLength: integer(env.OLLAMA_CONTEXT_LENGTH, 8192, 2048, 32768, 'OLLAMA_CONTEXT_LENGTH'), toolMode: toolMode as 'native' | 'json-actions' },
     apiKey: provider === 'gemini' ? env.GEMINI_API_KEY?.trim() || '' : '',
     accessSecret: env.AI_ACCESS_SECRET || '',
