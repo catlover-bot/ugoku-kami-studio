@@ -3,7 +3,7 @@ import { designChanges } from './DesignComparison';
 
 export type AiRun = {
   id: string; requestId: string; baseRevision: number; baseHash: string;
-  mode?: 'ollama' | 'gemini' | 'injected-test'; provider?: 'ollama' | 'gemini'; model?: string;
+  mode?: 'ollama' | 'gemini' | 'vertex' | 'injected-test'; provider?: 'ollama' | 'gemini' | 'vertex'; model?: string;
   localModel?: {digest: string; quantization: string; contextLength: number; runtimeVersion: string; toolMode?: 'native' | 'json-actions'};
   status: 'running' | 'awaiting_approval' | 'clarification_required' | 'succeeded' | 'failed' | 'cancelled';
   message: string;
@@ -21,7 +21,7 @@ export type AiRun = {
 export type DesignStamp = {designId: string; revision: number; designHash: string};
 export type AiEvidence = {
   runId: string; requestedAt: string; observedAt: string; prompt: string;
-  execution: {mode: 'ollama' | 'gemini' | 'injected-test' | 'unknown'; model: string | null};
+  execution: {mode: 'ollama' | 'gemini' | 'vertex' | 'injected-test' | 'unknown'; provider: NonNullable<AiRun['provider']> | null; model: string | null};
   base: DesignStamp & {checks: CheckResult[]};
   proposed?: DesignStamp & {checks: CheckResult[]; changes: ReturnType<typeof designChanges>};
   /** Last response actually received from the application server, independent of the UI decision. */
@@ -47,7 +47,7 @@ export function observeRun(previous: AiEvidence | undefined, run: AiRun, base: D
   const terminalDecision = previous && ['accepted', 'rejected', 'cancelled', 'stale', 'expired'].includes(previous.decision.status);
   return {
     runId: run.id, requestedAt, observedAt: now, prompt,
-    execution: {mode: run.mode ?? 'unknown', model: run.model ?? null},
+    execution: {mode: run.mode ?? 'unknown', provider: run.provider ?? null, model: run.model ?? null},
     base: {...designStamp(base), checks: base.checks},
     proposed: document ? {...designStamp(document), checks: document.checks, changes: designChanges(base, document)} : previous?.proposed,
     serverRun: publicRunSnapshot(run),
