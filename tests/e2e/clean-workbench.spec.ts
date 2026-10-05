@@ -1,8 +1,8 @@
 import {expect, test} from '@playwright/test';
 import {PDFDocument} from 'pdf-lib';
 import {readFile} from 'node:fs/promises';
-import {createDesign, type DesignDocument} from '@ugoku/core';
-import {manual, stage, startSample, splitPrint} from './helpers';
+import {createDesign, interpretDesignRequest, type DesignDocument} from '@ugoku/core';
+import {manual, stage, startSample, splitPrint, saveProject} from './helpers';
 
 // Ordinary deterministic app path. No inference client is created by these tests.
 test('one request field and review replace normal controls without changing the design before adoption', async ({page}, info) => {
@@ -40,7 +40,7 @@ test('one request field and review replace normal controls without changing the 
   const pdf=await PDFDocument.load(await readFile(path));expect(pdf.getSubject()).toContain(adopted);expect(pdf.getPages()[0]!.getWidth()).toBeCloseTo(595.276,2);
 });
 
-test('failed validation shows each geometry reason once and preserves errors without a detailed issue list', async({page})=>{
+test('failed validation shows each geometry reason once and preserves errors without a detailed issue list', async({page}, info)=>{
   let base: DesignDocument;
   let firstReason = '', firstSuggestion = '', starts = 0;
   const noIssuesMessage = '検査の詳細を取得できませんでした。作品は変更していません。接続を確認して再試行してください。';
@@ -54,17 +54,20 @@ test('failed validation shows each geometry reason once and preserves errors wit
     expect(issues.length).toBeGreaterThan(0);
     firstReason=issues[0]!.message;firstSuggestion=issues[0]!.suggestion!;
     const message=starts===1 ? `候補は条件を満たしません。${issues[0]!.partIds.join('・')}：${firstReason} ${firstSuggestion}` : noIssuesMessage;
-    const run={id:`validation-test-${starts}`,requestId:input.requestId,baseRevision:input.baseRevision,baseHash:input.baseHash,mode:'injected-test',status:'failed',message,error:{code:'validation_failed',message},validationIssues:starts===1?issues:[],constraintSuggestions:[],events:[],modelCalls:0,toolCalls:0,elapsedMs:0};
+    const run={requestInterpretation:interpretDesignRequest(base,input.prompt),id:`validation-test-${starts}`,requestId:input.requestId,baseRevision:input.baseRevision,baseHash:input.baseHash,mode:'injected-test',status:'failed',message,error:{code:'validation_failed',message},validationIssues:starts===1?issues:[],constraintSuggestions:[],events:[],modelCalls:0,toolCalls:0,elapsedMs:0};
     return route.fulfill({contentType:'application/json',body:JSON.stringify({run})});
   });
   await page.goto('/');await startSample(page);await manual(page);
+  await page.getByLabel('絵の大きさを保つ', {exact:true}).check();
+  await page.getByLabel('どう動かしたいですか？').fill('70mm動かしたい。絵の大きさと紙の枚数は変えない');
+  const original = await saveProject(page);
   const stamp=await page.locator('main').evaluate(element=>({hash:element.dataset.designHash,revision:element.dataset.designRevision}));
   await page.getByRole('button',{name:'設定',exact:true}).click();
   await page.getByLabel('AIアクセスコード').fill('synthetic-validation-access');
   await page.getByRole('dialog',{name:'設定',exact:true}).getByRole('button',{name:'閉じる',exact:true}).click();
   await page.getByRole('button',{name:'AIで案をつくる',exact:true}).click();
   const panel=page.locator('.ai-panel');
-  await expect(panel.getByRole('status')).toHaveText('候補は条件を満たしません。作品は変更していません。下の理由を確認して調整してください。');
+  await expect(panel.getByRole('status')).toHaveText('希望70mm。この条件では未成立です。作品と固定条件は変更していません。下の理由を確認し、変更してよい条件を見直してください。');
   const text=await panel.innerText();
   expect(text.split(firstReason)).toHaveLength(2);
   expect(text.split(firstSuggestion)).toHaveLength(2);
@@ -72,12 +75,29 @@ test('failed validation shows each geometry reason once and preserves errors wit
   await expect(panel.getByRole('button',{name:'この案にする',exact:true})).toHaveCount(0);
   await expect(page.locator('main')).toHaveAttribute('data-design-hash',stamp.hash!);
   await expect(page.locator('main')).toHaveAttribute('data-design-revision',stamp.revision!);
+  await expect(panel.getByRole('button',{name:'条件を見直す',exact:true})).toBeVisible();
+  await panel.screenshot({path:info.outputPath('infeasible-result.png')});
+  await panel.getByRole('button',{name:'条件を見直す',exact:true}).click();
+  await expect(page.locator('.motion-settings')).toBeVisible();
+  const preserved = await saveProject(page);
+  expect(preserved.document).toEqual(original.document);
+  await page.screenshot({path:info.outputPath('infeasible-manual-recovery.png')});
   await page.getByRole('button',{name:'AIを再試行する',exact:true}).click();
   await expect(panel.getByRole('status')).toHaveText(noIssuesMessage);
   await expect(panel.getByRole('heading',{name:'設計で見つかった問題'})).toHaveCount(0);
   await panel.getByRole('button',{name:'手動の調整に戻る',exact:true}).click();
   await expect(page.locator('.motion-settings')).toBeVisible();
   await expect(page.locator('main')).toHaveAttribute('data-design-hash',stamp.hash!);
+  const distance = page.getByLabel('動く距離（mm）',{exact:true});
+  await distance.fill('18'); await distance.press('Enter');
+  await page.getByRole('button',{name:'元に戻す',exact:true}).click();
+  await page.getByRole('button',{name:'やり直す',exact:true}).click();
+  await expect(distance).toHaveValue('18');
+  await page.getByRole('button',{name:'元に戻す',exact:true}).click();
+  const restored=await saveProject(page);
+  expect(restored.document.designHash).toBe(original.document.designHash);
+  expect(restored.document.input.locks).toEqual(original.document.input.locks);
+  expect(restored.document.revision).toBeGreaterThan(original.document.revision);
   expect(starts).toBe(2);
 });
 

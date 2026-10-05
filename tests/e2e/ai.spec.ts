@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { applyDesignPatch, parseDesignDocument, type DesignDocument } from '@ugoku/core';
-import { openRequest, editCurrentSettings, startSample, ai, precision } from './helpers';
+import { openRequest, editCurrentSettings, startSample, ai, precision, saveProject } from './helpers';
 
 // HTTP fixtures are confined to this browser test. No key, SDK request or production fallback is used.
 type RequestBody = { requestId: string; prompt: string; baseRevision: number; baseHash: string };
@@ -238,8 +238,9 @@ test.describe('AI panel — test-only HTTP fixtures, no live Gemini', () => {
     expect(fixture.requests[1]!.baseRevision).toBe(fixture.requests[0]!.baseRevision + 2);
   });
 
-  test('provider 429 and HTTP 429 preserve manual editing and permit explicit retry', async ({ page }) => {
+  test('provider 429 and HTTP 429 preserve manual editing and permit explicit retry', async ({ page }, info) => {
     const fixture = new AiFixture(); fixture.mode = 'provider429'; await open(page, fixture);
+    const original = await saveProject(page);
     await openRequest(page);
     await page.getByRole('button', { name: 'AIで案をつくる' }).click();
     await expect(page.getByText('Geminiの利用上限に達しました。時間をおいて再試行してください。')).toBeVisible();
@@ -247,7 +248,20 @@ test.describe('AI panel — test-only HTTP fixtures, no live Gemini', () => {
     fixture.mode = 'http429';
     await openRequest(page);
     await page.getByRole('button', { name: 'AIを再試行する', exact: true }).click();
-    await expect(page.getByText('現在の実行上限です。時間をおいて再試行してください。')).toBeVisible();
+    await expect(page.getByText('AIへの依頼が続いています。時間をおいて再度お試しください。作品は変更していません。')).toBeVisible();
+    await expect(page.locator('main')).toHaveAttribute('data-design-hash', original.document.designHash);
+    await expect(page.locator('main')).toHaveAttribute('data-design-revision', String(original.document.revision));
+    await expect(page.getByRole('button', {name: 'この案にする', exact: true})).toHaveCount(0);
+    await page.locator('.ai-panel').screenshot({path:info.outputPath('rate-limit.png')});
+    await page.getByRole('button', {name: '手動の調整に戻る', exact: true}).click();
+    const distance = page.getByLabel('動く距離（mm）', {exact:true});
+    await distance.fill('18'); await distance.press('Enter');
+    await page.getByRole('button', {name: '元に戻す', exact:true}).click();
+    const restored = await saveProject(page);
+    expect(restored.document.designHash).toBe(original.document.designHash);
+    expect(restored.document.revision).toBeGreaterThan(original.document.revision);
+    expect(restored.document.input.locks).toEqual(original.document.input.locks);
+    expect(fixture.requests).toHaveLength(2); // Manual recovery never retries AI.
     fixture.mode = 'proposal';
     await openRequest(page);
     await page.getByRole('button', { name: /AIで案をつくる|AIを再試行する/ }).click();

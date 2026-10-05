@@ -4,7 +4,7 @@ import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { z } from 'zod';
 import { readConfig, publicStatus, type ServerConfig } from './config.js';
-import { AppError } from './errors.js';
+import { AppError, publicError } from './errors.js';
 import { validateImage } from './images.js';
 import { GeminiProvider, VertexProvider, type ModelProvider } from './provider.js';
 import { OllamaProvider } from './ollama.js';
@@ -40,7 +40,11 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
   });
 
   app.setErrorHandler((error, _request, reply) => {
-    if (error instanceof AppError) return reply.code(error.statusCode).send({ error: { code: error.code, message: error.message } });
+    if (error instanceof AppError) {
+      const exposed = publicError(error);
+      if (exposed.retryAfterMs !== undefined) reply.header('Retry-After', Math.ceil(exposed.retryAfterMs / 1000));
+      return reply.code(error.statusCode).send({ error: exposed });
+    }
     if (error instanceof z.ZodError) return reply.code(400).send({ error: { code: 'invalid_input', message: '入力の形式または値を確認してください。' } });
     const statusCode = typeof error === 'object' && error !== null && 'statusCode' in error ? Number(error.statusCode) : 500;
     if (statusCode === 413) return reply.code(413).send({ error: { code: 'body_too_large', message: '送信するデータが大きすぎます。' } });
