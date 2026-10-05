@@ -22,13 +22,13 @@ const interpretationSchema = z.toJSONSchema(RequestInterpretationSchema);
 delete interpretationSchema.$schema;
 
 export const declarations: ToolDeclaration[] = [
-  { name: 'inspect_design', description: '現在の設計・固定条件・実検査結果を読み取る。', parametersJsonSchema: noArgs },
+  { name: 'inspect_design', description: '現在の設計・固定条件・実検査結果を読み取る。初期入力にも同じ要約があり、変更前の再読取は不要。', parametersJsonSchema: noArgs },
   { name: 'propose_request_interpretation', description: '依頼を方向・禁止方向・絶対距離・増減量・維持・未指定に分けて提案する。単位換算と基準版からの計算はサーバーが行う。未解釈の重要条件はunresolvedへ残す。固定解除や本人の承認を指定する権限はない。確実な初期解釈に訂正が不要なら省略できる。', parametersJsonSchema: interpretationSchema },
   { name: 'propose_design_patch', description: '利用者の希望と保護条件の中で候補を生成し、決定的に検査する。空オブジェクトは解釈済み希望の初期候補を作る。返されたfailを読んで修正する。選択・画像・固定条件は変更できない。', parametersJsonSchema: {
     type: 'object', properties: { direction, travelMm: number, widthMm: number, heightMm: number, maxSheets: { type: 'integer' }, paperThicknessMm: number, clearanceMm: number }, additionalProperties: false,
   } },
-  { name: 'validate_design', description: '最新候補の全検査を再計算する。unknownをpassにしない。', parametersJsonSchema: noArgs },
-  { name: 'arrange_pages', description: '最新候補の全機構部品をA4紙面へ決定的に配置する。縮小しない。', parametersJsonSchema: noArgs },
+  { name: 'validate_design', description: '最新候補の全検査を再計算する。候補作成結果にも全検査があるため同じ版の再検査は不要。unknownをpassにしない。', parametersJsonSchema: noArgs },
+  { name: 'arrange_pages', description: '最新候補の全機構部品をA4紙面へ決定的に配置する。候補作成結果にも配置結果があり同じ版の再配置は不要。縮小しない。', parametersJsonSchema: noArgs },
   { name: 'propose_constraint_change', description: '解釈済みの希望と直近の変更内容へ、条件1つを変える仮案を加えて共通コアで検査する。候補をまだ生成していない場合も希望値を省かない。寸法・紙面のfailがある案は表示せず、失敗理由を返す。同じ値は変更案にならない。検査を通っても固定解除・希望の変更・採用は許可されず、実物未確認。実際の条件や設計は変更しない。', parametersJsonSchema: {
     type: 'object', properties: { key: { type: 'string', enum: ['travelMm', 'direction', 'widthMm', 'heightMm', 'maxSheets', 'paperThicknessMm', 'clearanceMm'] }, value: { anyOf: [number, direction] }, reason: { type: 'string' } }, required: ['key', 'value', 'reason'], additionalProperties: false,
   } },
