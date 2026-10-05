@@ -10,6 +10,7 @@ import { GeminiProvider, VertexProvider, type ModelProvider } from './provider.j
 import { OllamaProvider } from './ollama.js';
 import { publicRun, RunManager } from './runs.js';
 import { SessionStore, secretMatches } from './sessions.js';
+import { verifyTrialPermit } from './trial-permit.js';
 
 export type App = FastifyInstance & { sessions: SessionStore; runs: RunManager };
 export type AppOptions = { config?: ServerConfig; provider?: ModelProvider; staticRoot?: string; logger?: boolean };
@@ -89,7 +90,11 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
   });
   app.post('/api/sessions/:id/runs', async (request, reply) => {
     const current = session(request); access(request);
-    return reply.code(202).send({ run: publicRun(runs.start(current, request.body)) });
+    const input = request.body as Record<string, unknown> | null;
+    const permit = config.vertex.trialPermitsRequired ? verifyTrialPermit(request.headers['x-ai-trial-permit'], config.accessSecret, {
+      sessionId: current.id, requestId: input?.requestId, baseRevision: input?.baseRevision, baseHash: input?.baseHash, sourceSha: config.vertex.trialSourceSha!,
+    }) : undefined;
+    return reply.code(202).send({ run: publicRun(runs.start(current, request.body, permit)) });
   });
   app.get('/api/sessions/:id/runs/:runId', async request => {
     const current = session(request);
@@ -97,7 +102,9 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
   });
   app.delete('/api/sessions/:id/runs/:runId', async request => {
     const current = session(request);
-    return { run: publicRun(runs.cancel(runs.get(current, Params.parse(request.params).runId!))) };
+    const run = runs.cancel(runs.get(current, Params.parse(request.params).runId!));
+    await run.done; // Acknowledge after the loop closes; remote billing cancellation is not implied.
+    return { run: publicRun(run) };
   });
   app.post('/api/sessions/:id/proposals/:proposalId/approve', async request => {
     const current = session(request);

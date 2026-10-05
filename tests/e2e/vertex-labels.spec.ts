@@ -53,8 +53,8 @@ class VertexHttpFixture {
       if (path.includes('/runs/') && method === 'DELETE') {
         this.cancelHeaders = await request.allHeaders();
         expect(request.postData()).toBeNull();
-        this.run = { ...this.run!, status: 'cancelled', proposal: undefined };
-        return json({ run: this.run });
+        this.run = { ...this.run!, status: 'cancelled', proposal: undefined, dispatchClosed: true, cancellation: {requestedAt: '2026-10-05T00:00:00.000Z', previousStatus: this.run!.status, dispatchClosedBeforeCancel: false, abortSignalAborted: true, toolCallsAtRequest: this.run!.toolCalls} };
+        return json({ run: {...this.run, cancellation: {...this.run.cancellation, authorization: 'fixture-private-field-must-not-be-exported'}} });
       }
       throw new Error(`Unexpected fixture API path: ${method} ${path}`);
     });
@@ -132,11 +132,14 @@ test('Vertex mock cancellation retains the source and the bodyless DELETE fix', 
   expect(fixture.cancelHeaders!['x-ai-access']).toBe('vertex-fixture-access-not-a-real-secret');
   await expect(page.locator('main')).toHaveAttribute('data-design-hash', beforeHash!);
   await expect(page.locator('main')).toHaveAttribute('data-design-revision', beforeRevision!);
-  await expect(page.getByText('中断しました。届いた結果は反映しません。編集内容と実行記録は残っています。', { exact: true })).toBeVisible();
+  await expect(page.getByRole('status').filter({hasText: 'サーバーが中断要求を確認しました。別の依頼を実行できます。'})).toBeVisible();
   const exported = await record(page, info.outputPath('vertex-http-fixture-cancel.json'));
   expect(exported.records[0]!.execution.mode).toBe('injected-test');
   expect(exported.records[0]!.execution.provider).toBe('vertex');
   expect(exported.records[0]!.decision.status).toBe('cancelled');
   expect(exported.records[0]!.serverRun.status).toBe('cancelled');
+  expect(exported.records[0]!.serverRun.dispatchClosed).toBe(true);
+  expect(exported.records[0]!.serverRun.cancellation).toEqual(fixture.run!.cancellation);
+  expect(JSON.stringify(exported)).not.toContain('fixture-private-field-must-not-be-exported');
   expect(fixture.starts).toBe(1);
 });

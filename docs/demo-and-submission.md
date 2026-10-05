@@ -1,8 +1,18 @@
 # デモ構成と提出準備
 
-## Goal009の追加素材（公開候補・未デプロイ）
+## Goal010開始時点の提出状態
 
-Cloud Run東京のWeb/API 1 vCPU / 1 GiB＋Vertex AI `gemini-3.8-flash` / `global` / ADCの比較案を準備しました。実装・模擬試験までで、この構成の実認証・実推論・デプロイ・公開は未実施です。[構成比較と次の試験計画](vertex-comparison-009.md)と[Goal009](goals/009-vertex-comparison.md)を参照してください。
+公開版候補はCloud Run東京のWeb/API＋Vertex AI、ローカル開発はWSLのOllama＋Gemmaです。前回の[非公開Vertex試験](vertex-trial-009.md)では1依頼の候補生成・検査・採用・同版PDF・保存再開を確認し、試験サービスは削除しました。UI送信から候補応答までの**6.305秒はその1件の観測値**で、一定速度やGemmaとの同条件の速度倍率を示しません。
+
+非公開の `artifacts/submission/private/vertex-trial-20261005/submission-preview/` に実画面7枚、採用第2版のPDFと、20秒の静止画スライドを保存しました。スライドは実時間の録画でも、約3分のデモ完成版でもありません。既存の約3分MP4・4画像はWSLの実録として保全し、Cloud成功の映像へ付け替えません。
+
+[Goal010](goals/010-metering-and-final-trial.md)では使用量と予約の扱いを見直し、実要求の中断→同じブラウザで別依頼・採用→不成立条件の3ケースを確認する計画です。**この3ケースの実Vertex結果はまだありません。** 計画や模擬試験を実測として提出しません。
+
+審査に使える継続公開URL・操作用アカウント、YouTube動画URL、実物の印刷・組立・動作確認、最終提出は未完了です。削除済みのIAM限定試験URLを提出欄へ転記しません。一般公開や投稿は今回の非公開試験の承認に含まれません。
+
+## Goal009開始時の追加素材（当時の公開候補・未デプロイ）
+
+Goal009開始時にはCloud Run東京のWeb/API 1 vCPU / 1 GiB＋Vertex AI `gemini-3.8-flash` / `global` / ADCの比較案を準備し、実装・模擬試験までを記録しました。以下のdraftはその時点の素材で、後日の実試験結果を反映した図ではありません。[構成比較と次の試験計画](vertex-comparison-009.md)と[Goal009](goals/009-vertex-comparison.md)を参照してください。
 
 非公開の`artifacts/submission/private/goal009/`に、各800字以内の`vertex-introduction-draft.txt`・`vertex-architecture-draft.txt`と、`vertex-comparison-draft.svg`・PNGを保存しました。図には「公開候補・未デプロイ」と記し、現在のWSL Gemma実績と今後のVertex構成を分けています。画像本体をモデルへ送らないこと、ブラウザのIndexedDB、決定的コアの検査と本人採用、同版PDFの共通経路を示しています。
 
@@ -30,7 +40,7 @@ Cloud Run東京のWeb/API 1 vCPU / 1 GiB＋Vertex AI `gemini-3.8-flash` / `globa
 
 Google Cloud の指定実行プロダクトと指定AI技術をそれぞれ1つ以上利用する条件がある。このリポジトリのコンテナ準備・アダプター実装だけで大会条件を達成したとは扱わない。Zenn記事は任意と掲載されている。審査はデフォルトブランチが対象で、提出時点の状態とデプロイを12月1日まで維持する旨も確認した。
 
-現在のGoal008では、検証済みソースのmain統合・push・通常CIは許可されています。2026-10-05 JSTには別途許可された非公開Cloud限定試験と削除を実施しました。一般公開・継続運用・YouTube投稿・Zenn提出は未実施で、それぞれの具体的な許可が必要です。2026-10-04の本人確認ではZenn未提出です。提出後はmain・公開リビジョン・素材を12月1日まで保持し、以後の開発は別ブランチに分けます。
+Goal008以降、検証済みソースのmain統合・push・通常CIを進めています。2026-10-05 JSTには別途許可された非公開Cloud限定試験と削除を実施しました。一般公開・継続運用・YouTube投稿・Zenn提出は未実施で、それぞれの具体的な許可が必要です。2026-10-04の本人確認ではZenn未提出です。提出後はmain・公開リビジョン・素材を12月1日まで保持し、以後の開発は別ブランチに分けます。
 
 ## Goal008の提出ファイルと未完了項目
 
@@ -54,4 +64,4 @@ Google Cloud の指定実行プロダクトと指定AI技術をそれぞれ1つ�
 
 課金計画と本人の認証・対象・限定試験の許可は非公開資料に記録しました。[Cloud限定試験](cloud-trial-008.md)では初回AIが180秒で時間切れ、同一依頼のキャッシュ温状態では78.5秒で第14版を採用し、同版PDFまで確認しました。中断のHTTP400は `dcedf93` で修正してローカル6ケースが成功しましたが、Cloud再試験はしていません。Cloudの試験版は `04138ab` であり、修正版の実績へ付け替えません。試験サービスは削除済み、概算約US$1.39には未測定予備US$1.20を含み、請求額は未取得です。約3.34 GiBのソースは7日soft deleteの残存があります。
 
-既存MP4と4枚の画像はWSLで収録した実演素材であり、今回のCloud実行映像ではありません。Cloud成功の説明へ動画を読み替えず、公開構成draftのまま扱います。公開URL・初回AI・修正後の中断・審査者相当のアクセス・YouTube URLが揃っていないため、`DEPLOYED_REVIEWABLE`／`READY_TO_SUBMIT`にはしません。
+既存MP4と4枚の画像はWSLで収録した実演素材であり、今回のCloud実行映像ではありません。Cloud成功の説明へ動画を読み替えず、公開構成draftのまま扱います。初回Vertex AIは1件を確認しましたが、継続公開URL・修正後の実中断と復帰・審査者相当のアクセス・YouTube URLが揃っていないため、`DEPLOYED_REVIEWABLE`／`READY_TO_SUBMIT`にはしません。

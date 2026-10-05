@@ -2,8 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { z } from 'zod';
 import { applyIntentPatch, assertRequestBinding, distanceTargetMm, InterpretationCorrectionSchema, interpretDesignRequest, interpretModelRequest, parseDesignDocument, validateDesign, type DesignDocument, type DesignPatch, type DesignIntent, type LockKey, type CheckResult, type InterpretationCorrection, type RequestInterpretation } from '@ugoku/core';
-import type { ConversationMessage, ToolResult, LocalTiming, LocalModel, ModelCost } from './conversation.js';
-import { vertexUsageCostUsd, vertexUsageDiagnostics, type VertexUsageDiagnostics } from './vertex-budget.js';
+import type { ConversationMessage, ToolResult, LocalTiming, LocalModel, ModelCost, ModelObservation } from './conversation.js';
+import { vertexUsageDiagnostics, type VertexUsageDiagnostics } from './vertex-budget.js';
 import { OllamaProvider } from './ollama.js';
 import type { ServerConfig } from './config.js';
 import { AppError, publicError } from './errors.js';
@@ -11,6 +11,7 @@ import { assertModelInput, GeminiProvider, VertexProvider, type ModelProvider, t
 import type { Session } from './sessions.js';
 import { modelInitialInput, modelToolResult } from './model-input.js';
 import { executeTool, type ConstraintSuggestion, type ToolContext } from './tools.js';
+import type { TrialPermit } from './trial-permit.js';
 
 const Correction = z.object({ runId: z.string().uuid(), requestId: z.string().min(8).max(100), changes: InterpretationCorrectionSchema }).strict();
 const Request = z.object({ requestId: z.string().min(8).max(100).regex(/^[a-zA-Z0-9_-]+$/), prompt: z.string().min(1).max(2000).refine(value => value.trim().length > 0), baseRevision: z.number().int().positive(), baseHash: z.string().min(8).max(128), correction: Correction.optional() }).strict();
@@ -23,7 +24,7 @@ function interpretationView(intent: DesignIntent): PublicInterpretation {
 type Event = { sequence: number; type: 'model' | 'tool' | 'validation'; tool?: string; message: string; designHash?: string; patch?: DesignPatch; checkStatuses?: { id: string; status: string }[]; durationMs: number };
 export type Proposal = { id: string; requestId: string; baseRevision: number; baseHash: string; patch: DesignPatch; document: DesignDocument; addedLocks: LockKey[]; protectedConditions: string[]; requestedTravelMm?: number; fulfillsRequested: boolean };
 export type TokenUsage = { promptTokens: number; outputTokens: number; thinkingTokens: number; cachedInputTokens: number; toolPromptTokens: number; totalTokens: number };
-export type ModelUsage = { call: number; inputBytes: number; outputTokenLimit: number; durationMs: number; received: boolean; finishReason: string | null; modelVersion: string | null; usage: TokenUsage | null; usageComplete?: boolean; usageDiagnostics?: VertexUsageDiagnostics; modelCost?: ModelCost; localTiming?: LocalTiming; localModel?: LocalModel };
+export type ModelUsage = { call: number; inputBytes: number; outputTokenLimit: number; durationMs: number; received: boolean; finishReason: string | null; modelVersion: string | null; usage: TokenUsage | null; usageComplete?: boolean; usageDiagnostics?: VertexUsageDiagnostics; modelCost?: ModelCost; localTiming?: LocalTiming; localModel?: LocalModel; attemptId?: string; dispatch?: { attemptId: string; startedAt: string; transport: 'vertex-http'; sdkRetryAttempts: 1 }; observations?: ModelObservation[] };
 function tokenUsage(usage: ProviderResponse['usageMetadata']): TokenUsage | null {
   if (!usage) return null;
   const count = (value: number | undefined) => Number.isSafeInteger(value) && value! >= 0 ? value! : 0;
@@ -40,6 +41,9 @@ export type Run = {
   constraintSuggestions: ConstraintSuggestion[]; error?: { code: string; message: string };
   modelCalls: number; toolCalls: number; elapsedMs: number; usage: TokenUsage & { responsesWithUsage: number; responsesWithoutUsage: number };
   controller: AbortController; done?: Promise<void>;
+  dispatchClosed?: boolean; dispatchClosedAt?: string;
+  cancellation?: { requestedAt: string; previousStatus: RunState; dispatchClosedBeforeCancel: boolean; abortSignalAborted: boolean; toolCallsAtRequest: number };
+  trialDispatch?: { permitId: string; callIds: string[]; sourceSha: string; sessionId: string; sdkRetryAttempts: 1 };
 };
 
 export function publicRun(run: Run) {
@@ -95,11 +99,13 @@ export class RunManager {
   // run. Only the projected view crosses the provider boundary; neither history
   // is added to publicRun. Weak keys follow existing session expiry/cap limits.
   private histories = new WeakMap<Run, ConversationMessage[]>();
+  private permits = new WeakMap<Run, TrialPermit>();
   constructor(private config: ServerConfig, private provider?: ModelProvider) {}
 
-  start(session: Session, body: unknown): Run {
+  start(session: Session, body: unknown, permit?: TrialPermit): Run {
     if (!this.config.aiEnabled || !this.provider) throw new AppError('ai_disabled', 'AI未接続です。手動で設計できます。', 503);
     const input = Request.parse(body);
+    if (this.config.vertex.trialPermitsRequired && (!permit || permit.sessionId !== session.id || permit.requestId !== input.requestId || permit.baseHash !== input.baseHash || permit.baseRevision !== input.baseRevision)) throw new AppError('trial_permit_required', '試験の送信枠を確認できません。', 403);
     const fingerprint = createHash('sha256').update(JSON.stringify(input)).digest('hex');
     const duplicate = [...session.runs.values()].find(run => run.requestId === input.requestId);
     if (duplicate) {
@@ -136,6 +142,11 @@ export class RunManager {
     for (const older of session.runs.values()) if (older.status === 'awaiting_approval') this.cancel(older);
     const run: Run = { id: randomUUID(), requestId: input.requestId, baseRevision: input.baseRevision, baseHash: input.baseHash, fingerprint, model: this.config.model, provider: this.config.provider, mode: this.provider instanceof VertexProvider ? 'vertex' : this.provider instanceof GeminiProvider ? 'gemini' : this.provider instanceof OllamaProvider ? 'ollama' : 'injected-test', modelUsage: [], prompt: input.prompt, authorCorrection, interpretationProposal: structuredClone(previous?.interpretationProposal ?? intent.interpretation), requestInterpretation: interpretationView(intent), intent: structuredClone(intent), intentSummary: { protections: protectionLabels(session.document, intent), notes: [...intent.notes] }, status: 'running', message: '現在の設計と、守る条件を確認しています。', events: [], validationIssues: [], constraintSuggestions: [], modelCalls: 0, toolCalls: 0, elapsedMs: 0, usage: { promptTokens: 0, outputTokens: 0, thinkingTokens: 0, cachedInputTokens: 0, toolPromptTokens: 0, totalTokens: 0, responsesWithUsage: 0, responsesWithoutUsage: 0 }, controller: new AbortController() };
     session.runs.set(run.id, run);
+    if (this.config.provider === 'vertex') run.dispatchClosed = false;
+    if (permit) {
+      this.permits.set(run, structuredClone(permit));
+      run.trialDispatch = { permitId: permit.permitId, callIds: [...permit.callIds], sourceSha: permit.sourceSha, sessionId: permit.sessionId, sdkRetryAttempts: 1 };
+    }
     this.starts.push(now); this.active++;
     run.done = this.execute(session, run, input.prompt).finally(() => { this.active--; });
     return run;
@@ -149,9 +160,11 @@ export class RunManager {
 
   cancel(run: Run): Run {
     if (run.status === 'running' || run.status === 'awaiting_approval' || run.status === 'clarification_required') {
+      const previousStatus = run.status, dispatchClosedBeforeCancel = run.dispatchClosed === true;
       run.status = 'cancelled'; run.proposal = undefined;
       run.message = (run.mode === 'gemini' || run.mode === 'vertex') ? '中断しました。送信済みのAPI呼び出しの課金取消しは保証されません。' : '中断しました。後続の検査・候補適用を停止しました。送信済みの推論が停止したとは限りません。';
       run.controller.abort(new AppError('cancelled', '利用者が中断しました。'));
+      run.cancellation ??= { requestedAt: new Date().toISOString(), previousStatus, dispatchClosedBeforeCancel, abortSignalAborted: run.controller.signal.aborted, toolCallsAtRequest: run.toolCalls };
     }
     return run;
   }
@@ -188,6 +201,8 @@ export class RunManager {
     const start = performance.now();
     const timer = setTimeout(() => run.controller.abort(new AppError('timeout', '実行時間の上限に達しました。設計は変更されていません。')), this.config.runTimeoutMs);
     const signal = run.controller.signal;
+    const permit = this.permits.get(run), authorizedAttempts = new Set<string>();
+    const callLimit = Math.min(this.config.maxModelCalls, permit?.callIds.length ?? this.config.maxModelCalls);
     const base = structuredClone(parseDesignDocument(session.document));
     const context: ToolContext = { prompt, correction: run.authorCorrection, interpretationProposal: run.interpretationProposal, base, candidate: base, patch: structuredClone(run.intent.patch), intent: run.intent, seenHashes: new Set([base.designHash]), seenInterpretationDesigns: new Set(), constraintSuggestions: run.constraintSuggestions };
     const history: ConversationMessage[] = [{ role: 'user', text: JSON.stringify({ request: prompt, design: base, requestIntent: run.intent, ...(run.authorCorrection ? { authorCorrection: run.authorCorrection } : {}), sentData: '画像本体は送信していません。選択領域・寸法と検査結果です。' }) }];
@@ -228,23 +243,66 @@ export class RunManager {
       } else { run.status = 'succeeded'; run.message = `設計の変更はありません。\n${text}`; }
     };
     try {
-      while (run.modelCalls < this.config.maxModelCalls) {
+      while (run.modelCalls < callLimit) {
         signal.throwIfAborted(); assertCurrent(session, run.baseRevision, run.baseHash);
         const inputBytes = assertModelInput(this.config, modelHistory, this.provider);
         run.modelCalls++;
         const modelStart = performance.now();
         const meter: ModelUsage = { call: run.modelCalls, inputBytes, outputTokenLimit: this.config.maxOutputTokens, durationMs: 0, received: false, finishReason: null, modelVersion: null, usage: null };
         run.modelUsage.push(meter); run.usage.responsesWithoutUsage++;
+        const attemptId = permit?.callIds[run.modelCalls - 1] ?? randomUUID();
+        if (run.provider === 'vertex') { meter.attemptId = attemptId; meter.observations = []; }
+        const callContext = run.provider === 'vertex' ? {
+          attemptId, call: meter.call,
+          beforeDispatch: () => {
+            signal.throwIfAborted();
+            if (run.dispatchClosed || authorizedAttempts.has(attemptId)) throw new AppError('trial_dispatch_closed', 'このモデル送信枠は終了しています。');
+            if (permit) {
+              if (Date.now() >= permit.expiresAt) throw new AppError('trial_permit_expired', '試験の送信枠が期限に達しました。作品は保持しています。');
+              // The outer durable grant and these calls are the SAME funds.
+              // Never add the whole grant to its own per-call consumption.
+              const previous = run.modelUsage.filter(item => item.dispatch).reduce((sum, item) => {
+                const costs = item.observations?.map(value => value.modelCost) ?? [];
+                const seen = new Map<string, number>();
+                const consistent = (item.observations ?? []).every(value => Object.entries(value.usageDiagnostics.observed).every(([key, n]) => {
+                  if (seen.has(key) && seen.get(key) !== n) return false;
+                  seen.set(key, n); return true;
+                }));
+                const known = consistent && costs.length > 0 && costs.every(value => value.estimateUsd !== null && value.kind !== 'sent-unknown');
+                return sum + (known ? Math.max(...costs.map(value => Math.ceil(value.estimateUsd! * 1e9))) : permit.callReserveNanoUsd);
+              }, 0);
+              if (!permit.callIds.includes(attemptId) || permit.priorCommittedNanoUsd + previous + permit.callReserveNanoUsd > permit.poolNanoUsd) throw new AppError('model_budget_limit', '次のモデル送信が試験の費用管理枠に収まらないため停止しました。作品は保持しています。');
+            }
+            authorizedAttempts.add(attemptId);
+          },
+          onDispatch: (dispatch: { attemptId: string; call: number; dispatchedAt: string }) => {
+            signal.throwIfAborted();
+            if (dispatch.attemptId !== attemptId || dispatch.call !== meter.call || run.dispatchClosed) throw new AppError('trial_dispatch_closed', 'モデル送信の記録が一致しません。');
+            meter.dispatch = { attemptId, startedAt: dispatch.dispatchedAt, transport: 'vertex-http', sdkRetryAttempts: 1 };
+          },
+          onObservation: (observation: ModelObservation) => {
+            if (observation.attemptId !== attemptId || observation.call !== meter.call || !meter.dispatch) throw new AppError('invalid_usage_observation', '使用量の記録が送信と一致しません。');
+            // Observations survive abortable() rejection and failed conversion.
+            // They cannot create tools, proposals or another model request.
+            meter.observations!.push(structuredClone(observation));
+            meter.usageDiagnostics = observation.usageDiagnostics;
+            meter.modelCost = observation.modelCost;
+            meter.finishReason = observation.finishReason;
+            meter.modelVersion = observation.modelVersion;
+          },
+        } : undefined;
         let response: ProviderResponse;
-        try { response = await abortable(this.provider!.generate(modelHistory, signal), signal); }
+        try { response = await abortable(this.provider!.generate(modelHistory, signal, callContext), signal); }
         finally { meter.durationMs = performance.now() - modelStart; }
         meter.received = true;
         meter.finishReason = response.finishReason ?? null;
         meter.localTiming = response.localTiming; meter.localModel = response.localModel;
         meter.modelVersion = response.modelVersion?.slice(0, 128) ?? null;
         if (run.provider === 'vertex') {
-          meter.usageComplete = vertexUsageCostUsd(response.usageMetadata) !== null;
           meter.usageDiagnostics = vertexUsageDiagnostics(response.usageMetadata);
+          // Display completeness is separate from the modelCost estimate.
+          // Optional missing cache/tool fields are never displayed as observed zero.
+          meter.usageComplete = Object.values(meter.usageDiagnostics.fields).every(field => field.state === 'value' || field.state === 'zero');
         }
         meter.usage = meter.usageComplete === false ? null : tokenUsage(response.usageMetadata);
         meter.modelCost = response.modelCost;
@@ -329,6 +387,9 @@ export class RunManager {
         run.error = publicError(signal.aborted ? signal.reason : error);
         run.status = 'failed'; run.message = run.error.message;
       }
-    } finally { clearTimeout(timer); run.elapsedMs = performance.now() - start; }
+    } finally {
+      clearTimeout(timer); run.elapsedMs = performance.now() - start;
+      if (run.provider === 'vertex') { run.dispatchClosed = true; run.dispatchClosedAt = new Date().toISOString(); }
+    }
   }
 }

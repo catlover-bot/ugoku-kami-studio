@@ -26,6 +26,8 @@ class AiFixture {
   holdStart = false;
   holdPoll = false;
   holdApproval = false;
+  holdCancel = false;
+  pendingCancel?: Held;
   pendingStart?: Held;
   pendingPoll?: Held;
   pendingApproval?: { route: Route; document: DesignDocument };
@@ -61,7 +63,9 @@ class AiFixture {
       }
       if (path.includes('/runs/') && method === 'DELETE') {
         this.cancels++;
-        return json({ run: { ...this.currentRun, status: 'cancelled', proposal: undefined } });
+        const run = {...this.currentRun!, status: 'cancelled' as const, proposal: undefined};
+        if (this.holdCancel) {this.pendingCancel = {route, run}; return;}
+        return json({run});
       }
       if (path.endsWith('/approve')) {
         this.approvals.push(route.request().postDataJSON() as Omit<RequestBody, 'prompt'>);
@@ -270,6 +274,36 @@ test.describe('AI panel — test-only HTTP fixtures, no live Gemini', () => {
     expect(fixture.sessions).toBe(2);
     await expect(page.getByRole('heading', { name: '変更案 · 採用待ち' })).toBeVisible();
     await expect(page.getByLabel('動く距離（mm）', {exact:true})).toHaveValue('18');
+  });
+
+  test('cancel confirmation blocks a new request while manual edits remain usable', async ({ page }, info) => {
+    const fixture = new AiFixture(); fixture.mode = 'running'; fixture.holdCancel = true;
+    await open(page, fixture); await openRequest(page);
+    await page.getByRole('button', {name: 'AIで案をつくる', exact: true}).click();
+    await expect(page.getByRole('button', {name: '中断する', exact: true})).toBeVisible();
+    await page.getByRole('button', {name: '中断する', exact: true}).click();
+    await expect.poll(() => Boolean(fixture.pendingCancel)).toBe(true);
+    await expect(page.getByRole('status').filter({hasText: '中断を要求しています。'})).toBeVisible();
+    await openRequest(page);
+    await expect(page.getByRole('button', {name: '中断要求を確認中…', exact: true})).toBeDisabled();
+    await page.screenshot({path: info.outputPath('cancel-pending.png')});
+    await editCurrentSettings(page);
+    const distance = page.getByLabel('動く距離（mm）', {exact: true});
+    await distance.fill('18'); await distance.press('Enter');
+    await expect(distance).toHaveValue('18');
+    expect(fixture.requests).toHaveLength(1);
+    await fixture.release(fixture.pendingCancel!, 'cancelled');
+    await openRequest(page);
+    await expect(page.getByRole('button', {name: 'AIで案をつくる', exact: true})).toBeEnabled();
+    fixture.mode = 'proposal';
+    await page.getByLabel('どう動かしたいですか？', {exact: true}).fill('動く距離を15mmにしてください');
+    await page.getByRole('button', {name: 'AIで案をつくる', exact: true}).click();
+    await expect(page.getByRole('heading', {name: 'AIの変更案 · 採用待ち', exact: true})).toBeVisible();
+    await expect(distance).toHaveValue('18');
+    expect(fixture.requests).toHaveLength(2);
+    expect(fixture.requests[1]!.baseHash).toBe(fixture.document!.designHash);
+    await page.screenshot({path: info.outputPath('cancel-recovered.png')});
+    expect(fixture.cancels).toBe(1);
   });
 
   test('cancel dismisses a running request and ignores a late poll result', async ({ page }) => {
