@@ -12,6 +12,7 @@ import type { Session } from './sessions.js';
 import { modelInitialInput, modelToolResult } from './model-input.js';
 import { executeTool, type ConstraintSuggestion, type ToolContext } from './tools.js';
 import type { TrialPermit } from './trial-permit.js';
+import { PublicLedger, publicLedgerHash, type PublicGrant } from './public-ledger.js';
 
 const Correction = z.object({ runId: z.string().uuid(), requestId: z.string().min(8).max(100), changes: InterpretationCorrectionSchema }).strict();
 const Request = z.object({ requestId: z.string().min(8).max(100).regex(/^[a-zA-Z0-9_-]+$/), prompt: z.string().min(1).max(2000).refine(value => value.trim().length > 0), baseRevision: z.number().int().positive(), baseHash: z.string().min(8).max(128), correction: Correction.optional() }).strict();
@@ -43,13 +44,14 @@ export type Run = {
   modelCalls: number; toolCalls: number; elapsedMs: number; usage: TokenUsage & { responsesWithUsage: number; responsesWithoutUsage: number };
   controller: AbortController; done?: Promise<void>;
   dispatchClosed?: boolean; dispatchClosedAt?: string;
+  accountingPending?: boolean;
   cancellation?: { requestedAt: string; previousStatus: RunState; dispatchClosedBeforeCancel: boolean; abortSignalAborted: boolean; toolCallsAtRequest: number };
   trialDispatch?: { permitId: string; callIds: string[]; sourceSha: string; sessionId: string; sdkRetryAttempts: 1 };
 };
 
 export function publicRun(run: Run) {
-  const { controller: _controller, done: _done, fingerprint: _fingerprint, intent: _intent, prompt: _prompt, authorCorrection: _authorCorrection, interpretationProposal: _interpretationProposal, ...result } = run;
-  return structuredClone(result);
+  const { controller: _controller, done: _done, fingerprint: _fingerprint, intent: _intent, prompt: _prompt, authorCorrection: _authorCorrection, interpretationProposal: _interpretationProposal, accountingPending: _accountingPending, ...result } = run;
+  return structuredClone(run.accountingPending && run.status !== 'running' ? { ...result, status: 'running' as const, message: '結果を確認しています。', proposal: undefined } : result);
 }
 
 function protectionLabels(base: DesignDocument, intent: DesignIntent): string[] {
@@ -101,10 +103,27 @@ export class RunManager {
   // is added to publicRun. Weak keys follow existing session expiry/cap limits.
   private histories = new WeakMap<Run, ConversationMessage[]>();
   private permits = new WeakMap<Run, TrialPermit>();
-  constructor(private config: ServerConfig, private provider?: ModelProvider) {}
+  private publicGrants = new WeakMap<Run, PublicGrant>();
+  constructor(private config: ServerConfig, private provider?: ModelProvider, private ledger?: PublicLedger) {}
 
-  start(session: Session, body: unknown, permit?: TrialPermit): Run {
+  async startPublic(session: Session, body: unknown): Promise<Run> {
+    if (!this.config.publicRelease || !this.ledger) throw new AppError('ledger_unavailable', 'AIの利用状況を確認できません。手動で続けられます。', 503);
+    const input = Request.parse(body), fingerprint = publicLedgerHash(JSON.stringify(input));
+    const duplicate = [...session.runs.values()].find(run => run.requestId === input.requestId);
+    if (duplicate) {
+      if (duplicate.fingerprint !== fingerprint) throw new AppError('request_conflict', '同じリクエストIDを別の依頼には使えません。', 409);
+      return duplicate;
+    }
+    assertCurrent(session, input.baseRevision, input.baseHash);
+    const durableFingerprint = publicLedgerHash(JSON.stringify({ designId: session.document.designId, prompt: input.prompt, baseRevision: input.baseRevision, baseHash: input.baseHash, correction: input.correction?.changes }));
+    const grant = await this.ledger.reserve({ requestId: input.requestId, fingerprint: durableFingerprint, bindingHash: publicLedgerHash(JSON.stringify({ sessionId: session.id, baseHash: input.baseHash, baseRevision: input.baseRevision })), phase: this.config.publicRelease.phase });
+    try { return this.start(session, input, undefined, grant); }
+    catch (error) { await this.ledger.close(grant, { verified: true }); throw error; }
+  }
+
+  start(session: Session, body: unknown, permit?: TrialPermit, grant?: PublicGrant): Run {
     if (!this.config.aiEnabled || !this.provider) throw new AppError('ai_disabled', 'AI未接続です。手動で設計できます。', 503);
+    if (this.config.publicRelease && (!grant || !this.ledger || permit)) throw new AppError('public_grant_required', 'AIの利用枠を確認できません。', 403);
     const input = Request.parse(body);
     if (this.config.vertex.trialPermitsRequired && (!permit || permit.sessionId !== session.id || permit.requestId !== input.requestId || permit.baseHash !== input.baseHash || permit.baseRevision !== input.baseRevision)) throw new AppError('trial_permit_required', '試験の送信枠を確認できません。', 403);
     const fingerprint = createHash('sha256').update(JSON.stringify(input)).digest('hex');
@@ -159,8 +178,18 @@ export class RunManager {
       this.permits.set(run, structuredClone(permit));
       run.trialDispatch = { permitId: permit.permitId, callIds: [...permit.callIds], sourceSha: permit.sourceSha, sessionId: permit.sessionId, sdkRetryAttempts: 1 };
     }
+    if (grant) { this.publicGrants.set(run, grant); run.accountingPending = true; }
     this.starts.push(now); this.active++;
-    run.done = this.execute(session, run, input.prompt).finally(() => { this.active--; });
+    run.done = this.execute(session, run, input.prompt).then(async () => {
+      if (grant) {
+        try { await this.ledger!.close(grant, { verified: true }); }
+        catch {
+          run.proposal = undefined;
+          if (run.status !== 'cancelled') { run.status = 'failed'; run.error = { code: 'ledger_unavailable', message: 'AIの利用記録を確定できませんでした。作品を保ったまま手動で続けられます。' }; run.message = run.error.message; }
+        }
+        finally { run.accountingPending = false; }
+      }
+    }).finally(() => { this.active--; });
     return run;
   }
 
@@ -184,7 +213,7 @@ export class RunManager {
   approve(session: Session, proposalId: string, body: unknown) {
     const input = Approval.parse(body);
     const run = [...session.runs.values()].find(item => item.proposal?.id === proposalId);
-    if (!run?.proposal || run.status !== 'awaiting_approval') throw new AppError('stale_approval', 'この提案の承認は無効です。', 409);
+    if (!run?.proposal || run.status !== 'awaiting_approval' || run.accountingPending) throw new AppError('stale_approval', 'この提案の承認は無効です。', 409);
     const proposal = run.proposal;
     if (input.requestId !== proposal.requestId || input.baseRevision !== proposal.baseRevision || input.baseHash !== proposal.baseHash) throw new AppError('stale_approval', '承認した提案と元の設計が一致しません。', 409);
     assertCurrent(session, input.baseRevision, input.baseHash);
@@ -214,6 +243,7 @@ export class RunManager {
     const timer = setTimeout(() => run.controller.abort(new AppError('timeout', '実行時間の上限に達しました。設計は変更されていません。')), this.config.runTimeoutMs);
     const signal = run.controller.signal;
     const permit = this.permits.get(run), authorizedAttempts = new Set<string>();
+    const grant = this.publicGrants.get(run);
     const callLimit = Math.min(this.config.maxModelCalls, permit?.callIds.length ?? this.config.maxModelCalls);
     const base = structuredClone(parseDesignDocument(session.document));
     const context: ToolContext = { prompt, correction: run.authorCorrection, interpretationProposal: run.interpretationProposal, base, candidate: base, patch: structuredClone(run.intent.patch), intent: run.intent, seenHashes: new Set([base.designHash]), seenInterpretationDesigns: new Set(), constraintSuggestions: run.constraintSuggestions };
@@ -290,11 +320,11 @@ export class RunManager {
         const modelStart = performance.now();
         const meter: ModelUsage = { call: run.modelCalls, inputBytes, outputTokenLimit: this.config.maxOutputTokens, durationMs: 0, received: false, finishReason: null, modelVersion: null, usage: null };
         run.modelUsage.push(meter); run.usage.responsesWithoutUsage++;
-        const attemptId = permit?.callIds[run.modelCalls - 1] ?? randomUUID();
+        const attemptId = grant?.callIds[run.modelCalls - 1] ?? permit?.callIds[run.modelCalls - 1] ?? randomUUID();
         if (run.provider === 'vertex') { meter.attemptId = attemptId; meter.observations = []; }
         const callContext = run.provider === 'vertex' ? {
           attemptId, call: meter.call,
-          beforeDispatch: () => {
+          beforeDispatch: async () => {
             signal.throwIfAborted();
             if (run.dispatchClosed || authorizedAttempts.has(attemptId)) throw new AppError('trial_dispatch_closed', 'このモデル送信枠は終了しています。');
             if (permit) {
@@ -313,14 +343,19 @@ export class RunManager {
               }, 0);
               if (!permit.callIds.includes(attemptId) || permit.priorCommittedNanoUsd + previous + permit.callReserveNanoUsd > permit.poolNanoUsd) throw new AppError('model_budget_limit', '次のモデル送信が試験の費用管理枠に収まらないため停止しました。作品は保持しています。');
             }
+            if (grant) {
+              await this.ledger!.beforeDispatch(grant, { call: meter.call, attemptId });
+              signal.throwIfAborted();
+              if (Date.now() >= Date.parse(grant.expiresAt) || run.dispatchClosed) throw new AppError('stale_public_grant', 'このAI実行の利用枠は終了しています。', 409);
+            }
             authorizedAttempts.add(attemptId);
           },
           onDispatch: (dispatch: { attemptId: string; call: number; dispatchedAt: string }) => {
             signal.throwIfAborted();
-            if (dispatch.attemptId !== attemptId || dispatch.call !== meter.call || run.dispatchClosed) throw new AppError('trial_dispatch_closed', 'モデル送信の記録が一致しません。');
+            if (dispatch.attemptId !== attemptId || dispatch.call !== meter.call || run.dispatchClosed || !authorizedAttempts.has(attemptId) || grant && Date.now() >= Date.parse(grant.expiresAt)) throw new AppError('trial_dispatch_closed', 'モデル送信の記録が一致しません。');
             meter.dispatch = { attemptId, startedAt: dispatch.dispatchedAt, transport: 'vertex-http', sdkRetryAttempts: 1 };
           },
-          onObservation: (observation: ModelObservation) => {
+          onObservation: async (observation: ModelObservation) => {
             if (observation.attemptId !== attemptId || observation.call !== meter.call || !meter.dispatch) throw new AppError('invalid_usage_observation', '使用量の記録が送信と一致しません。');
             // Observations survive abortable() rejection and failed conversion.
             // They cannot create tools, proposals or another model request.
@@ -329,6 +364,7 @@ export class RunManager {
             meter.modelCost = observation.modelCost;
             meter.finishReason = observation.finishReason;
             meter.modelVersion = observation.modelVersion;
+            if (grant) await this.ledger!.observe(grant, observation);
           },
         } : undefined;
         let response: ProviderResponse;

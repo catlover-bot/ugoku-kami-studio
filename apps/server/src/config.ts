@@ -29,6 +29,7 @@ export type ServerConfig = {
   aiEnabled: boolean;
   ollama: { baseUrl: string; model: string; digest: string; contextLength: number; toolMode: 'native' | 'json-actions' };
   vertex: { project: string; location: 'global'; model: string; endpoint: string; apiVersion: 'v1'; modelBudgetUsd?: number; trialPermitsRequired?: boolean; trialSourceSha?: string };
+  publicRelease?: { bucket: string; object: string; phase: 'pre-release' | 'public'; deadline: string };
   apiKey: string;
   accessSecret: string;
   model: string;
@@ -72,6 +73,10 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   if (vertex && env.VERTEX_MODEL !== VERTEX_MODEL) throw new Error('VERTEX_MODEL must explicitly be gemini-3.8-flash');
   const modelBudget = vertex && env.VERTEX_MODEL_BUDGET_USD ? Number(env.VERTEX_MODEL_BUDGET_USD) : undefined;
   const trialPermitsRequired = vertex && env.VERTEX_TRIAL_PERMITS_REQUIRED === 'true';
+  const publicRelease = env.AI_PUBLIC_RELEASE === 'true';
+  if (env.AI_PUBLIC_RELEASE && !['true', 'false'].includes(env.AI_PUBLIC_RELEASE)) throw Error('AI_PUBLIC_RELEASE must be true or false');
+  if (publicRelease && (!vertex || trialPermitsRequired || modelBudget !== 85)) throw Error('Public release requires Vertex, its separate 85 USD budget, and no trial permits');
+  if (publicRelease && (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(env.AI_LEDGER_BUCKET ?? '') || env.AI_LEDGER_OBJECT !== 'public-release-011/ledger.json' || !['pre-release', 'public'].includes(env.AI_RELEASE_PHASE ?? ''))) throw Error('Public release requires an explicit private ledger and release phase');
   if (vertex && env.VERTEX_TRIAL_PERMITS_REQUIRED && !['true', 'false'].includes(env.VERTEX_TRIAL_PERMITS_REQUIRED)) throw Error('VERTEX_TRIAL_PERMITS_REQUIRED must be true or false');
   if (trialPermitsRequired && (!/^[a-f0-9]{40}$/.test(env.VERTEX_TRIAL_SOURCE_SHA ?? '') || modelBudget !== 3.9)) throw Error('Trial permits require exact source SHA and model budget3.9');
   if (modelBudget !== undefined && (!/^\d+(?:\.\d{1,6})?$/.test(env.VERTEX_MODEL_BUDGET_USD!) || !Number.isFinite(modelBudget) || modelBudget <= 0 || modelBudget > 100)) throw new Error('VERTEX_MODEL_BUDGET_USD must be a positive amount up to 100 with at most 6 decimal places');
@@ -84,6 +89,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const config: ServerConfig = {
     provider: provider as ServerConfig['provider'],
     aiEnabled: provider !== 'none',
+    ...(publicRelease ? { publicRelease: { bucket: env.AI_LEDGER_BUCKET!, object: env.AI_LEDGER_OBJECT!, phase: env.AI_RELEASE_PHASE as 'pre-release' | 'public', deadline: '2026-12-01T14:59:00.000Z' } } : {}),
     vertex: { project: vertexProject, location: 'global', model: VERTEX_MODEL, endpoint: VERTEX_ENDPOINT, apiVersion: 'v1', ...(modelBudget !== undefined ? { modelBudgetUsd: modelBudget } : {}), ...(trialPermitsRequired ? { trialPermitsRequired: true, trialSourceSha: env.VERTEX_TRIAL_SOURCE_SHA } : {}) },
     ollama: { baseUrl: localUrl, model: localModel, digest: local ? env.OLLAMA_MODEL_DIGEST?.replace(/^sha256:/, '') || '' : '', contextLength: integer(env.OLLAMA_CONTEXT_LENGTH, 8192, 2048, 32768, 'OLLAMA_CONTEXT_LENGTH'), toolMode: toolMode as 'native' | 'json-actions' },
     apiKey: provider === 'gemini' ? env.GEMINI_API_KEY?.trim() || '' : '',
@@ -105,6 +111,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   if (config.aiEnabled && (config.accessSecret.trim().length < 32 || provider === 'gemini' && !config.apiKey)) {
     throw new Error('Selected AI_PROVIDER requires AI_ACCESS_SECRET of at least 32 characters; gemini also requires GEMINI_API_KEY');
   }
+  if (publicRelease && (config.maxModelCalls !== 6 || config.maxToolCalls !== 4 || config.maxInputBytes !== 32768 || config.maxOutputTokens !== 2048 || config.runTimeoutMs !== 90000 || config.maxConcurrentRuns !== 1 || config.runsPerMinute !== 2 || config.runsPerHour !== 4)) throw Error('Public release limits must match the authorized 6 models / 4 tools / 90 seconds / 32768 input bytes / 2048 output tokens / 1 concurrent / 2 starts per minute / 4 per hour');
   return config;
 }
 
@@ -117,6 +124,7 @@ export function publicStatus(config: ServerConfig) {
       reason: config.aiEnabled ? (config.provider === 'ollama' ? 'ローカルAI設定済み（実通信は実行時のみ）' : config.provider === 'vertex' ? 'Vertex AI設定済み（認証・接続は未確認）' : 'AI接続設定済み（実通信は実行時のみ）') : 'AI未接続 — 手動で設計できます',
       model: config.aiEnabled ? config.model : null,
       sendsImage: false,
+      ...(config.publicRelease ? { accessCodeRequired: true } : {}),
       endpoint: config.provider === 'ollama' ? config.ollama.baseUrl : config.provider === 'gemini' ? GEMINI_ENDPOINT : config.provider === 'vertex' ? VERTEX_ENDPOINT : null,
       ...(config.provider === 'vertex' ? { location: config.vertex.location, apiVersion: config.vertex.apiVersion, authentication: 'ADC', connectionStatus: 'not-tested' } : {}),
       ...(config.provider === 'ollama' ? { contextLength: config.ollama.contextLength, toolMode: config.ollama.toolMode } : {}),
