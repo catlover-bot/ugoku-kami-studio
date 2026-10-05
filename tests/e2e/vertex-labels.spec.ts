@@ -132,7 +132,7 @@ test('Vertex mock cancellation retains the source and the bodyless DELETE fix', 
   expect(fixture.cancelHeaders!['x-ai-access']).toBe('vertex-fixture-access-not-a-real-secret');
   await expect(page.locator('main')).toHaveAttribute('data-design-hash', beforeHash!);
   await expect(page.locator('main')).toHaveAttribute('data-design-revision', beforeRevision!);
-  await expect(page.getByText('中断しました。届いた結果は反映しません。編集内容と実行記録は残っています。', { exact: true })).toBeVisible();
+  await expect(page.getByRole('status').filter({hasText: 'サーバーが中断要求を確認しました。別の依頼を実行できます。'})).toBeVisible();
   const exported = await record(page, info.outputPath('vertex-http-fixture-cancel.json'));
   expect(exported.records[0]!.execution.mode).toBe('injected-test');
   expect(exported.records[0]!.execution.provider).toBe('vertex');
