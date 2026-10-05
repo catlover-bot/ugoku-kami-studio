@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { loadServerEnv, readConfig, DEFAULT_MODEL, GEMINI_ENDPOINT } from '../apps/server/src/config.ts';
+import { loadServerEnv, readConfig, DEFAULT_MODEL, GEMINI_ENDPOINT, VERTEX_MODEL } from '../apps/server/src/config.ts';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const major = Number(process.versions.node.split('.')[0]);
@@ -33,14 +33,17 @@ const report = {
   apiKeyConfigured: Boolean(process.env.GEMINI_API_KEY?.trim()),
   accessSecretConfigured: Boolean(process.env.AI_ACCESS_SECRET),
   model: config?.model ?? null,
-  modelSource: config?.provider === 'ollama' ? 'explicit-local' : process.env.GEMINI_MODEL ? 'explicit' : 'default',
-  documentedModel: DEFAULT_MODEL,
-  documentedModelCheckedAt: '2026-10-04',
-  connection: config?.provider === 'ollama' ? { provider: 'Ollama loopback', endpoint: config.ollama.baseUrl, runtimeStatus: 'not-tested', cloudDisabledStatus: 'not-tested', contextLength: config.ollama.contextLength, toolMode: config.ollama.toolMode, digestPinned: Boolean(config.ollama.digest) } : { provider: config?.provider === 'gemini' ? 'Gemini Developer API' : 'none', endpoint: config?.provider === 'gemini' ? GEMINI_ENDPOINT : null, sdk: '@google/genai', apiVersion: 'v1beta', authentication: 'server-side GEMINI_API_KEY; explicit app AI_ACCESS_SECRET', remoteStatus: 'not-tested' },
+  modelSource: config?.provider === 'ollama' ? 'explicit-local' : config?.provider === 'vertex' ? 'explicit-vertex' : process.env.GEMINI_MODEL ? 'explicit' : 'default',
+  documentedModel: config?.provider === 'vertex' ? VERTEX_MODEL : DEFAULT_MODEL,
+  documentedModelCheckedAt: '2026-10-05',
+  connection: config?.provider === 'ollama' ? { provider: 'Ollama loopback', endpoint: config.ollama.baseUrl, runtimeStatus: 'not-tested', cloudDisabledStatus: 'not-tested', contextLength: config.ollama.contextLength, toolMode: config.ollama.toolMode, digestPinned: Boolean(config.ollama.digest) } : config?.provider === 'vertex' ? { provider: 'Vertex AI', endpoint: config.vertex.endpoint, location: config.vertex.location, projectConfigured: Boolean(config.vertex.project), sdk: '@google/genai', apiVersion: 'v1', authentication: 'ADC: local user or attached service account; explicit app AI_ACCESS_SECRET', adcStatus: 'not-tested', remoteStatus: 'not-tested' } : { provider: config?.provider === 'gemini' ? 'Gemini Developer API' : 'none', endpoint: config?.provider === 'gemini' ? GEMINI_ENDPOINT : null, sdk: '@google/genai', apiVersion: 'v1beta', authentication: 'server-side GEMINI_API_KEY; explicit app AI_ACCESS_SECRET', remoteStatus: 'not-tested' },
   limits: config ? { modelCalls: config.maxModelCalls, toolCalls: config.maxToolCalls, timeoutMs: config.runTimeoutMs, inputBytesPerCall: config.maxInputBytes, outputTokensPerCall: config.maxOutputTokens, concurrentRuns: config.maxConcurrentRuns, runsPerMinute: config.runsPerMinute, runsPerHour: config.runsPerHour, retries: 0 } : null,
   ignoredSdkEnvironmentPresent: ['GOOGLE_API_KEY', 'GOOGLE_GENAI_USE_VERTEXAI', 'GOOGLE_GENAI_USE_ENTERPRISE', 'GOOGLE_GEMINI_BASE_URL', 'GOOGLE_VERTEX_BASE_URL'].some(key => Boolean(process.env[key])),
   configurationValid, configurationIssue,
   readyForExplicitLiveAuthorization: Boolean(config?.provider === 'gemini' && config.aiEnabled && process.env.GEMINI_MODEL),
+  vertexConfigurationReady: Boolean(config?.provider === 'vertex' && config.aiEnabled),
+  // Syntactic readiness is not authentication, quota, credit or execution permission.
+  vertexAuthenticationVerified: false,
   readyForExplicitLocalRun: Boolean(config?.provider === 'ollama' && config.aiEnabled),
   networkRequests: 0, paidApiCalls: 0,
 };

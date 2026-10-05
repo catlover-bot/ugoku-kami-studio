@@ -36,9 +36,12 @@ describe('official SDK adapter contract (network mocked)', () => {
     await expect(provider.generate(contents, new AbortController().signal)).rejects.toThrow('入力上限');
     expect(sdk.generate).not.toHaveBeenCalled();
     const initial: ConversationMessage[] = [{ role: 'user', text: 'inspect' }];
+    // Fit the full system/tool payload before testing growth from signed history.
+    config.maxInputBytes = provider.inputBytes(initial) + 128;
     sdk.generate.mockResolvedValueOnce({ candidates: [{ content: { role: 'model', parts: [{ functionCall: { name: 'inspect_design', args: {} }, thoughtSignature: 's'.repeat(9000) }] } }] });
     const result = await provider.generate(initial, new AbortController().signal);
-    expect(sdk.generate).toHaveBeenCalledWith(expect.objectContaining({ config: expect.objectContaining({ maxOutputTokens: 512, candidateCount: 1 }) }));
+    expect(sdk.generate).toHaveBeenCalledWith(expect.objectContaining({ config: expect.objectContaining({ maxOutputTokens: 512, thinkingConfig: { thinkingLevel: 'LOW' } }) }));
+    expect((sdk.generate.mock.calls[0] as unknown as [{ config: object }])[0].config).not.toHaveProperty('candidateCount');
     await expect(provider.generate([...initial, result.message], new AbortController().signal)).rejects.toMatchObject({ code: 'input_limit' });
     expect(sdk.generate).toHaveBeenCalledTimes(1);
   });

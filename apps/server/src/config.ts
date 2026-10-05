@@ -4,6 +4,9 @@ import { parseEnv } from 'node:util';
 
 export const DEFAULT_MODEL = 'gemini-3.8-flash';
 export const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com';
+// Goal009 compares this one GA model/location; never infer a Cloud project.
+export const VERTEX_MODEL = 'gemini-3.8-flash';
+export const VERTEX_ENDPOINT = 'https://aiplatform.googleapis.com';
 
 /** Shared bootstrap for server, doctor and live command. Never contacts Google. */
 export function loadServerEnv({ env = process.env, cwd = process.cwd() }: { env?: NodeJS.ProcessEnv; cwd?: string } = {}) {
@@ -21,10 +24,11 @@ export function loadServerEnv({ env = process.env, cwd = process.cwd() }: { env?
 }
 
 export type ServerConfig = {
-  provider: 'none' | 'ollama' | 'gemini';
+  provider: 'none' | 'ollama' | 'gemini' | 'vertex';
   /** Derived from provider; never an independent enabling flag. */
   aiEnabled: boolean;
   ollama: { baseUrl: string; model: string; digest: string; contextLength: number; toolMode: 'native' | 'json-actions' };
+  vertex: { project: string; location: 'global'; model: string; endpoint: string; apiVersion: 'v1' };
   apiKey: string;
   accessSecret: string;
   model: string;
@@ -60,7 +64,12 @@ export function validateOllamaModel(value: string): string {
 }
 export function readConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const provider = env.AI_PROVIDER?.trim() || 'none';
-  if (!['none', 'ollama', 'gemini'].includes(provider)) throw new Error('AI_PROVIDER must be none, ollama or gemini');
+  if (!['none', 'ollama', 'gemini', 'vertex'].includes(provider)) throw new Error('AI_PROVIDER must be none, ollama, gemini or vertex');
+  const vertex = provider === 'vertex';
+  const vertexProject = vertex ? env.VERTEX_PROJECT?.trim() || '' : '';
+  if (vertex && !/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(vertexProject)) throw new Error('VERTEX_PROJECT requires an explicit valid project ID');
+  if (vertex && env.VERTEX_LOCATION !== 'global') throw new Error('VERTEX_LOCATION must explicitly be global');
+  if (vertex && env.VERTEX_MODEL !== VERTEX_MODEL) throw new Error('VERTEX_MODEL must explicitly be gemini-3.8-flash');
   const local = provider === 'ollama';
   const localModel = local ? validateOllamaModel(env.OLLAMA_MODEL || '') : '';
   const localUrl = local ? validateOllamaEndpoint(env.OLLAMA_BASE_URL || '') : '';
@@ -70,10 +79,11 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const config: ServerConfig = {
     provider: provider as ServerConfig['provider'],
     aiEnabled: provider !== 'none',
+    vertex: { project: vertexProject, location: 'global', model: VERTEX_MODEL, endpoint: VERTEX_ENDPOINT, apiVersion: 'v1' },
     ollama: { baseUrl: localUrl, model: localModel, digest: local ? env.OLLAMA_MODEL_DIGEST?.replace(/^sha256:/, '') || '' : '', contextLength: integer(env.OLLAMA_CONTEXT_LENGTH, 8192, 2048, 32768, 'OLLAMA_CONTEXT_LENGTH'), toolMode: toolMode as 'native' | 'json-actions' },
     apiKey: provider === 'gemini' ? env.GEMINI_API_KEY?.trim() || '' : '',
     accessSecret: env.AI_ACCESS_SECRET || '',
-    model: local ? localModel : env.GEMINI_MODEL || DEFAULT_MODEL,
+    model: local ? localModel : vertex ? VERTEX_MODEL : env.GEMINI_MODEL || DEFAULT_MODEL,
     maxModelCalls: integer(env.AI_MAX_MODEL_CALLS, 6, 1, 12, 'AI_MAX_MODEL_CALLS'),
     maxToolCalls: integer(env.AI_MAX_TOOL_CALLS, 12, 1, 24, 'AI_MAX_TOOL_CALLS'),
     maxInputBytes: integer(env.AI_MAX_INPUT_BYTES, 65_536, 8192, 262_144, 'AI_MAX_INPUT_BYTES'),
@@ -99,10 +109,11 @@ export function publicStatus(config: ServerConfig) {
       enabled: config.aiEnabled,
       provider: config.provider,
       mode: config.aiEnabled ? config.provider : 'manual',
-      reason: config.aiEnabled ? (config.provider === 'ollama' ? 'ローカルAI設定済み（実通信は実行時のみ）' : 'AI接続設定済み（実通信は実行時のみ）') : 'AI未接続 — 手動で設計できます',
+      reason: config.aiEnabled ? (config.provider === 'ollama' ? 'ローカルAI設定済み（実通信は実行時のみ）' : config.provider === 'vertex' ? 'Vertex AI設定済み（認証・接続は未確認）' : 'AI接続設定済み（実通信は実行時のみ）') : 'AI未接続 — 手動で設計できます',
       model: config.aiEnabled ? config.model : null,
       sendsImage: false,
-      endpoint: config.provider === 'ollama' ? config.ollama.baseUrl : config.provider === 'gemini' ? GEMINI_ENDPOINT : null,
+      endpoint: config.provider === 'ollama' ? config.ollama.baseUrl : config.provider === 'gemini' ? GEMINI_ENDPOINT : config.provider === 'vertex' ? VERTEX_ENDPOINT : null,
+      ...(config.provider === 'vertex' ? { location: config.vertex.location, apiVersion: config.vertex.apiVersion, authentication: 'ADC', connectionStatus: 'not-tested' } : {}),
       ...(config.provider === 'ollama' ? { contextLength: config.ollama.contextLength, toolMode: config.ollama.toolMode } : {}),
     },
     limits: { modelCalls: config.maxModelCalls, toolCalls: config.maxToolCalls, timeoutMs: config.runTimeoutMs, inputBytes: config.maxInputBytes, outputTokens: config.maxOutputTokens },

@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { readConfig, publicStatus, type ServerConfig } from './config.js';
 import { AppError } from './errors.js';
 import { validateImage } from './images.js';
-import { GeminiProvider, type ModelProvider } from './provider.js';
+import { GeminiProvider, VertexProvider, type ModelProvider } from './provider.js';
 import { OllamaProvider } from './ollama.js';
 import { publicRun, RunManager } from './runs.js';
 import { SessionStore, secretMatches } from './sessions.js';
@@ -21,7 +21,7 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
   const config = options.config ?? readConfig();
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 256 * 1024, requestTimeout: 15_000, trustProxy: false }) as unknown as App;
   const sessions = new SessionStore(config);
-  const runs = new RunManager(config, options.provider ?? (config.aiEnabled ? config.provider === 'ollama' ? new OllamaProvider(config) : config.provider === 'gemini' ? new GeminiProvider(config) : undefined : undefined));
+  const runs = new RunManager(config, options.provider ?? (config.aiEnabled ? config.provider === 'ollama' ? new OllamaProvider(config) : config.provider === 'gemini' ? new GeminiProvider(config) : config.provider === 'vertex' ? new VertexProvider(config) : undefined : undefined));
   app.decorate('sessions', sessions); app.decorate('runs', runs);
   let imageActive = 0;
   let imageStarts: number[] = [];
@@ -63,7 +63,7 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
   app.get('/health', async () => ({ status: 'ok' }));
   app.get('/api/status', async () => {
     const status = publicStatus(config);
-    if (options.provider && config.aiEnabled) status.ai = { ...status.ai, mode: 'injected-test', reason: 'テスト用の模擬通信です。実Geminiへは接続しません。' };
+    if (options.provider && config.aiEnabled) status.ai = { ...status.ai, mode: 'injected-test', reason: 'テスト用の模擬通信です。実AIへは接続しません。' };
     return status;
   });
   app.post('/api/images', { bodyLimit: 8 * 1024 * 1024 }, async request => {
