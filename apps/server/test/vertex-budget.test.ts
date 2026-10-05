@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GoogleAuth } from 'google-auth-library';
 import { createDesign, SAMPLE_INPUT } from '@ugoku/core';
-import { VertexBudget, vertexCallReserveUsd, vertexUsageCostUsd } from '../src/vertex-budget.js';
+import { VertexBudget, vertexCallReserveUsd, vertexUsageCostUsd, vertexUsageDiagnostics } from '../src/vertex-budget.js';
 import { VertexProvider } from '../src/provider.js';
 import { readConfig } from '../src/config.js';
 import { createApp, type App } from '../src/app.js';
@@ -40,6 +40,28 @@ describe('Vertex usage estimates and next-call reservations (no live requests)',
     expect(readConfig({ ...settings, VERTEX_MODEL_BUDGET_USD: '3.9' }).vertex.modelBudgetUsd).toBe(3.9);
     for (const value of ['-1', '0', '101', 'NaN', '1e3', '0.0000001']) expect(() => readConfig({ ...settings, VERTEX_MODEL_BUDGET_USD: value })).toThrow('VERTEX_MODEL_BUDGET_USD');
   });
+  it('retains partial numeric observations, distinguishes explicit zero from missing, and drops all nonnumeric/arbitrary metadata', () => {
+    const partial = { promptTokenCount: 100, candidatesTokenCount: 10, totalTokenCount: 110, thoughtsTokenCount: undefined, text: 'not public', promptTokensDetails: [{ text: 'not public' }] };
+    expect(vertexUsageDiagnostics(partial)).toEqual({ source: 'sdk-usage-metadata', metadataPresent: true, observed: { promptTokenCount: 100, candidatesTokenCount: 10, totalTokenCount: 110 }, missingRequired: ['thoughtsTokenCount'], invalidFields: [], inconsistencies: [] });
+    expect(vertexUsageCostUsd(partial)).toBeNull();
+    expect(vertexUsageDiagnostics({ ...partial, thoughtsTokenCount: 0 }).missingRequired).toEqual([]);
+    expect(vertexUsageCostUsd({ ...partial, thoughtsTokenCount: 0 })).toBe(0.000225);
+    expect(vertexUsageDiagnostics(undefined)).toMatchObject({ metadataPresent: false, observed: {}, missingRequired: ['promptTokenCount', 'candidatesTokenCount', 'thoughtsTokenCount', 'totalTokenCount'] });
+    expect(vertexUsageDiagnostics({ ...complete, candidatesTokenCount: -1, thoughtsTokenCount: Number.NaN })).toMatchObject({ observed: { promptTokenCount: 100, candidatesTokenCount: -1, totalTokenCount: 115 }, invalidFields: ['candidatesTokenCount', 'thoughtsTokenCount'] });
+    expect(vertexUsageDiagnostics({ ...complete, cachedContentTokenCount: 101, totalTokenCount: 110 }).inconsistencies).toEqual(['total_less_than_components', 'cached_input_exceeds_prompt']);
+    expect(vertexUsageDiagnostics({ ...complete, promptTokenCount: 0 }).inconsistencies).toEqual(['empty_prompt']);
+  });
+  it('the installed generateContent SDK preserves complete Vertex wire usage including explicit zero thoughts', async () => {
+    vi.spyOn(GoogleAuth.prototype, 'getRequestHeaders').mockResolvedValue(new Headers({ authorization: 'Bearer synthetic-test-only' }));
+    const wireUsage = { promptTokenCount: 100, candidatesTokenCount: 10, thoughtsTokenCount: 0, totalTokenCount: 110 };
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { role: 'model', parts: [{ text: 'Offline only' }] }, finishReason: 'STOP' }], usageMetadata: wireUsage }), { headers: { 'content-type': 'application/json' } })); vi.stubGlobal('fetch', fetch);
+    const provider = new VertexProvider(readConfig(settings));
+    const response = await provider.generate([{ role: 'user', text: 'Offline test' }], new AbortController().signal);
+    expect(response.usageMetadata).toEqual(wireUsage);
+    expect(response.modelCost).toMatchObject({ kind: 'usage-estimate', usageEstimateUsd: 0.000225 });
+    expect(provider.budgetStatus()).toMatchObject({ reservedUsd: 0, callsWithCompleteUsage: 1, callsWithUnknownUsage: 0 });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
   it('blocks SDK dispatch after an upstream failure while retaining the cost reservation', async () => {
     vi.spyOn(GoogleAuth.prototype, 'getRequestHeaders').mockResolvedValue(new Headers({ authorization: 'Bearer synthetic-test-only' }));
     const fetch = vi.fn(async () => new Response(JSON.stringify({ error: { code: 500, message: 'offline failure' } }), { status: 500, headers: { 'content-type': 'application/json' } })); vi.stubGlobal('fetch', fetch);
@@ -69,6 +91,8 @@ describe('Vertex usage estimates and next-call reservations (no live requests)',
     const session = app.sessions.authorize(created.sessionId, `Bearer ${created.token}`);
     const run = app.runs.start(session, { requestId: 'budget-incomplete-1', prompt: '距離を15mmにしてください', baseRevision: document.revision, baseHash: document.designHash }); await run.done;
     expect(run.modelUsage[0]).toMatchObject({ received: true, usageComplete: false, usage: null, modelCost: { kind: 'reservation', usageEstimateUsd: null, reservationUsd: 0.556032 } });
+    const publicResult = (await app.inject({ url: `/api/sessions/${created.sessionId}/runs/${run.id}`, headers: { authorization: `Bearer ${created.token}` } })).json();
+    expect(publicResult.run.modelUsage[0].usageDiagnostics).toEqual({ source: 'sdk-usage-metadata', metadataPresent: true, observed: { promptTokenCount: 100, candidatesTokenCount: 10, totalTokenCount: 110 }, missingRequired: ['thoughtsTokenCount'], invalidFields: [], inconsistencies: [] });
     expect(run.usage.responsesWithoutUsage).toBe(1); expect(run.usage.responsesWithUsage).toBe(0);
     const status = (await app.inject('/api/status')).json();
     expect(status.modelBudget).toMatchObject({ callsWithUnknownUsage: 1, reservedUsd: 0.556032, scope: 'this-provider-instance' });

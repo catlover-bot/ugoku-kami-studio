@@ -7,6 +7,34 @@ const INPUT_NANO = 1500, OUTPUT_NANO = 7500, NANO_PER_USD = 1_000_000_000;
 const THINKING_RESERVE = 65_536;
 const dollars = (nano: number) => nano / NANO_PER_USD;
 const count = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0 && (value as number) <= 10_000_000;
+const requiredFields = ['promptTokenCount', 'candidatesTokenCount', 'thoughtsTokenCount', 'totalTokenCount'] as const;
+const usageFields = [...requiredFields, 'cachedContentTokenCount', 'toolUsePromptTokenCount'] as const;
+type UsageField = typeof usageFields[number];
+export type VertexUsageDiagnostics = {
+  source: 'sdk-usage-metadata'; metadataPresent: boolean;
+  observed: Partial<Record<UsageField, number>>;
+  missingRequired: UsageField[]; invalidFields: UsageField[];
+  inconsistencies: ('empty_prompt' | 'total_less_than_components' | 'cached_input_exceeds_prompt')[];
+};
+
+/** Preserve only allowlisted numeric SDK observations, never response content or
+ * arbitrary metadata. Diagnostics do not make partial usage eligible to settle. */
+export function vertexUsageDiagnostics(usage: UsageMetadata | undefined): VertexUsageDiagnostics {
+  const present = typeof usage === 'object' && usage !== null && !Array.isArray(usage);
+  const result: VertexUsageDiagnostics = { source: 'sdk-usage-metadata', metadataPresent: present, observed: {}, missingRequired: [], invalidFields: [], inconsistencies: [] };
+  for (const field of usageFields) {
+    const value = present ? usage[field] : undefined;
+    if (typeof value === 'number' && Number.isFinite(value)) result.observed[field] = value;
+    if (value === undefined || value === null) {
+      if ((requiredFields as readonly string[]).includes(field)) result.missingRequired.push(field);
+    } else if (!count(value)) result.invalidFields.push(field);
+  }
+  const { promptTokenCount: input, candidatesTokenCount: output, thoughtsTokenCount: thinking, totalTokenCount: total, cachedContentTokenCount: cached } = result.observed;
+  if (input === 0) result.inconsistencies.push('empty_prompt');
+  if (count(input) && count(output) && count(thinking) && count(total) && total < input + output + thinking) result.inconsistencies.push('total_less_than_components');
+  if (count(input) && count(cached) && cached > input) result.inconsistencies.push('cached_input_exceeds_prompt');
+  return result;
+}
 
 /** Planning reserve, NOT a verified tokenizer or thinking-inclusive billing cap. */
 export function vertexCallReserveUsd(inputBytes: number, outputTokens: number): number {
