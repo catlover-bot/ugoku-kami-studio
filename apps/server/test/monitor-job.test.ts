@@ -1,7 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cloudApi, OBSERVATION_BUDGET_MS, runMonitor, STOP_STAGE_BUDGET_MS, type MonitorDependencies } from '../src/operations/monitor-job.js';
+import { cloudApi, monitorMode, OBSERVATION_BUDGET_MS, runMonitor, runMonitorPreflight, STOP_STAGE_BUDGET_MS, type MonitorDependencies } from '../src/operations/monitor-job.js';
 import { dailyNoticeKey, RELEASE_DEADLINE, type MonitorState } from '../src/operations/cost-monitor.js';
-import { LedgerStoreError, initialPublicLedger, publicLedgerSummary } from '../src/public-ledger.js';
+import { LedgerStoreError, PublicLedger, initialPublicLedger, publicLedgerHash, publicLedgerSummary } from '../src/public-ledger.js';
 
 const now = Date.parse('2026-10-06T03:00:00Z'), start = now - 12 * 3600000;
 function harness() {
@@ -243,5 +244,93 @@ describe('monitor Cloud HTTP adapter (in-memory responses, no cloud)', () => {
     const controller = new AbortController(), noFetch = vi.fn<typeof fetch>();
     await expect(cloudApi('DELETE', 'https://run.googleapis.com/owned', controller.signal, async () => {controller.abort(); return 'fixture';}, noFetch)).rejects.toThrow();
     expect(noFetch).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('explicit recovery preflight (in-memory production ledger, no Cloud)', () => {
+  async function recoveryHarness() {
+    const h = harness(), api = h.deps.api;
+    h.deps.api = (method, url, signal) => method === 'GET' && url.includes('/services/')
+      ? Promise.resolve({generation: '2', observedGeneration: '2', terminalCondition: {type: 'Ready', state: 'CONDITION_SUCCEEDED'}, latestReadyRevision: 'same-revision', latestCreatedRevision: 'same-revision'})
+      : api(method, url, signal);
+    let ledgerData = JSON.stringify(initialPublicLedger(start)), ledgerGeneration = 10;
+    const writes = vi.fn(async (generation: string, data: string) => {expect(generation).toBe(String(ledgerGeneration)); ledgerData = data; return String(++ledgerGeneration);});
+    const actual = new PublicLedger({read: async () => ({generation: String(ledgerGeneration), data: ledgerData}), compareAndSwap: writes}, () => now - 60_000);
+    const grant = await actual.reserve({requestId: randomUUID(), fingerprint: publicLedgerHash('fixture request'), bindingHash: publicLedgerHash('fixture base'), phase: 'pre-release'});
+    await actual.beforeDispatch(grant, {call: 1, attemptId: randomUUID()});
+    await actual.close(grant, {verified: true});
+    await actual.setStop({ai: true, whole: true});
+    writes.mockClear();
+    const setStop = vi.fn(async () => {throw Error('Preflight must not call setStop');});
+    h.deps.ledger = () => ({snapshot: () => actual.snapshot(), setStop});
+    let raw = JSON.stringify(h.state(), null, 2) + '\n', generation = '123';
+    h.stateStore.read.mockImplementation(async () => ({generation, data: raw}));
+    h.stateStore.compareAndSwap.mockImplementation(async (before, data) => {expect(before).toBe(generation); expect(data).toBe(raw); generation = '124'; return generation;});
+    return {...h, writes, setStop, originalRaw: raw, ledgerData: () => ledgerData, replaceLedger: (data: string) => {ledgerData = data;}, replaceRaw: (data: string) => {raw = data;}};
+  }
+  it('uses explicit CLI only; unknown or combined flags cannot fall back to normal mode', () => {
+    expect(monitorMode([])).toBe('normal'); expect(monitorMode(['--preflight'])).toBe('preflight');
+    for (const args of [['--prefligh'], ['--preflight', '--preflight'], ['--preflight', '--delete']]) expect(() => monitorMode(args)).toThrow();
+  });
+  it('reads actual cumulative ledger, executes shared metrics, and CASes identical monitor bytes without any ledger mutation', async () => {
+    const h = await recoveryHarness(), before = h.ledgerData();
+    h.cpu(360000); // Even an over-threshold estimate is only reported; this mode makes no stop decision.
+    await runMonitorPreflight(h.deps);
+    expect(h.stateStore.compareAndSwap).toHaveBeenCalledExactlyOnceWith('123', h.originalRaw);
+    expect(h.stateStore.read).toHaveBeenCalledTimes(2);
+    expect(h.ledgerData()).toBe(before); expect(h.writes).not.toHaveBeenCalled(); expect(h.setStop).not.toHaveBeenCalled();
+    expect(h.requests.every(r => r.method === 'GET')).toBe(true);
+    const metrics = h.requests.filter(r => r.url.includes('monitoring.')); expect(metrics).toHaveLength(4);
+    for (const r of metrics) {const u = new URL(r.url); expect(u.searchParams.get('interval.startTime')).toBe(h.state().startedAt); expect(u.searchParams.get('aggregation.perSeriesAligner')).toBe('ALIGN_SUM');}
+    expect(h.notices.at(-1)).toMatchObject({event: 'monitor-preflight', data: {requests: 1, sends: 1, modelUnknownHeldUsd: .556032, ledgerUnchanged: true, monitorBodyUnchanged: true, startedAt: h.state().startedAt, checkedAt: h.state().checkedAt, stopDecision: false, deletes: 0, ledgerWrites: 0}});
+    expect(h.notices.at(-1)?.data.infrastructure).toMatchObject({billingActual: false});
+  });
+  it('requires the restored service to exist, be Ready and have a fully observed matching revision', async () => {
+    for (const value of [{absent: true}, {terminalCondition: {type: 'Ready', state: 'CONDITION_PENDING'}}, {generation: '2', observedGeneration: '1', terminalCondition: {type: 'Ready', state: 'CONDITION_SUCCEEDED'}}]) {
+      const h = await recoveryHarness(); h.deps.api = vi.fn(async () => value);
+      await expect(runMonitorPreflight(h.deps)).rejects.toThrow();
+      expect(h.stateStore.compareAndSwap).not.toHaveBeenCalled(); expect(h.setStop).not.toHaveBeenCalled();
+      expect(h.notices).toContainEqual({event: 'monitor-diagnostic', data: {stage: 'preflight.service-ready', category: 'invalid-state'}});
+    }
+  });
+  it('rejects a corrupt or already-unlocked ledger without recreating it or spending its previous unknown reservation', async () => {
+    for (const change of ['corrupt', 'unlocked']) {
+      const h = await recoveryHarness(), state = JSON.parse(h.ledgerData());
+      if (change === 'corrupt') state.entries[0].calls[0].state = 'released'; else state.stop.whole = false;
+      h.replaceLedger(JSON.stringify(state)); const before = h.ledgerData();
+      await expect(runMonitorPreflight(h.deps)).rejects.toThrow();
+      expect(h.ledgerData()).toBe(before); expect(h.writes).not.toHaveBeenCalled(); expect(h.setStop).not.toHaveBeenCalled(); expect(h.stateStore.compareAndSwap).not.toHaveBeenCalled();
+    }
+  });
+  it('rejects invalid cumulative state without altering checkedAt/start/stop marker', async () => {
+    const h = await recoveryHarness(); h.replaceRaw(JSON.stringify({...h.state(), totals: {...h.state().totals, cpuSeconds: -1}, stoppedAt: new Date(now).toISOString(), stopReason: 'operator-stop'}));
+    await expect(runMonitorPreflight(h.deps)).rejects.toThrow();
+    expect(h.stateStore.compareAndSwap).not.toHaveBeenCalled(); expect(h.setStop).not.toHaveBeenCalled(); expect(h.requests).toEqual([]);
+  });
+  it('an actual-shaped Monitoring HTTP error fails safely, with no normal-monitor deletion fallback', async () => {
+    const h = await recoveryHarness(), api = h.deps.api;
+    h.deps.api = (method, url, signal) => url.includes('monitoring.') ? cloudApi(method, url, signal, async () => 'SECRET_TOKEN', async () => Response.json({error: {message: 'SECRET_BODY'}}, {status: 403})) : api(method, url, signal);
+    await expect(runMonitorPreflight(h.deps)).rejects.toThrow('403');
+    expect(h.notices).toContainEqual({event: 'monitor-diagnostic', data: {stage: 'observation.metrics.cpu', category: 'http', httpStatus: 403}});
+    expect(h.stateStore.compareAndSwap).not.toHaveBeenCalled(); expect(h.setStop).not.toHaveBeenCalled(); expect(h.deleted.size).toBe(0); expect(JSON.stringify(h.notices)).not.toContain('SECRET');
+  });
+  it('denied or uncertain same-body CAS is not retried and does not report preflight success', async () => {
+    for (const kind of ['unavailable', 'uncertain'] as const) {
+      const h = await recoveryHarness(); h.stateStore.compareAndSwap.mockRejectedValueOnce(new LedgerStoreError(kind));
+      await expect(runMonitorPreflight(h.deps)).rejects.toThrow();
+      expect(h.stateStore.compareAndSwap).toHaveBeenCalledTimes(1); expect(h.setStop).not.toHaveBeenCalled(); expect(h.writes).not.toHaveBeenCalled(); expect(h.deleted.size).toBe(0);
+      expect(h.notices).toContainEqual({event: 'monitor-diagnostic', data: {stage: 'preflight.state-identical-cas', category: kind}});
+      expect(h.notices.some(n => n.event === 'monitor-preflight')).toBe(false);
+    }
+  });
+  it('a changed readback cannot claim preservation and a hung read remains bounded at the original ten seconds', async () => {
+    const h = await recoveryHarness(); h.stateStore.compareAndSwap.mockImplementation(async () => {h.replaceRaw(h.originalRaw + ' '); return '123';});
+    await expect(runMonitorPreflight(h.deps)).rejects.toThrow('conflict');
+    expect(h.notices.some(n => n.event === 'monitor-preflight')).toBe(false); expect(h.setStop).not.toHaveBeenCalled();
+    vi.useFakeTimers(); const hung = await recoveryHarness(); hung.stateStore.read.mockImplementation(() => new Promise(() => {}));
+    const pending = expect(runMonitorPreflight(hung.deps)).rejects.toThrow('timeout');
+    await vi.advanceTimersByTimeAsync(OBSERVATION_BUDGET_MS); await pending;
+    expect(hung.deleted.size).toBe(0); expect(hung.setStop).not.toHaveBeenCalled(); expect(hung.stateStore.compareAndSwap).not.toHaveBeenCalled(); expect(vi.getTimerCount()).toBe(0);
   });
 });

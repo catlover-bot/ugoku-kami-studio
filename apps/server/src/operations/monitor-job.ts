@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { GcsLedgerStore, metadataAccessToken } from '../gcs-ledger-store.js';
 import { LedgerStoreError, PublicLedger, type PublicLedgerStore } from '../public-ledger.js';
@@ -104,6 +105,76 @@ async function stop(deps: MonitorDependencies, reason: string, owned: ReturnType
   deps.notice('release-cleanup', {serviceAbsent: true, repositoryAbsent: true, sourceAndSecretAbsent: true, schedulesAbsent: true, ledgerStopped, retained: 'private ledger and monitor objects, job definition, IAM, audit logs'});
 }
 
+/** Shared metric request path for normal monitoring and explicit recovery checks. */
+async function observeCost(deps: MonitorDependencies, signal: AbortSignal, state: MonitorState, time: number) {
+  const end = new Date(time - MONITOR_LAG_MS).toISOString();
+  const types = ['container/cpu/allocation_time', 'container/memory/allocation_time', 'container/network/sent_bytes_count', 'request_count'];
+  const values = Date.parse(end) > Date.parse(state.startedAt) ? await Promise.all(types.map((metric, index) => diagnostic(deps, `observation.metrics.${['cpu', 'memory', 'network', 'requests'][index]}`, () => metricSum(url => deps.api('GET', url, signal), {project: deps.project, region, service, metric, start: state.startedAt, end})))) : [0, 0, 0, 0];
+  const observed = {cpuSeconds: values[0]!, memoryGiBSeconds: values[1]!, sentBytes: values[2]!, requests: values[3]!};
+  return diagnostic(deps, 'observation.cost-estimate', async () => infrastructureEstimate(state, observed, time));
+}
+
+/** Explicit operator preflight: no stop decision, DELETE or ledger mutation.
+ * Only the existing monitor object is CAS-written with its exact original bytes.
+ * A denied/uncertain CAS or concurrent change is a failure, never an implicit retry.
+ */
+export async function runMonitorPreflight(deps: MonitorDependencies): Promise<void> {
+  const owned = targets(deps.project, deps.bucket), now = deps.now ?? Date.now;
+  try {
+    await bounded(OBSERVATION_BUDGET_MS, async signal => {
+      const time = now(), store = deps.stateStore(signal);
+      const version = await diagnostic(deps, 'observation.state-read', () => store.read());
+      const state = await diagnostic(deps, 'preflight.state-validation', async () => {
+        const value = JSON.parse(version.data) as MonitorState;
+        if (value.schema !== 'ugoku-public-monitor-011' || typeof value.lastDailyNotice !== 'string'
+          || !Number.isFinite(Date.parse(value.startedAt)) || !Number.isFinite(Date.parse(value.checkedAt))
+          || Date.parse(value.checkedAt) < Date.parse(value.startedAt) || Date.parse(value.checkedAt) > time
+          || (value.stoppedAt !== undefined || value.stopReason !== undefined)
+            && (!Number.isFinite(Date.parse(value.stoppedAt ?? '')) || typeof value.stopReason !== 'string' || !value.stopReason)) throw new MonitorFailure('invalid-state');
+        // The exact production validator checks fixed reserve and all cumulative totals.
+        infrastructureEstimate(value, value.totals, time);
+        return value;
+      });
+      const currentService = await diagnostic(deps, 'observation.service-read', () => deps.api('GET', owned.service, signal));
+      await diagnostic(deps, 'preflight.service-ready', async () => {
+        const condition = currentService.terminalCondition as {type?: string; state?: string} | undefined;
+        if (currentService.absent || currentService.reconciling === true || currentService.deleteTime !== undefined
+          || condition?.type !== 'Ready' || condition.state !== 'CONDITION_SUCCEEDED'
+          || typeof currentService.generation !== 'string' || currentService.generation !== currentService.observedGeneration
+          || typeof currentService.latestReadyRevision !== 'string' || !currentService.latestReadyRevision
+          || currentService.latestReadyRevision !== currentService.latestCreatedRevision) throw new MonitorFailure('invalid-state');
+      });
+      const ledger = deps.ledger(signal);
+      const before = await diagnostic(deps, 'observation.ledger-read', () => ledger.snapshot());
+      await diagnostic(deps, 'preflight.ledger-stopped', async () => {
+        if (!before.stop.ai || !before.stop.whole || before.active) throw new MonitorFailure('invalid-state');
+      });
+      const estimate = await observeCost(deps, signal, state, time);
+      signal.throwIfAborted();
+      const generation = await diagnostic(deps, 'preflight.state-identical-cas', () => store.compareAndSwap(version.generation, version.data));
+      signal.throwIfAborted();
+      await diagnostic(deps, 'preflight.preservation-proof', async () => {
+        const afterState = await store.read(), afterLedger = await ledger.snapshot();
+        if (afterState.generation !== generation || afterState.data !== version.data || before.generation !== afterLedger.generation) throw new MonitorFailure('conflict');
+      });
+      deps.notice('monitor-preflight', {serviceReady: true, ledgerStopped: true, monitorBodyUnchanged: true, ledgerUnchanged: true,
+        stateGeneration: generation, ledgerGeneration: before.generation, monitorBodySha256: createHash('sha256').update(version.data).digest('hex'),
+        startedAt: state.startedAt, checkedAt: state.checkedAt, modelCommittedUsd: before.committedNano / 1e9,
+        modelUnknownHeldUsd: before.sentUnknownNano / 1e9, requests: before.requests, sends: before.sends,
+        infrastructure: estimate, stopDecision: false, deletes: 0, ledgerWrites: 0, creditsDeducted: 0, billingActual: false});
+    });
+  } catch (error) {
+    deps.notice('monitor-diagnostic', {stage: 'preflight', ...failureDetails(error)});
+    throw error;
+  }
+}
+
+export function monitorMode(args: readonly string[]): 'normal' | 'preflight' {
+  if (args.length === 0) return 'normal';
+  if (args.length === 1 && args[0] === '--preflight') return 'preflight';
+  throw new MonitorFailure('invalid-state');
+}
+
 /** Only control-plane/Monitoring APIs and generation CAS; never wakes the app. */
 export async function runMonitor(deps: MonitorDependencies): Promise<void> {
   const owned = targets(deps.project, deps.bucket), now = deps.now ?? Date.now;
@@ -122,11 +193,8 @@ export async function runMonitor(deps: MonitorDependencies): Promise<void> {
       if ((await diagnostic(deps, 'observation.service-read', () => deps.api('GET', owned.service, signal))).absent) return 'service-absent';
       const ledgerState = await diagnostic(deps, 'observation.ledger-read', () => deps.ledger(signal).snapshot());
       if (ledgerState.stop.whole) return 'operator-stop';
-      const time = now(), end = new Date(time - MONITOR_LAG_MS).toISOString();
-      const types = ['container/cpu/allocation_time', 'container/memory/allocation_time', 'container/network/sent_bytes_count', 'request_count'];
-      const values = Date.parse(end) > Date.parse(state.startedAt) ? await Promise.all(types.map((metric, index) => diagnostic(deps, `observation.metrics.${['cpu', 'memory', 'network', 'requests'][index]}`, () => metricSum(url => deps.api('GET', url, signal), {project: deps.project, region, service, metric, start: state.startedAt, end})))) : [0, 0, 0, 0];
-      const observed = {cpuSeconds: values[0]!, memoryGiBSeconds: values[1]!, sentBytes: values[2]!, requests: values[3]!};
-      const estimate = infrastructureEstimate(state, observed, time), reason = stopReason(time, estimate.totalUsd, false), day = dailyNoticeKey(time);
+      const time = now(), estimate = await observeCost(deps, signal, state, time);
+      const reason = stopReason(time, estimate.totalUsd, false), day = dailyNoticeKey(time);
       const updated: MonitorState = {...state, checkedAt: new Date(time).toISOString(), totals: estimate.totals, lastDailyNotice: day, ...(reason ? {stoppedAt: new Date(time).toISOString(), stopReason: reason} : {})};
       await diagnostic(deps, 'observation.state-write', () => stateStore.compareAndSwap(version.generation, JSON.stringify(updated)));
       const report = {day, infrastructure: estimate, modelCommittedUsd: ledgerState.committedNano / 1e9, modelUnknownHeldUsd: ledgerState.sentUnknownNano / 1e9, requests: ledgerState.requests, sends: ledgerState.sends, modelBudgetUsd: 85, infraStopUsd: 8, grossLimitUsd: 100, creditsDeducted: 0, billingActual: false};
@@ -162,12 +230,19 @@ export async function cloudApi(method: 'GET' | 'DELETE', address: string, signal
   const text = Buffer.concat(chunks).toString('utf8'); return text ? JSON.parse(text) : {};
 }
 function notice(event: string, data: Record<string, unknown>) {
-  process.stdout.write(JSON.stringify({severity: ['release-stopped', 'monitor-failed', 'ledger-stop-unconfirmed', 'monitor-diagnostic'].includes(event) ? 'ERROR' : event === 'budget-warning' ? 'WARNING' : 'NOTICE', component: 'ugoku-public-monitor-011', event, ...data}) + '\n');
+  process.stdout.write(JSON.stringify({severity: ['release-stopped', 'monitor-failed', 'ledger-stop-unconfirmed', 'monitor-diagnostic', 'monitor-preflight-failed'].includes(event) ? 'ERROR' : event === 'budget-warning' ? 'WARNING' : 'NOTICE', component: 'ugoku-public-monitor-011', event, ...data}) + '\n');
 }
 async function main() {
-  const project = process.env.MONITOR_PROJECT ?? '', bucket = process.env.MONITOR_BUCKET ?? '';
-  const store = (object: string, signal: AbortSignal) => new GcsLedgerStore({bucket, object, fetch: (url, init) => {signal.throwIfAborted(); return fetch(url, {...init, signal: init?.signal ? AbortSignal.any([signal, init.signal]) : signal});}});
-  try {await runMonitor({project, bucket, stateStore: signal => store('public-release-011/monitor.json', signal), ledger: signal => new PublicLedger(store('public-release-011/ledger.json', signal)), api: cloudApi, notice});}
-  catch {notice('monitor-failed', {reason: 'Monitor execution did not finish; operator action required'}); process.exitCode = 1;}
+  let mode: ReturnType<typeof monitorMode> | undefined;
+  try {
+    mode = monitorMode(process.argv.slice(2));
+    const project = process.env.MONITOR_PROJECT ?? '', bucket = process.env.MONITOR_BUCKET ?? '';
+    const store = (object: string, signal: AbortSignal) => new GcsLedgerStore({bucket, object, fetch: (url, init) => {signal.throwIfAborted(); return fetch(url, {...init, signal: init?.signal ? AbortSignal.any([signal, init.signal]) : signal});}});
+    const deps: MonitorDependencies = {project, bucket, stateStore: signal => store('public-release-011/monitor.json', signal), ledger: signal => new PublicLedger(store('public-release-011/ledger.json', signal)), api: cloudApi, notice};
+    if (mode === 'preflight') await runMonitorPreflight(deps); else await runMonitor(deps);
+  } catch (error) {
+    notice(mode === 'preflight' ? 'monitor-preflight-failed' : 'monitor-failed', {stage: mode ? 'entrypoint' : 'arguments', ...failureDetails(error), reason: mode === 'preflight' ? 'Preflight failed; no stop decision or ledger stop change was performed' : 'Monitor execution did not finish; operator action required'});
+    process.exitCode = 1;
+  }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) await main();
