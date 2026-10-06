@@ -1,0 +1,614 @@
+{
+  "schemaVersion": 1,
+  "status": "rendered-awaiting-full-review",
+  "language": "ja",
+  "contentPolicy": {
+    "newModelCalls": 0,
+    "newCloudChanges": 0,
+    "productChanges": 0,
+    "historicalFilesModified": false,
+    "youtubePosted": false,
+    "zennSubmitted": false,
+    "physicalValidation": "unverified"
+  },
+  "imageCopy": [
+    {
+      "id": "01-select",
+      "title": "自分の絵から、動く紙工作へ。",
+      "body": "",
+      "sourceLabel": "手動操作の画面",
+      "visualFocus": "魚と選択枠を大きく見せる。入力パネルの全文を読ませない。",
+      "evidenceKind": "historical-local-manual-screenshot",
+      "file": "images/01-from-your-art.png",
+      "footer": "実画面 / 自分の絵を四角で選ぶ",
+      "note": "",
+      "sourceFile": "public/goal011/images/01-selection-local.png"
+    },
+    {
+      "id": "02-compare",
+      "title": "あと5mm。紙は増やさない。",
+      "body": "",
+      "sourceLabel": "実Vertex AIの記録・2026年10月5日",
+      "visualFocus": "25mmと30mmの同縮尺比較、差分表、採用ボタン。",
+      "evidenceKind": "historical-real-vertex",
+      "sourceFile": "public/goal011/images/02-candidate-vertex.png",
+      "file": "images/02-five-more-millimeters.png",
+      "footer": "実画面 / 25mmから30mmへ・型紙1枚のまま",
+      "note": ""
+    },
+    {
+      "id": "03-alternative",
+      "title": "AIが提案。コードが検査。作者が選ぶ。",
+      "body": "希望と違う案も、比べてから。",
+      "sourceLabel": "公開版の実画面・別作品・2026年10月5日",
+      "visualFocus": "希望70mmと代案35mmを短く分ける。35mmを希望達成や最大値と呼ばない。",
+      "evidenceKind": "actual-public-vertex-still",
+      "sourceFile": "public/goal011/images/04-public-alternative-vertex.png",
+      "file": "images/03-compare-and-choose.png",
+      "footer": "実画面 / 希望70mm・代案35mm",
+      "note": ""
+    },
+    {
+      "id": "04-print",
+      "title": "採用した設計を、原寸キットに。",
+      "body": "",
+      "sourceLabel": "30mm・第3版の取得PDF／実物未検証",
+      "visualFocus": "実PDFの型紙とガイド。画面と紙を飾りで合成した完成品には見せない。",
+      "evidenceKind": "historical-adopted-version-pdf",
+      "sourceFile": "public/goal011/fish-revision3.pdf",
+      "file": "images/04-full-size-kit.png",
+      "footer": "原寸PDF・実画面 / 同じ30mm案・第3版",
+      "note": "紙の動作は実物で確認。"
+    }
+  ],
+  "video": {
+    "chapters": [
+      {
+        "id": "opening",
+        "start": 0,
+        "end": 8,
+        "title": "自分の絵から、動く紙工作へ。",
+        "sceneIds": [
+          "01-opening"
+        ],
+        "captions": [
+          "絵を動かす仕組みを、画面で確かめながら。"
+        ],
+        "sourceLabels": [
+          "手動デモ・ローカル"
+        ]
+      },
+      {
+        "id": "select",
+        "start": 8,
+        "end": 33,
+        "title": "絵を読み込み、動かすところを選ぶ",
+        "sceneIds": [
+          "02-import",
+          "03-select",
+          "04-selection"
+        ],
+        "captions": [
+          "自分の絵を読み込みます。",
+          "動かしたいところを、四角で囲みます。",
+          "四角い紙ごと動くので、範囲を確かめます。"
+        ],
+        "sourceLabels": [
+          "手動デモ・ローカル"
+        ]
+      },
+      {
+        "id": "motion",
+        "start": 33,
+        "end": 63,
+        "title": "正面と裏のしくみを確かめる",
+        "sceneIds": [
+          "05-front",
+          "06-back"
+        ],
+        "captions": [
+          "方向と距離を決めて、動きをプレビュー。",
+          "両端の姿と、裏のタブの通り道を確認します。"
+        ],
+        "sourceLabels": [
+          "手動デモ・ローカル"
+        ]
+      },
+      {
+        "id": "request",
+        "start": 63,
+        "end": 77.64,
+        "title": "別の例：25mmから、あと5mm",
+        "sceneIds": [
+          "07-request",
+          "08-real-wait"
+        ],
+        "captions": [
+          "25mmから30mmへ。絵の大きさと紙の枚数はそのまま。",
+          "AIの案を、コードで検査しています。"
+        ],
+        "sourceLabels": [
+          "実AIの記録・2026.10.5・静止",
+          "実AIの記録・2026.10.5"
+        ]
+      },
+      {
+        "id": "compare-adopt",
+        "start": 77.64,
+        "end": 93.12,
+        "title": "比べて、使う案を選ぶ",
+        "sceneIds": [
+          "09-compare",
+          "10-decide",
+          "11-adopt"
+        ],
+        "captions": [
+          "原本を残して、同じ縮尺で見比べます。",
+          "使う案は、作者が選びます。"
+        ],
+        "sourceLabels": [
+          "同じ実AIの候補画面・静止",
+          "実AIの記録・2026.10.5"
+        ]
+      },
+      {
+        "id": "print",
+        "start": 93.12,
+        "end": 115.12,
+        "title": "採用した同じ版を、原寸キットに",
+        "sceneIds": [
+          "12-open-adopted",
+          "13-pdf"
+        ],
+        "captions": [
+          "この採用版から、型紙とガイドへ。",
+          "第3版・30mmの設計から、PDFをダウンロード。"
+        ],
+        "sourceLabels": [
+          "手動デモ・ローカル"
+        ]
+      },
+      {
+        "id": "guide-save",
+        "start": 115.12,
+        "end": 153.12,
+        "title": "組み立てる順番を見て、保存・再開",
+        "sceneIds": [
+          "14-guide",
+          "15-glue",
+          "16-save",
+          "17-resume"
+        ],
+        "captions": [
+          "部品と手順を、図で確認できます。",
+          "接着する面と、接着しない場所を確かめます。",
+          "作品と、開いていた手順を保存。",
+          "再び開くと、同じ版から再開できます。"
+        ],
+        "sourceLabels": [
+          "手動デモ・ローカル"
+        ]
+      },
+      {
+        "id": "alternative",
+        "start": 153.12,
+        "end": 169.12,
+        "title": "別の依頼：希望70mm、代案35mm",
+        "sceneIds": [
+          "18-alternative",
+          "19-core"
+        ],
+        "captions": [
+          "希望どおりに収まらないときも、違いを示します。",
+          "AIが提案。コードが検査。作者が選ぶ。"
+        ],
+        "sourceLabels": [
+          "公開版の実画面・静止"
+        ]
+      },
+      {
+        "id": "ending",
+        "start": 169.12,
+        "end": 177.12,
+        "title": "自分の絵から、動く紙工作へ。",
+        "sceneIds": [
+          "20-ending"
+        ],
+        "captions": [
+          "描いた絵に、動く仕組みを。"
+        ],
+        "sourceLabels": [
+          "手動デモ・ローカル"
+        ]
+      }
+    ],
+    "captionStyle": {
+      "preferredLines": 1,
+      "maxLines": 2,
+      "oneMessageAtATime": true,
+      "avoid": [
+        "Goal番号やテストケース記号を大見出しにする",
+        "速度保証のない秒数を宣伝する",
+        "画面内の長文を字幕でも繰り返す",
+        "静止画を操作中の連続映像と呼ぶ"
+      ]
+    },
+    "sourceLabels": {
+      "newLocal": "手動デモ・ローカル",
+      "actualAi": "実AIの記録・2026年10月5日",
+      "publicStill": "公開版の実画面・静止表示",
+      "diagram": "構成の説明図"
+    },
+    "architectureInVideo": false,
+    "architectureNote": "構成図は独立した提出素材として維持し、動画の長い図説明は入れない。",
+    "segments": [
+      {
+        "id": "01-opening",
+        "kind": "video",
+        "sourceStart": 35,
+        "duration": 8,
+        "outputStart": 0,
+        "outputEnd": 8,
+        "title": "自分の絵から、動く紙工作へ。",
+        "label": "手動デモ・ローカル",
+        "caption": "絵を動かす仕組みを、画面で確かめながら。",
+        "note": "",
+        "sourceSha256": "fe0486b7dfef39cf75b04c42509a67646c2dc37aa7a9ae319c93b9b0d45a8562"
+      },
+      {
+        "id": "02-import",
+        "kind": "video",
+        "sourceStart": 1.96,
+        "duration": 9,
+        "outputStart": 8,
+        "outputEnd": 17,
+        "title": "絵を選ぶ",
+        "label": "手動デモ・ローカル",
+        "caption": "自分の絵を読み込みます。",
+        "note": "",
+        "sourceSha256": "fe0486b7dfef39cf75b04c42509a67646c2dc37aa7a9ae319c93b9b0d45a8562"
+      },
+      {
+        "id": "03-select",
+        "kind": "video",
+        "sourceStart": 10.96,
+        "duration": 8,
+        "outputStart": 17,
+        "outputEnd": 25,
+        "title": "動かす部分を決める",
+        "label": "手動デモ・ローカル",
+        "caption": "動かしたいところを、四角で囲みます。",
+        "note": "",
+        "sourceSha256": "fe0486b7dfef39cf75b04c42509a67646c2dc37aa7a9ae319c93b9b0d45a8562"
+      },
+      {
+        "id": "04-selection",
+        "kind": "video",
+        "sourceStart": 18.96,
+        "duration": 8,
+        "outputStart": 25,
+        "outputEnd": 33,
+        "title": "動かす部分を決める",
+        "label": "手動デモ・ローカル",
+        "caption": "四角い紙ごと動くので、範囲を確かめます。",
+        "note": "",
+        "sourceSha256": "fe0486b7dfef39cf75b04c42509a67646c2dc37aa7a9ae319c93b9b0d45a8562"
+      },
+      {
+        "id": "05-front",
+        "kind": "video",
+        "sourceStart": 32,
+        "duration": 14,
+        "outputStart": 33,
+        "outputEnd": 47,
+        "title": "動きを確かめる",
+        "label": "手動デモ・ローカル",
+        "caption": "方向と距離を決めて、動きをプレビュー。",
+        "note": "",
+        "sourceSha256": "fe0486b7dfef39cf75b04c42509a67646c2dc37aa7a9ae319c93b9b0d45a8562"
+      },
+      {
+        "id": "06-back",
+        "kind": "video",
+        "sourceStart": 46,
+        "duration": 16,
+        "outputStart": 47,
+        "outputEnd": 63,
+        "title": "裏の仕組みも見る",
+        "label": "手動デモ・ローカル",
+        "caption": "両端の姿と、裏のタブの通り道を確認します。",
+        "note": "",
+        "sourceSha256": "fe0486b7dfef39cf75b04c42509a67646c2dc37aa7a9ae319c93b9b0d45a8562"
+      },
+      {
+        "id": "07-request",
+        "kind": "still",
+        "duration": 6,
+        "outputStart": 63,
+        "outputEnd": 69,
+        "title": "別の例：25mmから、あと5mm",
+        "label": "実AIの記録・2026.10.5・静止",
+        "caption": "25mmから30mmへ。絵の大きさと紙の枚数はそのまま。",
+        "sourceSha256": "3dfa22f8ea847bc83920912584049a23d961950f5c97a93dadd75e7da0c9d4fd"
+      },
+      {
+        "id": "08-real-wait",
+        "kind": "video",
+        "sourceStart": 4.88,
+        "duration": 8.64,
+        "outputStart": 69,
+        "outputEnd": 77.64,
+        "title": "希望を伝える",
+        "label": "実AIの記録・2026.10.5",
+        "caption": "AIの案を、コードで検査しています。",
+        "note": "",
+        "sourceSha256": "c791f1ed4338fe952fbcb564323cf862d252494faffe309f9f6a9eabe33a170a"
+      },
+      {
+        "id": "09-compare",
+        "kind": "still",
+        "duration": 8,
+        "outputStart": 77.64,
+        "outputEnd": 85.64,
+        "title": "比べて選ぶ",
+        "label": "同じ実AIの候補画面・静止",
+        "caption": "原本を残して、同じ縮尺で見比べます。",
+        "sourceSha256": "5d13dbab3e03b34a0293d9b772ae493688b487dbf24787ffdad45ecf74b6cb2e"
+      },
+      {
+        "id": "10-decide",
+        "kind": "still",
+        "duration": 6,
+        "outputStart": 85.64,
+        "outputEnd": 91.64,
+        "title": "比べて選ぶ",
+        "label": "同じ実AIの候補画面・静止",
+        "caption": "使う案は、作者が選びます。",
+        "sourceSha256": "5d13dbab3e03b34a0293d9b772ae493688b487dbf24787ffdad45ecf74b6cb2e"
+      },
+      {
+        "id": "11-adopt",
+        "kind": "video",
+        "sourceStart": 13.52,
+        "duration": 1.48,
+        "outputStart": 91.64,
+        "outputEnd": 93.12,
+        "title": "この案にする",
+        "label": "実AIの記録・2026.10.5",
+        "caption": "使う案は、作者が選びます。",
+        "note": "",
+        "sourceSha256": "c791f1ed4338fe952fbcb564323cf862d252494faffe309f9f6a9eabe33a170a"
+      },
+      {
+        "id": "12-open-adopted",
+        "kind": "video",
+        "sourceStart": 1.36,
+        "duration": 8,
+        "outputStart": 93.12,
+        "outputEnd": 101.12,
+        "title": "保存した30mmの採用版を開く",
+        "label": "手動デモ・ローカル",
+        "caption": "この採用版から、型紙とガイドへ。",
+        "note": "",
+        "sourceSha256": "feccb1e29b2a8de78061524e9263869c4b438359b2caf43de98ebc5990a0288d"
+      },
+      {
+        "id": "13-pdf",
+        "kind": "video",
+        "sourceStart": 9.36,
+        "duration": 14,
+        "outputStart": 101.12,
+        "outputEnd": 115.12,
+        "title": "同じ版を、原寸キットに",
+        "label": "手動デモ・ローカル",
+        "caption": "第3版・30mmの設計から、PDFをダウンロード。",
+        "note": "",
+        "sourceSha256": "feccb1e29b2a8de78061524e9263869c4b438359b2caf43de98ebc5990a0288d"
+      },
+      {
+        "id": "14-guide",
+        "kind": "video",
+        "sourceStart": 23.36,
+        "duration": 12,
+        "outputStart": 115.12,
+        "outputEnd": 127.12,
+        "title": "組み立てる順番を見る",
+        "label": "手動デモ・ローカル",
+        "caption": "部品と手順を、図で確認できます。",
+        "note": "",
+        "sourceSha256": "feccb1e29b2a8de78061524e9263869c4b438359b2caf43de98ebc5990a0288d"
+      },
+      {
+        "id": "15-glue",
+        "kind": "video",
+        "sourceStart": 35.36,
+        "duration": 12,
+        "outputStart": 127.12,
+        "outputEnd": 139.12,
+        "title": "組み立てる順番を見る",
+        "label": "手動デモ・ローカル",
+        "caption": "接着する面と、接着しない場所を確かめます。",
+        "note": "",
+        "sourceSha256": "feccb1e29b2a8de78061524e9263869c4b438359b2caf43de98ebc5990a0288d"
+      },
+      {
+        "id": "16-save",
+        "kind": "video",
+        "sourceStart": 47.36,
+        "duration": 7,
+        "outputStart": 139.12,
+        "outputEnd": 146.12,
+        "title": "保存して、続きから",
+        "label": "手動デモ・ローカル",
+        "caption": "作品と、開いていた手順を保存。",
+        "note": "",
+        "sourceSha256": "feccb1e29b2a8de78061524e9263869c4b438359b2caf43de98ebc5990a0288d"
+      },
+      {
+        "id": "17-resume",
+        "kind": "video",
+        "sourceStart": 54.36,
+        "duration": 7,
+        "outputStart": 146.12,
+        "outputEnd": 153.12,
+        "title": "保存して、続きから",
+        "label": "手動デモ・ローカル",
+        "caption": "再び開くと、同じ版から再開できます。",
+        "note": "",
+        "sourceSha256": "feccb1e29b2a8de78061524e9263869c4b438359b2caf43de98ebc5990a0288d"
+      },
+      {
+        "id": "18-alternative",
+        "kind": "still",
+        "duration": 8,
+        "outputStart": 153.12,
+        "outputEnd": 161.12,
+        "title": "別の依頼：希望70mm、代案35mm",
+        "label": "公開版の実画面・静止",
+        "caption": "希望どおりに収まらないときも、違いを示します。",
+        "sourceSha256": "5daf64f49ae60e131451f955d1d0cb4099fb22b88a5f99e10f065c9e9530ef82"
+      },
+      {
+        "id": "19-core",
+        "kind": "still",
+        "duration": 8,
+        "outputStart": 161.12,
+        "outputEnd": 169.12,
+        "title": "別の依頼：希望70mm、代案35mm",
+        "label": "公開版の実画面・静止",
+        "caption": "AIが提案。コードが検査。作者が選ぶ。",
+        "sourceSha256": "5daf64f49ae60e131451f955d1d0cb4099fb22b88a5f99e10f065c9e9530ef82"
+      },
+      {
+        "id": "20-ending",
+        "kind": "video",
+        "sourceStart": 35,
+        "duration": 8,
+        "outputStart": 169.12,
+        "outputEnd": 177.12,
+        "title": "自分の絵から、動く紙工作へ。",
+        "label": "手動デモ・ローカル",
+        "caption": "描いた絵に、動く仕組みを。",
+        "note": "紙での動作は、印刷・組み立てで確認します。",
+        "sourceSha256": "fe0486b7dfef39cf75b04c42509a67646c2dc37aa7a9ae319c93b9b0d45a8562"
+      }
+    ],
+    "render": {
+      "file": "public/goal011/review-v2/demo.mp4",
+      "sha256": "ca6c7b67ed7e4aeac2001a14ac0f290a1fa8b81b67052334f9670192654dabfd",
+      "bytes": 6137814,
+      "durationSeconds": 177.12,
+      "sourceEdl": "private/material-redesign-20261006/video/edit-decisions.json",
+      "sourceEdlSha256": "d9bb5baaa06ead228fe71f0f796f672aef2b9ae46186ff0e8c139e6ef9e984ff",
+      "fullReview": "passed-decode-1x-playback-and-sampled-visual-review",
+      "technicalReviewResults": "Root records the completed decode/playback/visual review in the final manifest."
+    },
+    "sourceCodeShas": {
+      "newLocalManual": "a6bf70915f41830b77ef65a44e590e7ef83136b2",
+      "historicalVertexB": "6b6e98bd33f9f125e0301865da98024167ef9fab",
+      "historicalPublicC": "14a2edb958924b4355d31c69d1567d5ee4ff4026"
+    },
+    "newLocalPdf": {
+      "sha256": "f927221d284a15c29b01326fff2fb9b9137061470e462f3436417879a7a7269d",
+      "pages": 5,
+      "A4": true,
+      "designId": "goal009-comparison-fish",
+      "revision": 3,
+      "designHash": "5b3d233852f77d3d47610aecb9fbf49a8b61c345b6faa8f0236252850b18fdd8"
+    }
+  },
+  "actualVertexB": {
+    "sourceFile": "private/goal010/browser-sequence-2026-10-05T09-11-37.048Z/raw-video/page@de21d445086ace1eab9b95f1b5a6005b.webm",
+    "sourceSha256": "c791f1ed4338fe952fbcb564323cf862d252494faffe309f9f6a9eabe33a170a",
+    "sourceCodeSha": "6b6e98bd33f9f125e0301865da98024167ef9fab",
+    "provider": "vertex",
+    "model": "gemini-3.8-flash",
+    "beforeTravelMm": 25,
+    "afterTravelMm": 30,
+    "beforeRevision": 2,
+    "afterRevision": 3,
+    "designHash": "5b3d233852f77d3d47610aecb9fbf49a8b61c345b6faa8f0236252850b18fdd8",
+    "modelCalls": 3,
+    "toolCalls": 2,
+    "observedUiWaitMs": 8429,
+    "timingBasis": "actual WebM PTS copied from verified prior EDL, not wall-clock event subtraction",
+    "recommendedContinuousWindow": [
+      4.88,
+      15.0
+    ],
+    "windows": [
+      {
+        "kind": "request-already-filled-send-wait",
+        "start": 4.88,
+        "end": 13.52
+      },
+      {
+        "kind": "comparison-and-adoption",
+        "start": 13.52,
+        "end": 15.0
+      },
+      {
+        "kind": "print",
+        "start": 15.28,
+        "end": 16.8
+      },
+      {
+        "kind": "guide-save-reload",
+        "start": 16.8,
+        "end": 18.04
+      }
+    ],
+    "excludedSettingsWindows": [
+      [
+        0,
+        2.44
+      ],
+      [
+        3.92,
+        4.88
+      ],
+      [
+        15,
+        15.28
+      ],
+      [
+        18.04,
+        18.8
+      ]
+    ],
+    "boundaryReview": {
+      "ptsInspected": [
+        4.88,
+        5.04,
+        13.52,
+        14.68,
+        14.72,
+        14.76,
+        14.96
+      ],
+      "adoptionNote": "14.72 still shows enabled adoption; 14.76 is already approval pending; 14.96 displays adopted r3/30mm. Keep comparison and adoption together; do not start the click sequence at14.76.",
+      "requestNote": "4.88 shows the request already entered; no keystroke sequence is proved.",
+      "privateEvidenceDirectory": "private/review-v2/provenance"
+    },
+    "pdfSha256": "d9bb14261db7a64365d988b9e11b15d73f8d57a9b2a978d5e180ee254c916e4b",
+    "pdfPages": 5,
+    "physicalValidation": "unverified"
+  },
+  "submissionTextDrafts": {
+    "problemSolution": "描いた絵で紙工作を作りたい。でも、どこを切り、どのくらい動かし、裏に何を付ければよいのかが難しい。うごく紙工房は、絵の一部をまっすぐ動かす仕組みを、画面で確かめながら設計するWebアプリです。\n絵を読み込み、動かす範囲を囲み、方向と距離を決めます。言葉でAIに希望を伝え、元の作品と案を見比べることもできます。絵の大きさや紙の枚数を守り、使う案は本人が選びます。\n決めた版からA4型紙と組み立てガイドを取得。ブラウザに保存して、続きから再開できます。手動制作は無料・Googleログイン不要で、AIには審査用コードが必要です。\n実物の印刷・組立・動作は未検証です。",
+    "architecture": "ブラウザで絵・選択範囲・寸法を編集し、作品をIndexedDBに保存します。Web/APIは東京のCloud Run、AIはVertex AIのGeminiです。\nAIは希望文と設計条件から変更案を出し、共通コアが寸法・干渉・A4配置・固定条件を検査します。画像本体はモデルへ送りません。案を比較して本人が採用するまで原本を保ち、採用した同じ版からPDFと組み立てガイドを作ります。\nAIの入口は審査用コードで保護し、Cloud RunからVertex AIへの認証にはサービスアカウントを使います。非公開GCSの台帳で利用回数と費用予約を保持し、再起動後も上限を継承。別の監視Jobが費用・期限・監視障害を確認し、停止条件に達した専用サービスを止めます。"
+  },
+  "textCounts": {
+    "problemSolution": {
+      "codePoints": 282,
+      "utf16": 282
+    },
+    "architecture": {
+      "codePoints": 328,
+      "utf16": 328
+    }
+  },
+  "outputDirectory": "artifacts/submission/public/goal011/review-v2/",
+  "nominalTargetDurationSeconds": 180,
+  "durationSeconds": 177.12
+}
