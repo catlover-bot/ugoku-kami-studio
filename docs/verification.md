@@ -1,5 +1,15 @@
 # 検証記録
 
+## Goal011 — 2026年10月6日の監視復旧
+
+監視・停止の診断分類とRegistry削除APIの修正に、停止中の明示preflightを追加しました。関連32試験、型検査、lint、server build、修正SHA `ed0c36934b0583dc1a72529be0af0a01816f53ef` の[Check/コンテナ](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37422870119)・[WebKit](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37422870102)が成功しています。
+
+本番と同じScheduler→monitor SA経路でpreflight `ws4l7` が成功し、監視取得・既存stateの同一本文CAS/読戻し・停止中台帳の無変更を確認しました。その後、一度限りの世代付きCASで `stop.ai/whole` だけを解除。通常監視 `9r8tq` は15:36:10 JSTに18.267秒で成功し、サービスがReadyのままであること、監視時刻・累計の更新を確認しました。旧障害の具体的例外は当時のログに残っていません。停止判定を無効化せず、障害時は引き続き停止します。
+
+同URLを15:37 JSTに新規Chromiumで確認。サンプル20→18.5mmの手動編集・第2版の保存と同じ内容の再読込、コードなしUIの送信0、コードなし実APIと不正コード通常UIの401 `access_denied`、原本保持、同版A4 PDF5ページが通りました。ブラウザ全工程15.387秒は起動・複数操作・PDF生成を含み、ページ初回表示やAI推論時間ではありません。実AI0件、確認後のGCS世代と本文は停止解除直後と完全一致し、4依頼8送信・モデル管理額$0.7489245（うち送信済み不明$0.556032）を維持しています。
+
+証跡は `artifacts/submission/private/goal011/recovery-20261006/`、PDFは同配下 `browser-2026-10-06T06-37-38.514Z/recovery-manual-same-version.pdf`。実物は未確認です。次回18:00 JSTの監視と12月1日23:59 JSTの期限停止は有効な設定として確認しました。この記録時点で次回の予定実行は未実行です。main統合SHAとそのCIは同配下 `main-integration.json` に別記します。
+
 ## Goal011 — 公開URL・実Vertex・永続制御
 
 2026-10-05、配信SHA `14a2edb958924b4355d31c69d1567d5ee4ff4026` を非公開検証後に一般公開しました。手動制作はコード不要、AIは審査用コードを必須とします。[公開URL・実結果・運用](public-operation-011.md)を最新状態とし、以下のGoal010以前は当時の履歴です。

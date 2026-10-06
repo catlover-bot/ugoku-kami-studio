@@ -2,6 +2,8 @@
 
 ## Goal011の現在の提出素材と公開状態
 
+2026年10月6日15:37 JST、監視障害による停止から同じ公開URL・同じアプリ版で復旧を確認しました。通常監視と新規ブラウザの手動編集・保存再開・同版PDF・AI認証拒否を実確認。動画・画像・紹介文・PDFのバイト列は保持し、素材README/manifestと非公開審査手順の公開状態だけを更新しました。新ZIP SHA-256は `5249f9f212ff36f253eb01026165ce4a1020893c66766a2fb090ec984797177e`。実AIの追加はなく、下記の実Vertex記録は元の試行のままです。
+
 [実際の公開URL](https://ugoku-kami-release-011-erl7e5ym5a-an.a.run.app)で、Google未ログインの新規ブラウザから手動編集・画像入力・保存/PDF、コード付き実Vertexの候補比較・採用・同版PDF/ガイド・保存再読込を確認しました。WSLプロキシは停止しています。[実結果と運用](public-operation-011.md)。AIコードを含む手順は `artifacts/submission/private/goal011/reviewer-instructions.txt` に分離しています。
 
 最新のローカル素材は `artifacts/submission/public/goal011/` です。
