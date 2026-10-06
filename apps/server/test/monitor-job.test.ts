@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cloudApi, OBSERVATION_BUDGET_MS, runMonitor, STOP_STAGE_BUDGET_MS, type MonitorDependencies } from '../src/operations/monitor-job.js';
 import { dailyNoticeKey, RELEASE_DEADLINE, type MonitorState } from '../src/operations/cost-monitor.js';
-import { initialPublicLedger, publicLedgerSummary } from '../src/public-ledger.js';
+import { LedgerStoreError, initialPublicLedger, publicLedgerSummary } from '../src/public-ledger.js';
 
 const now = Date.parse('2026-10-06T03:00:00Z'), start = now - 12 * 3600000;
 function harness() {
@@ -60,6 +60,60 @@ describe('independent monitor Job: injected control-plane APIs only', () => {
     expect(deleted.some(url => /ledger|monitor.json|buckets|serviceAccounts/.test(url))).toBe(false);
     expect(h.notices.at(-1)?.event).toBe('release-cleanup');
   });
+  it('repository DELETE wire has no unsupported force parameter and retains scoped authorization', async () => {
+    const h = harness(); h.deps.now = () => Date.parse(RELEASE_DEADLINE);
+    const api = h.deps.api;
+    const fetcher = vi.fn<typeof fetch>(async (address, init) => {
+      const url = new URL(String(address));
+      if (url.search) return Response.json({error: {message: 'Unknown query parameter'}}, {status: 400});
+      expect(init?.method).toBe('DELETE');
+      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer fixture-token');
+      h.deleted.add(url.href);
+      return Response.json({name: 'operations/repository-delete'});
+    });
+    h.deps.api = (method, url, signal) => method === 'DELETE' && url.includes('artifactregistry.')
+      ? cloudApi(method, url, signal, async () => 'fixture-token', fetcher) : api(method, url, signal);
+    await runMonitor(h.deps);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(new URL(String(fetcher.mock.calls[0]![0])).search).toBe('');
+    expect(h.notices.at(-1)?.event).toBe('release-cleanup');
+  });
+  it('records observation HTTP status and stage without response text, tokens or private URL', async () => {
+    const h = harness(), api = h.deps.api;
+    let failed = false;
+    h.deps.api = (method, url, signal) => {
+      if (!failed && method === 'GET' && url.includes('/services/')) {
+        failed = true;
+        return cloudApi(method, url, signal, async () => 'SECRET_TOKEN', async () => Response.json({error: {message: 'SECRET_BODY'}}, {status: 503}));
+      }
+      return api(method, url, signal);
+    };
+    await runMonitor(h.deps);
+    expect(h.notices).toContainEqual({event: 'monitor-diagnostic', data: {stage: 'observation.service-read', category: 'http', httpStatus: 503}});
+    const diagnostics = h.notices.filter(n => n.event === 'monitor-diagnostic');
+    expect(JSON.stringify(diagnostics)).not.toMatch(/SECRET|googleapis|example-project/);
+    expect(h.deleted.size).toBe(6); // Same fail-closed action; diagnostics do not weaken it.
+  });
+  it('preserves the failing cleanup target and HTTP status, leaving schedules for retry', async () => {
+    const h = harness(), api = h.deps.api; h.deps.now = () => Date.parse(RELEASE_DEADLINE);
+    h.deps.api = (method, url, signal) => method === 'DELETE' && url.includes('artifactregistry.')
+      ? cloudApi(method, url, signal, async () => 'SECRET_TOKEN', async () => Response.json({error: {message: 'SECRET_CLEANUP'}}, {status: 400}))
+      : api(method, url, signal);
+    await expect(runMonitor(h.deps)).rejects.toThrow('incomplete');
+    expect(h.notices).toContainEqual({event: 'monitor-diagnostic', data: {stage: 'cleanup.repository.delete', category: 'http', httpStatus: 400}});
+    expect(h.notices).toContainEqual({event: 'monitor-diagnostic', data: {stage: 'cleanup.resources', category: 'http', httpStatus: 400}});
+    expect(h.requests.some(r => r.url.includes('cloudscheduler.'))).toBe(false);
+    expect(JSON.stringify(h.notices)).not.toContain('SECRET');
+  });
+  it('classifies ledger conflicts and hides unknown exception messages', async () => {
+    for (const error of [new LedgerStoreError('conflict'), Error('SECRET_UNKNOWN')]) {
+      const h = harness(); h.stateStore.compareAndSwap.mockRejectedValueOnce(error);
+      await runMonitor(h.deps);
+      expect(h.notices).toContainEqual({event: 'monitor-diagnostic', data: {stage: 'observation.state-write', category: error instanceof LedgerStoreError ? 'conflict' : 'unknown'}});
+      expect(JSON.stringify(h.notices)).not.toContain('SECRET');
+      expect(h.notices.some(n => n.event === 'monitor-check')).toBe(false);
+    }
+  });
   it('a persisted stop marker resumes cleanup after a recovered ledger; asynchronous deletion keeps both schedules', async () => {
     const h = harness(); h.setState({stoppedAt: new Date(now - 1000).toISOString(), stopReason: 'infrastructure-reserve'}); h.pendingRepository(true);
     await runMonitor(h.deps);
@@ -93,6 +147,7 @@ describe('independent monitor Job: injected control-plane APIs only', () => {
     const task = runMonitor(h.deps);
     await vi.advanceTimersByTimeAsync(OBSERVATION_BUDGET_MS);
     expect(readSignal?.aborted).toBe(true);
+    expect(h.notices).toContainEqual({event: 'monitor-diagnostic', data: {stage: 'observation', category: 'timeout'}});
     expect(h.requests[0]).toMatchObject({method: 'GET'});
     expect(h.requests[0]!.url).toContain('/services/ugoku-kami-release-011');
     expect(h.requests.find(request => request.method === 'DELETE')?.url).toContain('/services/ugoku-kami-release-011');
@@ -116,6 +171,7 @@ describe('independent monitor Job: injected control-plane APIs only', () => {
     h.deps.api = async (method, url, signal) => url.includes('monitoring.googleapis.com') ? {executionErrors: [{code: 14}], timeSeries: []} : api(method, url, signal);
     await runMonitor(h.deps);
     expect(h.notices.some(item => item.event === 'monitor-check')).toBe(false);
+    expect(h.notices).toContainEqual({event: 'monitor-diagnostic', data: {stage: 'observation.metrics.cpu', category: 'partial-response'}});
     expect(h.requests.some(request => request.method === 'DELETE' && request.url.includes('/services/'))).toBe(true);
   });
   it('an unconfirmed service DELETE retains cleanup targets and schedules and reports failure', async () => {
