@@ -1,24 +1,29 @@
 /** Local review of the completed submission movie; never opens the app or Cloud.
  * Wait for the renderer's completion before running.
  * node scripts/submission/redesign-review.mjs --assets-root /absolute/artifacts/submission
+ * Add --edition review-v2.1 for the separately preserved final edition.
  */
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {createServer} from 'node:http';
 import {execFileSync,spawn} from 'node:child_process';
-import {readFile,writeFile,mkdir} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,readdir} from 'node:fs/promises';
 import {resolve,join,relative} from 'node:path';
 import {chromium} from '@playwright/test';
-assert.equal(process.argv[2],'--assets-root');assert.equal(process.argv.length,4);
+assert.equal(process.argv[2],'--assets-root');assert([4,6].includes(process.argv.length));
+if(process.argv.length===6)assert.equal(process.argv[4],'--edition');
+const edition=process.argv[5]??'review-v2';
+const editionWork={'review-v2':'material-redesign-20261006','review-v2.1':'material-finalize-20261006'};
+assert(Object.hasOwn(editionWork,edition),'Unsupported edition');
 const assets=resolve(process.argv[3]);
-const movie=join(assets,'public/goal011/review-v2/demo.mp4');
-const work=join(assets,'private/material-redesign-20261006/video');
-const output=join(work,'review');await mkdir(output,{recursive:true,mode:0o700});
+const movie=join(assets,`public/goal011/${edition}/demo.mp4`);
+const work=join(assets,'private',editionWork[edition],'video');
+const output=join(work,'review');
 const sha=b=>createHash('sha256').update(b).digest('hex');
 const save=async(name,value)=>writeFile(join(output,name),JSON.stringify(value,null,2)+'\n',{mode:0o600});
 const bytes=await readFile(movie),edlBytes=await readFile(join(work,'edit-decisions.json'));
 const edl=JSON.parse(edlBytes);assert.equal(sha(bytes),edl.sha256,'Movie must match completed EDL');
-assert.equal(edl.scenes.length,20);assert(Math.abs(edl.durationSeconds-177.12)<1e-6);
+assert(Array.isArray(edl.scenes)&&edl.scenes.length>=2);assert(Math.abs(edl.durationSeconds-177.12)<1e-6);
 assert.equal(edl.newCloudCalls,0);assert.equal(edl.newModelCalls,0);
 const fps=25,totalFrames=4428,midpoints=[],boundaries=[];
 let previous=0;
@@ -33,12 +38,14 @@ for(const [i,s]of edl.scenes.entries()){
  if(i>0){const cut=Math.round(s.outputStart*fps);boundaries.push({kind:'before-cut',scene:edl.scenes[i-1].id,next:s.id,frame:cut-1,time:(cut-1)/fps},{kind:'after-cut',scene:s.id,previous:edl.scenes[i-1].id,frame:cut,time:cut/fps});}
  previous=s.outputEnd;
 }
-assert(Math.abs(previous-177.12)<1e-6);assert.equal(boundaries.length,38);
+assert(Math.abs(previous-177.12)<1e-6);assert.equal(boundaries.length,2*(edl.scenes.length-1));
 const probe=JSON.parse(execFileSync('ffprobe',['-v','error','-show_streams','-show_format','-of','json',movie],{encoding:'utf8',maxBuffer:2_000_000}));
 assert.equal(probe.streams.length,1,'No audio or extra streams');
 const stream=probe.streams[0];assert.equal(stream.codec_type,'video');assert.equal(stream.codec_name,'h264');
 assert.equal(stream.width,1920);assert.equal(stream.height,1080);assert.equal(stream.avg_frame_rate,'25/1');assert.equal(stream.r_frame_rate,'25/1');assert.equal(Number(stream.nb_frames),totalFrames);assert(Math.abs(Number(probe.format.duration)-177.12)<.001);
-const report={format:'ugoku-review-v2-video-technical-v1',movie:relative(assets,movie),sha256:sha(bytes),edlSha256:sha(edlBytes),probe,startedAt:new Date().toISOString(),classification:'Edited actual recordings and explicitly labeled real stills. Offline review only, not a new product/Cloud test.',fullDecode:'pending',frameSampling:{midpoints:20,boundaryAdjacentFrames:38,method:'Actual decoded output frame indices; previous frame and first frame at each of19 scene cuts.',notClaimed:'Sampling is not manual inspection of all4428 full-resolution frames.'},visualReview:'pending-human-inspection',cloudCalls:0,newModelCalls:0};
+const report={format:'ugoku-review-v2-video-technical-v1',edition,movie:relative(assets,movie),sha256:sha(bytes),edlSha256:sha(edlBytes),probe,startedAt:new Date().toISOString(),classification:'Edited actual recordings and explicitly labeled real stills. Offline review only, not a new product/Cloud test.',fullDecode:'pending',frameSampling:{midpoints:midpoints.length,boundaryAdjacentFrames:boundaries.length,method:`Actual decoded output frame indices; previous frame and first frame at each of${edl.scenes.length-1} scene cuts.`,notClaimed:'Sampling is not manual inspection of all4428 full-resolution frames.'},visualReview:'pending-human-inspection',cloudCalls:0,newModelCalls:0};
+// Evidence is append-by-edition: never overwrite an existing review directory.
+await mkdir(output,{mode:0o700});
 await save('technical-review.json',report);
 const ffmpeg=args=>new Promise((accept,reject)=>{const child=spawn('ffmpeg',['-nostdin','-hide_banner','-v','error',...args],{stdio:['ignore','ignore','pipe']});let error='';child.stderr.on('data',b=>{error+=b.toString();});child.once('error',reject);child.once('close',code=>code===0&&!error.trim()?accept():reject(Error(`ffmpeg exit${code}: ${error.slice(0,4000)}`)));});
 let server,browser;
@@ -46,19 +53,27 @@ try{
  await ffmpeg(['-xerror','-i',movie,'-map','0:v:0','-f','null','-']);report.fullDecode='passed-all4428-frames-no-errors';await save('technical-review.json',report);console.log(JSON.stringify({stage:'full-decode',result:'passed',frames:totalFrames}));
  const unique=[...new Set([...midpoints,...boundaries].map(x=>x.frame))].sort((a,b)=>a-b);
  const select=unique.map(n=>`eq(n\\,${n})`).join('+');
- await ffmpeg(['-y','-i',movie,'-vf',`select=${select}`,'-fps_mode','vfr','-start_number','0',join(output,'frame-%03d.png')]);
+ // Concatenated clips may change color metadata. Keep select's frame counter
+ // continuous across those changes, and reject missing/extra extracted frames.
+ await ffmpeg(['-y','-reinit_filter','0','-i',movie,'-vf',`select=${select}`,'-fps_mode','vfr','-start_number','0',join(output,'frame-%03d.png')]);
+ assert.equal((await readdir(output)).filter(name=>/^frame-\d+\.png$/.test(name)).length,unique.length,'Extracted frame count must match the complete sample map');
  for(const sample of [...midpoints,...boundaries])sample.file=`frame-${String(unique.indexOf(sample.frame)).padStart(3,'0')}.png`;
  const sampled=await Promise.all(unique.map(async(frame,i)=>{const file=`frame-${String(i).padStart(3,'0')}.png`,b=await readFile(join(output,file));return {file,frame,time:frame/fps,sha256:sha(b)};}));
  await save('frame-map.json',{movieSha256:sha(bytes),midpoints,boundaries,uniqueFrames:sampled});
  const contactPaths=[];
  browser=await chromium.launch({headless:true});
  const contact=await browser.newPage({viewport:{width:1920,height:1490},deviceScaleFactor:1});await contact.route('**/*',r=>r.abort());
- for(const [name,items]of [['contact-midpoints.png',midpoints],['contact-boundaries-01.png',boundaries.slice(0,20)],['contact-boundaries-02.png',boundaries.slice(20)]]){
+ const contactGroups=[];
+ for(const [kind,items]of [['midpoints',midpoints],['boundaries',boundaries]])for(let offset=0;offset<items.length;offset+=20){
+  const suffix=kind==='midpoints'&&items.length<=20?'':`-${String(offset/20+1).padStart(2,'0')}`;
+  contactGroups.push([`contact-${kind}${suffix}.png`,items.slice(offset,offset+20)]);
+ }
+ for(const [name,items]of contactGroups){
   const cards=await Promise.all(items.map(async x=>`<figure><img src="data:image/png;base64,${(await readFile(join(output,x.file))).toString('base64')}"><figcaption>${x.scene} · ${x.kind} · ${x.time.toFixed(2)}s · frame${x.frame}</figcaption></figure>`));
   await contact.setContent(`<html><style>*{box-sizing:border-box}body{margin:0;display:grid;grid-template-columns:repeat(4,480px);align-content:start;background:#ebece7;font:16px sans-serif;color:#252923}figure{margin:0;width:480px;height:298px;border:1px solid #ccc}img{width:478px;height:269px;display:block}figcaption{height:27px;padding:4px 8px;white-space:nowrap;font-size:14px}</style><body>${cards.join('')}</body></html>`);
   await contact.evaluate(async()=>Promise.all([...document.images].map(i=>i.decode())));await contact.screenshot({path:join(output,name)});contactPaths.push(name);
  }
- await contact.close();report.frameSampling.extractedUniqueFrames=sampled.length;report.frameSampling.contacts=contactPaths;await save('technical-review.json',report);console.log(JSON.stringify({stage:'frame-extraction',midpoints:20,boundaryFrames:38,contacts:contactPaths}));
+ await contact.close();report.frameSampling.extractedUniqueFrames=sampled.length;report.frameSampling.contacts=contactPaths;await save('technical-review.json',report);console.log(JSON.stringify({stage:'frame-extraction',midpoints:midpoints.length,boundaryFrames:boundaries.length,contacts:contactPaths}));
  // Serve only this immutable movie in memory. Valid byte ranges support Chromium.
  server=createServer((req,res)=>{
   if(req.method!=='GET'){res.writeHead(405);res.end();return;}
@@ -69,7 +84,7 @@ try{
   }
   if(req.url==='/favicon.ico'){res.writeHead(204);res.end();return;}
   if(req.url!=='/'){res.writeHead(404);res.end();return;}
-  res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end('<!doctype html><html lang="ja"><meta charset="utf-8"><title>Local review-v2 playback</title><style>body{margin:0;background:#FAFAF7}video{display:block;width:1920px;height:1080px}</style><video muted playsinline preload="auto" src="/demo.mp4"></video></html>');
+  res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(`<!doctype html><html lang="ja"><meta charset="utf-8"><title>Local ${edition} playback</title><style>body{margin:0;background:#FAFAF7}video{display:block;width:1920px;height:1080px}</style><video muted playsinline preload="auto" src="/demo.mp4"></video></html>`);
  });
  await new Promise((accept,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',accept);});
  const origin=`http://127.0.0.1:${server.address().port}`;

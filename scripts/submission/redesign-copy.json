@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "rendered-awaiting-full-review",
+  "status": "review-v2.1-reviewed-ready-for-main-integration",
   "language": "ja",
   "contentPolicy": {
     "newModelCalls": 0,
@@ -66,21 +66,27 @@
       {
         "id": "opening",
         "start": 0,
-        "end": 8,
-        "title": "自分の絵から、動く紙工作へ。",
+        "end": 10,
+        "title": "見どころ：自分の絵から、同じ版の型紙へ",
         "sceneIds": [
-          "01-opening"
+          "01a-opening-art",
+          "01b-opening-conditions",
+          "01c-opening-kit"
         ],
         "captions": [
-          "絵を動かす仕組みを、画面で確かめながら。"
+          "自分の絵が、工作の設計に。",
+          "あと5mm。紙は増やさない。",
+          "選んだ版から、原寸型紙と組立ガイドへ。"
         ],
         "sourceLabels": [
-          "手動デモ・ローカル"
+          "実画面の抜粋・静止",
+          "同じ作品の実AI候補・静止",
+          "実PDFとガイドの抜粋・静止"
         ]
       },
       {
         "id": "select",
-        "start": 8,
+        "start": 10,
         "end": 33,
         "title": "絵を読み込み、動かすところを選ぶ",
         "sceneIds": [
@@ -243,25 +249,45 @@
     "architectureNote": "構成図は独立した提出素材として維持し、動画の長い図説明は入れない。",
     "segments": [
       {
-        "id": "01-opening",
-        "kind": "video",
-        "sourceStart": 35,
-        "duration": 8,
+        "id": "01a-opening-art",
+        "kind": "still",
+        "duration": 3.2,
         "outputStart": 0,
-        "outputEnd": 8,
-        "title": "自分の絵から、動く紙工作へ。",
-        "label": "手動デモ・ローカル",
-        "caption": "絵を動かす仕組みを、画面で確かめながら。",
-        "note": "",
-        "sourceSha256": "fe0486b7dfef39cf75b04c42509a67646c2dc37aa7a9ae319c93b9b0d45a8562"
+        "outputEnd": 3.2,
+        "title": "見どころ｜自分の絵",
+        "label": "実画面の抜粋・静止",
+        "caption": "自分の絵が、工作の設計に。",
+        "sourceSha256": "3dfa22f8ea847bc83920912584049a23d961950f5c97a93dadd75e7da0c9d4fd"
+      },
+      {
+        "id": "01b-opening-conditions",
+        "kind": "still",
+        "duration": 3.2,
+        "outputStart": 3.2,
+        "outputEnd": 6.4,
+        "title": "見どころ｜条件を守った変更案",
+        "label": "同じ作品の実AI候補・静止",
+        "caption": "あと5mm。紙は増やさない。",
+        "sourceSha256": "5d13dbab3e03b34a0293d9b772ae493688b487dbf24787ffdad45ecf74b6cb2e"
+      },
+      {
+        "id": "01c-opening-kit",
+        "kind": "still",
+        "duration": 3.6,
+        "outputStart": 6.4,
+        "outputEnd": 10,
+        "title": "見どころ｜採用した同じ版の型紙",
+        "label": "実PDFとガイドの抜粋・静止",
+        "caption": "選んだ版から、原寸型紙と組立ガイドへ。",
+        "sourceSha256": "42324cafdf05637528c1f3c7586505608e71508b0f8b55255ef6b0abfad9c759"
       },
       {
         "id": "02-import",
         "kind": "video",
         "sourceStart": 1.96,
         "duration": 9,
-        "outputStart": 8,
-        "outputEnd": 17,
+        "outputStart": 10,
+        "outputEnd": 19,
         "title": "絵を選ぶ",
         "label": "手動デモ・ローカル",
         "caption": "自分の絵を読み込みます。",
@@ -273,8 +299,8 @@
         "kind": "video",
         "sourceStart": 10.96,
         "duration": 8,
-        "outputStart": 17,
-        "outputEnd": 25,
+        "outputStart": 19,
+        "outputEnd": 27,
         "title": "動かす部分を決める",
         "label": "手動デモ・ローカル",
         "caption": "動かしたいところを、四角で囲みます。",
@@ -285,8 +311,8 @@
         "id": "04-selection",
         "kind": "video",
         "sourceStart": 18.96,
-        "duration": 8,
-        "outputStart": 25,
+        "duration": 6,
+        "outputStart": 27,
         "outputEnd": 33,
         "title": "動かす部分を決める",
         "label": "手動デモ・ローカル",
@@ -494,14 +520,24 @@
       }
     ],
     "render": {
-      "file": "public/goal011/review-v2/demo.mp4",
-      "sha256": "ca6c7b67ed7e4aeac2001a14ac0f290a1fa8b81b67052334f9670192654dabfd",
-      "bytes": 6137814,
+      "file": "public/goal011/review-v2.1/demo.mp4",
+      "sha256": "ce70c4348372c15d9d778e613bab92d4f7fb7a43b609aa7f3986aeba00e9fe2d",
+      "bytes": 6004526,
       "durationSeconds": 177.12,
-      "sourceEdl": "private/material-redesign-20261006/video/edit-decisions.json",
-      "sourceEdlSha256": "d9bb5baaa06ead228fe71f0f796f672aef2b9ae46186ff0e8c139e6ef9e984ff",
-      "fullReview": "passed-decode-1x-playback-and-sampled-visual-review",
-      "technicalReviewResults": "Root records the completed decode/playback/visual review in the final manifest."
+      "sourceEdl": "private/material-finalize-20261006/video/edit-decisions.json",
+      "sourceEdlSha256": "3991566adffbe5bd86f4aba97278320e72904017c3a007bedae9d1b1692fe055",
+      "fullReview": "passed-technical-and-visual-accepted",
+      "technicalReviewResults": "177.12 seconds / 4428 decoded frames; complete1x playback177121.9ms, zero dropped/corrupted frames or browser errors. Five contact sheets cover64 correctly mapped PTS samples; three opening frames also reviewed at full size. Not individual visual inspection of all4428 frames.",
+      "reviewEvidence": {
+        "technicalReview": "private/material-finalize-20261006/video/review/technical-review.json",
+        "technicalReviewSha256": "874cd730cd83a36dd694998663d8b60b2ac9b2ae4370ab2bb3596b37e6ab0cc0",
+        "visualReview": "private/material-finalize-20261006/video/review/visual-review.json",
+        "visualReviewSha256": "c33ddbe8ae1c2084f1b141b112c09c0a1ac4dae76eb2935f22c7cf0a5a60be8d",
+        "acceptance": "private/material-finalize-20261006/acceptance.json",
+        "acceptanceSha256": "847465f54c1608601a3024f68c95595875a46a3a329ed1456615b34ac3454ff7",
+        "correctedFrameMapSha256": "d354c54cafa9205e527a54476f3c695354588c7adb6ddd93fb80bf4fedd2a318",
+        "accepted": true
+      }
     },
     "sourceCodeShas": {
       "newLocalManual": "a6bf70915f41830b77ef65a44e590e7ef83136b2",
@@ -515,6 +551,17 @@
       "designId": "goal009-comparison-fish",
       "revision": 3,
       "designHash": "5b3d233852f77d3d47610aecb9fbf49a8b61c345b6faa8f0236252850b18fdd8"
+    },
+    "opening": {
+      "durationSeconds": 10,
+      "kind": "three-labeled-static-excerpts-not-continuous-demonstration",
+      "sameProject": "goal009-comparison-fish",
+      "beforeRevision": 2,
+      "adoptedRevision": 3,
+      "adoptedDesignHash": "5b3d233852f77d3d47610aecb9fbf49a8b61c345b6faa8f0236252850b18fdd8",
+      "sourcePdf": "public/goal011/review-v2/fish-revision3.pdf",
+      "sourcePdfSha256": "d9bb14261db7a64365d988b9e11b15d73f8d57a9b2a978d5e180ee254c916e4b",
+      "removedRepeatedSelectionSeconds": 2
     }
   },
   "actualVertexB": {
@@ -608,7 +655,47 @@
       "utf16": 328
     }
   },
-  "outputDirectory": "artifacts/submission/public/goal011/review-v2/",
+  "outputDirectory": "artifacts/submission/public/goal011/review-v2.1/",
   "nominalTargetDurationSeconds": 180,
-  "durationSeconds": 177.12
+  "durationSeconds": 177.12,
+  "finalization": {
+    "version": "review-v2.1",
+    "previousVersion": "review-v2",
+    "previousPublicDirectory": "artifacts/submission/public/goal011/review-v2/",
+    "previousZip": "artifacts/submission/ugoku-kami-goal011-review-v2.zip",
+    "preservePreviousBytes": true,
+    "privateEvidenceDirectory": "artifacts/submission/private/material-finalize-20261006/",
+    "canonicalMaterialReadme": "artifacts/submission/public/goal011/review-v2.1/README.txt",
+    "canonicalMaterialManifest": "artifacts/submission/public/goal011/review-v2.1/manifest.json",
+    "chapterSourceVersion": "review-v2.1-final-EDL",
+    "runtimeScope": "No app, cloud, model, or deployed-runtime change. Normal main integration applies to submission tooling and documentation only.",
+    "submissionRecordAudit": {
+      "scope": "Existing local submission manifests, READMEs, and material-redesign records; no external form or cloud request.",
+      "finalSubmissionRecordFound": false,
+      "actualYoutubeVideoUrlFound": false,
+      "evidence": [
+        "public/goal011/review-v2/manifest.json",
+        "public/goal011/review-v2/README.txt",
+        "public/goal011/manifest.json",
+        "public/goal011/README.txt"
+      ],
+      "limitation": "Local records do not independently attest to later actions outside this workspace."
+    },
+    "openingSummary": "0–3.2s: actual25mm/revision2 artwork still;3.2–6.4s: same project25→30mm real candidate still;6.4–10s: same adopted30mm/revision3 PDF and guide excerpts; all explicitly static and not a continuous action.",
+    "unchangedFromPreviousAfterSeconds": 33
+  },
+  "previousReviewV2": {
+    "render": {
+      "file": "public/goal011/review-v2/demo.mp4",
+      "sha256": "ca6c7b67ed7e4aeac2001a14ac0f290a1fa8b81b67052334f9670192654dabfd",
+      "bytes": 6137814,
+      "durationSeconds": 177.12,
+      "sourceEdl": "private/material-redesign-20261006/video/edit-decisions.json",
+      "sourceEdlSha256": "d9bb5baaa06ead228fe71f0f796f672aef2b9ae46186ff0e8c139e6ef9e984ff",
+      "fullReview": "passed-decode-1x-playback-and-sampled-visual-review",
+      "technicalReviewResults": "Root records the completed decode/playback/visual review in the final manifest."
+    },
+    "sourceEdl": "private/material-redesign-20261006/video/edit-decisions.json",
+    "preserved": true
+  }
 }
