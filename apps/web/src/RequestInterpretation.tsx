@@ -65,9 +65,9 @@ export default function RequestInterpretation(props: Props) {
   useEffect(() => {setExpanded(!props.compact);}, [value.binding.requestHash]);
   useEffect(() => {if (!props.compact || value.clarifications.length || value.approvalRequired) setExpanded(true);}, [props.compact, value.clarifications.length, value.approvalRequired]);
   const contents = <section className="request-interpretation" aria-label="希望の受け取り方" data-base-hash={value.binding.baseHash} data-base-revision={value.binding.baseRevision}>
-    <h4>希望をこう受け取りました</h4>
+    <h4>{value.clarifications.length || value.approvalRequired ? '希望を確認してください' : 'この案で使った解釈'}</h4>
     <ul className="interpretation-summary">{value.summary.map((item,index) => <li key={index}>{item}</li>)}</ul>
-    {source === 'ai' && <p className="field-note">この実行で使う解釈です。違うところは採用前に直せます。</p>}
+    {source === 'ai' && <p className="field-note">違うところは採用前に訂正できます。</p>}
     {value.clarifications.map(item => <div className="interpretation-question" key={item.id}><p>{item.message}</p><div className="button-row">{item.choices.map((choice,index) => <button type="button" className="secondary" data-design-action key={index} disabled={disabled} onClick={() => onCorrect(choice.changes)}>{choice.label}</button>)}</div></div>)}
     {value.approvalRequired && <div className="interpretation-question"><p>紙の上限を {value.approvalRequired.from}枚 → {value.approvalRequired.to}枚 に緩める希望です。今の上限のままでは採用できません。</p><button type="button" className="secondary" data-design-action disabled={disabled} onClick={() => onCorrect({paperApproval:{from:value.approvalRequired!.from,to:value.approvalRequired!.to}})}>上限を{value.approvalRequired.from}枚から{value.approvalRequired.to}枚に変更して検査する</button></div>}
     <InterpretationEditor {...props} document={document} />

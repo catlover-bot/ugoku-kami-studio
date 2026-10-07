@@ -44,7 +44,7 @@ class OfflineAi {
 }
 async function openAi(page: Page, fixture: OfflineAi) {
   await fixture.attach(page); await page.goto('/'); await startSample(page); await page.locator('.artwork-stage .artwork-svg').waitFor(); await ai(page);
-  await expect(page.locator('.connection')).toHaveText('模擬AI（テスト）');
+  await expect(page.getByRole('dialog', { name: '設定', exact: true }).getByRole('heading', { name: '模擬AI（テスト）', exact: true })).toBeVisible();
   await page.getByLabel('AIアクセスコード').fill('private-fixture-access-code'); await page.getByRole('dialog', {name: '設定', exact: true}).getByRole('button', {name: '閉じる', exact: true}).click();
   await page.getByLabel('どう動かしたいですか？').fill('動く距離を15mmにしたい');
 }
@@ -93,7 +93,8 @@ test('G4 interrupted polling resumes the same run and exports its adopted versio
   expect(item.proposed.designHash).toBe(item.decision.adopted.designHash);
   expect(item.serverRun.events[0].checkStatuses.length).toBeGreaterThan(0); expect(item.serverRun.modelUsage[0].usage.totalTokens).toBe(120);
   await stage(page, 3); await expect(page.getByRole('button', {name: 'PDFをダウンロード', exact: true})).toBeEnabled();
-  await expect(page.locator('.kit-download')).toContainText('PDF全5ページ');
+  await expect(page.getByLabel('PDFに含める内容', { exact: true })).toHaveValue('all');
+  await expect(page.locator('.kit-download')).toContainText('PDF 5ページ');
   expect(await mainHash(page)).toBe(item.decision.adopted.designHash);
 });
 

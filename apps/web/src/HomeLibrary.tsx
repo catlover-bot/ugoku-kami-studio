@@ -49,7 +49,7 @@ export default function HomeLibrary({ entries, activeId, activeStatus, continueI
   const [busy, setBusy] = useState('');
   const [notice, setNotice] = useState('');
   const busyRef = useRef(false), composing = useRef(false);
-  const dialogRef = useRef<HTMLDialogElement>(null), nameRef = useRef<HTMLInputElement>(null), cancelDeleteRef = useRef<HTMLButtonElement>(null), listHeading = useRef<HTMLHeadingElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null), nameRef = useRef<HTMLInputElement>(null), cancelDeleteRef = useRef<HTMLButtonElement>(null), listHeading = useRef<HTMLHeadingElement>(null), dialogOrigin = useRef<HTMLElement | null>(null);
   const ready = entries.filter(entry => entry.status === 'ready');
   const recent = ready.find(entry => entry.id === continueId) ?? ready.find(entry => entry.id === activeId) ?? ready.reduce<HomeLibraryEntry | undefined>((latest, entry) => !latest || (Date.parse(entry.updatedAt) || 0) > (Date.parse(latest.updatedAt) || 0) ? entry : latest, undefined);
   const disabled = loading || !!busy;
@@ -61,7 +61,10 @@ export default function HomeLibrary({ entries, activeId, activeStatus, continueI
       element.showModal();
       if (dialog.kind === 'rename') { nameRef.current?.focus(); nameRef.current?.select(); }
       else cancelDeleteRef.current?.focus();
-    } else if (!dialog && element.open) element.close();
+    } else if (!dialog && element.open) {
+      element.close();
+      dialogOrigin.current?.focus();
+    }
   }, [dialog]);
 
   async function perform(message: string, action: () => Action, success?: () => void) {
@@ -73,6 +76,8 @@ export default function HomeLibrary({ entries, activeId, activeStatus, continueI
   }
   function openDialog(kind: LibraryDialog['kind'], entry: HomeLibraryEntry) {
     if (disabled) return;
+    const focused = dialogRef.current?.ownerDocument.activeElement;
+    dialogOrigin.current = focused instanceof HTMLElement ? focused.closest('details')?.querySelector('summary') ?? focused : null;
     setLocalError(''); setName(displayName(entry)); setDialog({ kind, entry });
   }
   function closeDialog() {
@@ -97,7 +102,7 @@ export default function HomeLibrary({ entries, activeId, activeStatus, continueI
 
   return <section className="home-library" aria-labelledby={headingId}>
     <div className="library-start">
-      <div><h1 id={headingId}>絵から、紙工作をつくろう。</h1><p>絵を選んで、動かすところを四角く囲みます。</p></div>
+      <div><h1 id={headingId}>作品をつくる</h1><p>絵を選び、動かすところを囲むことから。</p></div>
       <div className="library-start-actions">
         <button className="primary" disabled={disabled} onClick={() => void perform('画像を選びます…', onCreateOwn)}>自分の絵ではじめる</button>
         <button className="secondary" disabled={disabled} onClick={() => void perform('サンプルを開いています…', onTrySample)}>サンプルで試す</button>
@@ -120,7 +125,16 @@ export default function HomeLibrary({ entries, activeId, activeStatus, continueI
           {corrupt && <p className="library-entry-issue">{entry.issue || 'この作品を読み取れません。復元できる内容を確認するか、この作品だけを削除できます。'}</p>}
           <div className="library-entry-actions">
             <button className="secondary" disabled={disabled} onClick={() => void perform(corrupt ? '復元できる内容を確認しています…' : '作品を開いています…', () => corrupt ? onRecover(entry.id) : onOpen(entry.id))}>{corrupt ? '復元できる内容を確認' : '続きから開く'}</button>
-            <details className="library-more"><summary>作品の操作</summary><div>
+            <details className="library-more" onBlur={event => {
+              if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+            }} onKeyDown={event => {
+              if (event.key === 'Escape' && event.currentTarget.open) {
+                event.preventDefault(); event.currentTarget.open = false;
+                event.currentTarget.querySelector('summary')?.focus();
+              }
+            }} onToggle={event => {
+              if (event.currentTarget.open) event.currentTarget.closest('.library-list')?.querySelectorAll<HTMLDetailsElement>('.library-more[open]').forEach(menu => { if (menu !== event.currentTarget) menu.open = false; });
+            }}><summary aria-disabled={disabled} onClick={event => { if (disabled) event.preventDefault(); }}>作品の操作</summary><div>
               {!corrupt && <><button className="text-button" disabled={disabled} onClick={() => openDialog('rename', entry)}>名前を変更</button><button className="text-button" disabled={disabled} onClick={() => void perform('作品を複製しています…', () => onDuplicate(entry.id), () => setNotice(`「${label}」を複製しました。`))}>複製する</button><button className="text-button" disabled={disabled} onClick={() => void perform('プロジェクトを書き出しています…', () => onExport(entry.id), () => setNotice(`「${label}」を書き出しました。`))}>ファイルに書き出す</button></>}
               <button className="text-button library-delete" disabled={disabled} onClick={() => openDialog('delete', entry)}>削除する</button>
             </div></details>

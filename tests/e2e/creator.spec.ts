@@ -191,7 +191,9 @@ test('S6 export pending then edit discards stale PDF; S7 manual recovery stays a
   await page.locator('.intent-panel').getByRole('button', { name: 'この案にする', exact: true }).click();
   expect((await saved(page)).document.input.travelMm).toBe(15);
   await ai(page);
-  await expect(page.locator('.connection')).toHaveText('手動で編集中');
+  await page.getByRole('button',{name:'設定',exact:true}).click();
+  await expect(page.getByRole('dialog',{name:'設定',exact:true}).getByRole('heading',{name:'手動で編集中',exact:true})).toBeVisible();
+  await page.keyboard.press('Escape');
 });
 
 test('S8 physical draft keeps its measured revision, and design undo cannot delete recorded evidence', async ({ page }) => {

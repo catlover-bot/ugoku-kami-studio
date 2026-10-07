@@ -105,6 +105,38 @@ test('Vertex setup stays in settings; a mocked candidate uses the same workbench
   const previews = page.locator('.comparison-previews .artwork-svg');
   await expect(previews).toHaveCount(2);
   expect(await previews.nth(0).getAttribute('viewBox')).toBe(await previews.nth(1).getAttribute('viewBox'));
+  const comparisonPosition = page.getByLabel('候補の比較位置', { exact: true });
+  if (info.project.name === 'desktop') {
+    await expect(page.getByRole('group', { name: '比べる作品', exact: true })).toBeHidden();
+    const bounds = await comparisonPosition.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+    const scales = await previews.evaluateAll(elements => elements.map(element => {
+      const matrix = (element as SVGSVGElement).getScreenCTM();
+      return matrix ? { x: matrix.a, y: matrix.d } : null;
+    }));
+    expect(scales[0]).toEqual(scales[1]);
+    await page.setViewportSize({ width: 1366, height: 768 });
+    const compactBounds = await comparisonPosition.boundingBox();
+    expect(compactBounds!.y + compactBounds!.height).toBeLessThanOrEqual(768);
+  }
+  await page.getByRole('button', { name: '比較を始点にする', exact: true }).click();
+  await expect(comparisonPosition).toHaveValue('0');
+  await expect(previews.nth(0)).toHaveAttribute('data-phase', '0');
+  await expect(previews.nth(1)).toHaveAttribute('data-phase', '0');
+  await comparisonPosition.focus(); await comparisonPosition.press('End');
+  await expect(comparisonPosition).toHaveValue('1');
+  await expect(previews.nth(0)).toHaveAttribute('data-phase', '1');
+  await expect(previews.nth(1)).toHaveAttribute('data-phase', '1');
+  if (info.project.name === 'mobile') {
+    const candidateBox = await previews.nth(1).boundingBox();
+    await page.getByRole('button', { name: 'いまの作品', exact: true }).click();
+    const currentBox = await previews.nth(0).boundingBox();
+    expect(currentBox!.width).toBeCloseTo(candidateBox!.width, 1);
+    expect(currentBox!.height).toBeCloseTo(candidateBox!.height, 1);
+    await page.getByRole('button', { name: '候補の作品', exact: true }).click();
+  }
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: info.outputPath('vertex-http-fixture-candidate.png'), fullPage: true });
   await page.locator('.ai-panel').getByRole('button', { name: 'この案にする', exact: true }).click();
   await expect(page.getByLabel('動く距離（mm）', { exact: true })).toHaveValue('25');

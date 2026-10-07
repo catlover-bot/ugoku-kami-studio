@@ -73,7 +73,7 @@ class SharedRequestFixture {
 async function openFixture(page: Page, fixture: SharedRequestFixture) {
   await fixture.attach(page);
   await openPanel(page);
-  await expect(page.locator('.connection')).toHaveText('模擬AI（テスト）');
+  await expect(page.locator('.ai-settings h3')).toHaveText('模擬AI（テスト）');
   await ai(page);
   await page.getByLabel('AIアクセスコード').fill(ACCESS); await page.getByRole('dialog', {name: '設定', exact: true}).getByRole('button', {name: '閉じる', exact: true}).click();
   await page.getByLabel(AI_PROMPT).fill('動く距離を15mmにしたい');
@@ -88,7 +88,7 @@ test.describe('Goal005 AI experience — offline HTTP fixtures', () => {
   test('unconnected guidance is user-facing and trusted conditions remain visible without opening settings', async ({ page }, info) => {
     await page.route('**/api/status', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ai: { enabled: false, mode: 'manual', reason: 'AI_ENABLED=false; GEMINI_API_KEY is absent; deploy the server' } }) }));
     await openPanel(page);
-    await expect(page.locator('.connection')).toHaveText('手動で編集中');
+    await expect(page.locator('.ai-settings h3')).toHaveText('手動で編集中');
     await expect(page.getByRole('dialog',{name:'設定',exact:true})).toBeHidden();
     const panel = page.locator('.ai-panel');
     await expect(page.getByRole('checkbox',{name:'絵の大きさを保つ',exact:true})).toBeVisible();
@@ -105,7 +105,7 @@ test.describe('Goal005 AI experience — offline HTTP fixtures', () => {
   test('access code and model details are secondary and configured status does not claim a tested live connection', async ({ page }) => {
     await page.route('**/api/status', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ai: { enabled: true, mode: 'gemini', model: 'gemini-model-for-local-ui-fixture' } }) }));
     await openPanel(page);
-    await expect(page.locator('.connection')).toHaveText('Gemini（設定済み）');
+    await expect(page.locator('.ai-settings h3')).toHaveText('Gemini（設定済み）');
     await expect(page.getByLabel('AIアクセスコード')).toBeHidden();
     await expect(page.locator('.ai-settings').getByText('gemini-model-for-local-ui-fixture', { exact: false })).toBeHidden();
     await page.getByRole('button',{name:'設定',exact:true}).click();
@@ -124,7 +124,7 @@ test.describe('Goal005 AI experience — offline HTTP fixtures', () => {
       return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Unexpected request in presentation fixture' }) });
     });
     await openPanel(page);
-    await expect(page.locator('.connection')).toHaveText('模擬AI（テスト）');
+    await expect(page.locator('.ai-settings h3')).toHaveText('模擬AI（テスト）');
     await openRequest(page);
     await requestButton(page).click();
     // Missing AI access keeps the editor usable; settings open only on request.

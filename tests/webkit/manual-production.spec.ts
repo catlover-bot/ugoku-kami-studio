@@ -14,7 +14,6 @@ type SavedWorkspace = {
   draft: { stage: number; guide?: { designId: string; revision: number; designHash: string; step: number; document?: DesignDocument } };
 };
 const sha256 = (data: Uint8Array | string) => createHash('sha256').update(data).digest('hex');
-const pdfLabels = { all: 'PDFをダウンロード', pattern: '型紙だけを保存', instructions: '組み立て説明だけを保存' } as const;
 
 /** Read native persisted bytes only; do not call repository or React methods. */
 async function readSaved(page: Page): Promise<SavedWorkspace> {
@@ -126,9 +125,9 @@ test('own artwork survives native save and reload, then downloads matching split
   await stage(page, 3);
   const drawings: Record<string, string[]> = {}, downloadEvidence = [];
   for (const mode of ['all', 'pattern', 'instructions'] as const) {
-    if (mode !== 'all') { const options = page.locator('.split-options'); if (!await options.evaluate(element => (element as HTMLDetailsElement).open)) await options.locator(':scope > summary').click(); }
+    await page.getByLabel('PDFに含める内容', {exact: true}).selectOption(mode);
     const pending = page.waitForEvent('download');
-    await page.getByRole('button', { name: pdfLabels[mode], exact: true }).click();
+    await page.getByRole('button', { name: 'PDFをダウンロード', exact: true }).click();
     const download = await pending, path = info.outputPath(`${mode}.pdf`);
     await download.saveAs(path);
     const bytes = await readFile(path), pdf = await PDFDocument.load(bytes);

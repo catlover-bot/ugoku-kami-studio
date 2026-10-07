@@ -78,7 +78,9 @@ test('条件違反・未対応・AI未接続でも編集できる', async ({ pag
   await page.getByLabel('動く距離（mm）', { exact: true }).fill('20'); await page.getByLabel('動く距離（mm）', { exact: true }).press('Enter');
   await expect(pdfButton(page)).toBeEnabled();
   await ai(page);
-  await expect(page.locator('.connection')).toHaveText('手動で編集中');
+  await page.getByRole('button',{name:'設定',exact:true}).click();
+  await expect(page.getByRole('dialog',{name:'設定',exact:true}).getByRole('heading',{name:'手動で編集中',exact:true})).toBeVisible();
+  await closeDialog(page);
   await page.getByLabel('どう動かしたいですか？').fill('カメを回転させたい');
   await page.getByRole('button', { name: 'AIで案をつくる', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: /AIは未接続/ })).toBeVisible();
