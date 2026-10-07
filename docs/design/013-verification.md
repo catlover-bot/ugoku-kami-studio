@@ -42,9 +42,11 @@ AIは希望入力を開いた同条件から、対象ボタン下端をviewport�
 
 ## 回帰と再現
 
-`npm ci`、`npm run check`（ESLint・型・431単体／統合・build）、`npm run test:e2e`、`npm run test:storage`、`npm run examples`を実行。E2E初回190件中183件成功、接続表示を設定へ移した旧selectorとPDF表記、画像エラーの見切れを修正し、該当28件を再実行して全件成功した。データ保護・設計hash・全ページ・原本保持のassertは削っていない。
+`npm ci`、`npm run check`（ESLint・型・431単体／統合・build）、`npm run test:e2e`、`npm run test:storage`、`npm run examples`を実行。ローカルE2E初回は190件中183件成功、接続表示を設定へ移した旧selectorとPDF表記、画像エラーの見切れを修正し、該当28件を再実行して全件成功した。データ保護・設計hash・全ページ・原本保持のassertは削っていない。
 
-WebKitはWSLのOS依存不足でブラウザ起動前に停止、Dockerは未導入。既存の同じspecをChromium／通常サーバーで対照実行し3件成功したが、WebKit／コンテナ成功とは数えない。実WebKit・Dockerはmain同SHAのCIで確認し、結果は公開反映記録に追記する。
+WebKitはWSLのOS依存不足でブラウザ起動前に停止、Dockerは未導入。既存の同じspecをChromium／通常サーバーで対照実行し3件成功したが、WebKit／コンテナ成功とは数えない。その後、main同SHAのCIで実WebKitとDockerを確認した。
+
+実装コミットは `925ff433384cdf1f1f1462eff9862e191acc75fc`、通常統合したmainは `4e3f4918f93014adcb0c2ca662067c493e8797d6`。[Check](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37602458469)で431単体／統合、E2E190件、保存29件、examples、実コンテナ2件がすべて成功した。[WebKit](https://github.com/catlover-bot/ugoku-kami-studio/actions/runs/37602458670)も実ブラウザ1件が成功し、自画像・保存復帰・PDF3種・取得版ガイドを確認した。実AI smokeは明示的にskipされ、モデル送信0。ローカルで実行できなかった環境と、CIで成功した環境を区別する。
 
 ```sh
 npm ci
@@ -74,6 +76,18 @@ node --import tsx scripts/capture-workbench.mjs
 
 ## 統合・公開・提出物
 
-main統合・同SHA CI・同じ既存Cloud Runのアプリ更新と追加AIなしの公開確認を、このローカル確認とは別に記録する。停止フラグ・費用枠・保持予約・監視Job・Scheduler・期限は維持し、SOURCE_SHAとアプリイメージだけを更新する。直前の正常revision／digestを保全する。
+2026-10-07 19:12 JSTに、同じ公開サービス `ugoku-kami-release-011` の配信を `ugoku-kami-release-011-00002-57g` へ更新した。公開アプリのSOURCE_SHAは `4e3f4918f93014adcb0c2ca662067c493e8797d6`、digestは `sha256:82633c70592409c90340d7fa7653a3de345160b42d50fb18df242431ebfb691d`。Service UIDを保持した通常更新で、templateの変更はイメージとSOURCE_SHAだけ。旧revision `ugoku-kami-release-011-00001-62s` とdigest `sha256:9ba664f1c84756c060e320368f1a9365bda0374ddf32161bbfd43846b16c28ae` をロールバック用に保全した。
+
+台帳本文とgenerationは不変で、従来の4依頼・8送信・モデル管理額$0.7489245（うち送信済み不明予約$0.556032）を引き継ぐ。停止フラグ、IAM、監視修正版、Scheduler2件、公開開始日、2026-12-01 23:59 JSTの期限を維持した。新しいサービス・モデル・費用枠は追加していない。
+
+今回のビルドは71.282秒、既存公開分との累計257.931秒、Registryは新旧アプリと監視を含め334,917,702 bytesで各管理上限内。ビルドの標準料金換算約$0.00713は既存インフラ固定予備に含め、二重加算しない。公開UI確認後19:14 JSTのメトリクスに基づく管理見込みはインフラ$1.88787＋モデル管理額$0.7489245＝約$2.63680。保存・監視・反映遅延等の予備を含む従来の100ドル枠の見込みで、確定請求額ではない。今回の利用明細は未取得、クレジット控除は0として計算した。
+
+配信revisionはReady/Active/ContainerHealthy成功、公開healthは200だった。Cloud Runのrevision条件にある7.19秒（デプロイ）・5.05秒（health到達）と、単発health応答347msはそれぞれ別の測定で、利用者の初回待ち時間や推論時間へ読み替えない。初回の公開ホーム読込みは新規Chromiumで約2.945秒だった（1回の標本、コールドスタートとは断定しない）。
+
+同日19:13 JSTの公開確認では、Googleログインや特別な認証ヘッダーのない新規Chromiumから、ホーム・サンプル20→18.5mm編集・保存と完全再読込・同じ第2版のA4 PDF全5ページ・取得版ガイド第2工程の再開・自作PNGの2点選択と保存再読込が成功。配信JS/CSSは検証済みmainのbuildとbytes一致。コードなしの通常UIは送信0、コードなしAPIと7文字の誤コードによる通常UIはどちらも401 `access_denied`、原本と保存済み版を保持した。成功AI run／実モデル送信は0、ブラウザの未処理エラーも0。確認後に台帳のgeneration・本文hash、設定・IAM・監視を再読し、不変を確認した。
+
+公開確認の実画面10枚・保存文書・結果はローカル `artifacts/goal013/public-check/browser-2026-10-07T10-13-26.728Z/`、取得PDFは同フォルダ `goal013-manual-same-version.pdf`。設計ID `81c6feda-2b4f-4a5a-bcdd-e1b9d29934e2`、第2版、設計hash `85642d38220fe99ec3d54eb3dca149a2a3abbb9f7d4c2928cdd7d0b135657d67` とPDFのtitle/subjectを照合した。ローカルの採用済み自作画像PDF（第7版・25mm）とは別の確認ケースである。
+
+実装・main統合・公開反映はいずれも完了。公開後の結果文書だけを追加統合した最終mainとCIはローカル `artifacts/goal013/public-check/final-main-ci.json` に記録し、アプリ配信SHAと区別する。公開後の文書更新に対する再ビルド・追加推論は行わない。
 
 新しい提出画像4枚と動画の差し替え章は `artifacts/submission/public/goal013-ui/`。review-v2.1等の旧素材は上書きしない。画像・動画・検証artifactはGit管理外で、GitHubから取得できるとは案内しない。今回の画像の手動候補と、過去動画の実Vertex実績を区別する。動画全面再制作・YouTube公開・Zenn最終提出は行わない。

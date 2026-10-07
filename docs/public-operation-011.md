@@ -94,3 +94,13 @@ Build104.565秒（標準換算約$0.010457）、イメージ111,637,221bytes、G
 | main統合と同SHAのCI | 統合SHA・実結果・URLは非公開 `artifacts/submission/private/goal011/recovery-20261006/main-integration.json` に記録。監視branchの成功をmainの結果へ読み替えない |
 
 Registry削除後に同じRegistryを参照する監視Jobを再実行できるかは未検証です。今回の修正はこの依存関係を変更していません。再び監視不能や予算・期限の停止条件が成立した場合は従来どおり停止し、自動的にフラグを解除しません。残る専用資源は非公開の運用記録と照合して扱います。
+
+## 2026-10-07 — Goal013の制作UI更新
+
+既存サービスを通常更新し、新しい制作UIを同じURLへ配信した。Service UID、CPU/メモリ、min/max、Vertexモデル、台帳・保持予約、IAM、監視修正版、Scheduler2件、公開開始日と終了期限を保持した。停止解除や台帳初期化は行っていない。
+
+アプリSOURCE_SHA `4e3f4918f93014adcb0c2ca662067c493e8797d6`、revision `ugoku-kami-release-011-00002-57g`、digest `sha256:82633c70592409c90340d7fa7653a3de345160b42d50fb18df242431ebfb691d`。旧revision `ugoku-kami-release-011-00001-62s` と旧アプリdigestを保全。監視digest `sha256:46c07642aa6c63bbe1df02f2f6d250dab800d157a513c928f51e62dbc9d936c7` は変更していない。
+
+通常の未ログインブラウザで手動編集・保存再読込・同じ第2版のPDF5ページ・取得版ガイド・自画像を確認した。コードなし／誤コードのAIは401で拒否、実モデル送信0。操作後も台帳の4依頼・8送信、モデル管理額$0.7489245、本文hashとgenerationは不変。新ビルド71.282秒、累計257.931秒、Registry約335MB。19:14 JSTのインフラ管理見込み$1.88787＋モデル管理額＝約$2.63680は既存100ドル枠内で、クレジット控除なし・確定請求ではない。今回の請求明細は未取得。
+
+[画面・回帰・公開確認・費用の詳細](design/013-verification.md)とローカル `artifacts/goal013/public-check/` に証拠を保存した。公開反映後の結果文書のmain SHAとCIは同フォルダ `final-main-ci.json` に記録し、実配信アプリSHAを文書更新SHAへ付け替えない。
