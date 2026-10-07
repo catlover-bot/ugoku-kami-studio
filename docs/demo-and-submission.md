@@ -1,5 +1,9 @@
 # デモ構成と提出準備
 
+## Goal015：ナレーション付き動画
+
+動画の新しい候補は `artifacts/submission/public/goal015-narrated/demo-narrated.mp4`。Goal014の無音原本を保全し、同じ160.6秒の映像・字幕へローカルVOICEVOX Nemo女声1の音声を追加した。画像・本文・構成図・PDFは以下のGoal014一式を維持する。同フォルダに音声単体、時刻付き原稿、設定・利用条件、YouTube説明欄用クレジットを置く。[Goal015の記録](goals/015-local-narration.md)、[再生成手順](../scripts/submission/README.md)を参照。耳での聴感確認は未実施とし、客観的な再生・同期・読み指定・音量検査とは区別する。YouTube投稿・Zenn最終提出は本人が行う。
+
 ## Goal014：新UIの提出候補
 
 新しい提出候補は `artifacts/submission/public/goal014-final/` にまとめる。MP4は160.60秒（2分40.60秒）、1920×1080・25fps・無音。全4,015フレームのデコード、等速での全編再生（drop/corruptとも0）、全14場面と13カット前後の抽出・目視、ZIP全件の展開照合を完了した。完成版の選択は同フォルダの `README.txt`・`manifest.json` を基準にする。[提出欄と制作手順](../scripts/submission/README.md)、[Goal014の出所と区別](goals/014-current-ui-submission.md)を参照。

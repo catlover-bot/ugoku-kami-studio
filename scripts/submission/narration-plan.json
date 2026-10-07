@@ -1,0 +1,171 @@
+{
+  "format": "ugoku-narration-plan-v1",
+  "sourceSha256": "592c3df09739a6e81b91d5926747b2d343bbfbf1d63e2841b0420e1eaed6e59c",
+  "durationSeconds": 160.6,
+  "readingNotes": {
+    "うごく紙工房": "ウゴク / カミコオボオ（accent_phrases APIで作品名だけを補正）",
+    "原寸": "ゲンスン（漢字の辞書読みを保持）",
+    "型紙": "カタガミ（漢字の辞書読みを保持）",
+    "Gemini": "ジェミニ",
+    "PDF": "ピーディーエフ",
+    "AI": "エーアイ",
+    "25mm": "にじゅうごミリ",
+    "30mm": "さんじゅうミリ"
+  },
+  "segments": [
+    {
+      "id": "01-purpose",
+      "startSeconds": 0.3,
+      "untilSeconds": 9.7,
+      "sceneIds": [
+        "opening-motion",
+        "opening-change",
+        "opening-pattern"
+      ],
+      "text": "うごく紙工房。絵と希望を、原寸の型紙と組み立てガイドにつなぎます。",
+      "spokenText": "うごく紙工房。絵と希望を、原寸の型紙と組み立てガイドにつなぎます。"
+    },
+    {
+      "id": "02-select",
+      "startSeconds": 10.5,
+      "untilSeconds": 21.4,
+      "sceneIds": [
+        "select-art"
+      ],
+      "text": "自分の絵を読み込み、動かしたい部分を囲みます。動かす場所は、作者が決めます。",
+      "spokenText": "自分の絵を読み込み、動かしたい部分を囲みます。動かす場所は、作者が決めます。"
+    },
+    {
+      "id": "03-conditions",
+      "startSeconds": 22.2,
+      "untilSeconds": 31.3,
+      "sceneIds": [
+        "set-conditions"
+      ],
+      "text": "方向と距離を決めます。絵の大きさや紙の枚数も、守る条件にできます。",
+      "spokenText": "方向と距離を決めます。絵の大きさや紙の枚数も、守る条件にできます。"
+    },
+    {
+      "id": "04-manual-request",
+      "startSeconds": 32.0,
+      "untilSeconds": 44.0,
+      "sceneIds": [
+        "request-and-compare"
+      ],
+      "text": "ここは、AIを使わない寸法支援です。25mmから、あと5mm、と希望を伝えます。",
+      "spokenText": "ここは、AIを使わない寸法支援です。25mmから、あと5mm、と希望を伝えます。"
+    },
+    {
+      "id": "05-compare",
+      "startSeconds": 47.0,
+      "untilSeconds": 60.0,
+      "sceneIds": [
+        "request-and-compare"
+      ],
+      "text": "コードが条件を検査し、30mmの案を提示します。元の作品と、同じ縮尺で比べられます。",
+      "spokenText": "コードが条件を検査し、30mmの案を提示します。元の作品と、同じ縮尺で比べられます。"
+    },
+    {
+      "id": "06-author",
+      "startSeconds": 61.0,
+      "untilSeconds": 67.0,
+      "sceneIds": [
+        "author-adopts"
+      ],
+      "text": "原本と見比べて、使う案は作者が選びます。",
+      "spokenText": "原本と見比べて、使う案は作者が選びます。"
+    },
+    {
+      "id": "07-real-ai",
+      "startSeconds": 67.65,
+      "untilSeconds": 80.3,
+      "sceneIds": [
+        "real-ai-response",
+        "real-ai-comparison",
+        "real-ai-adoption"
+      ],
+      "text": "ここからは、旧画面での実AI記録です。Geminiが設計ツールで寸法を調整し、コードの検査結果を受け取ります。",
+      "spokenText": "ここからは、旧画面での実AI記録です。ジェミニが設計ツールで寸法を調整し、コードの検査結果を受け取ります。"
+    },
+    {
+      "id": "08-reopen",
+      "startSeconds": 81.1,
+      "untilSeconds": 89.6,
+      "sceneIds": [
+        "reopen-adopted"
+      ],
+      "text": "ここからは別の収録です。AIの案を採用した第3版を、新しい画面で開きます。",
+      "spokenText": "ここからは別の収録です。AIの案を採用した第3版を、新しい画面で開きます。"
+    },
+    {
+      "id": "09-pdf",
+      "startSeconds": 91.0,
+      "untilSeconds": 102.5,
+      "sceneIds": [
+        "same-version-pdf"
+      ],
+      "text": "作者が選んだ30mm、第3版から、原寸の型紙と説明書を、PDFで取得します。",
+      "spokenText": "作者が選んだ30mm、第3版から、原寸の型紙と説明書を、PDFで取得します。"
+    },
+    {
+      "id": "10-version",
+      "startSeconds": 104.0,
+      "untilSeconds": 111.1,
+      "sceneIds": [
+        "same-version-pdf"
+      ],
+      "text": "画面と型紙、組み立てガイドは、同じ設計版につながっています。",
+      "spokenText": "画面と型紙、組み立てガイドは、同じ設計版につながっています。"
+    },
+    {
+      "id": "11-guide",
+      "startSeconds": 112.0,
+      "untilSeconds": 123.0,
+      "sceneIds": [
+        "guide-parts-and-glue"
+      ],
+      "text": "ガイドでは、部品の向きや折り方を、一工程ずつ確認できます。",
+      "spokenText": "ガイドでは、部品の向きや折り方を、一工程ずつ確認できます。"
+    },
+    {
+      "id": "12-glue",
+      "startSeconds": 128.0,
+      "untilSeconds": 138.0,
+      "sceneIds": [
+        "guide-parts-and-glue"
+      ],
+      "text": "接着する面と、動かすために接着しない場所も、図で確かめます。",
+      "spokenText": "接着する面と、動かすために接着しない場所も、図で確かめます。"
+    },
+    {
+      "id": "13-physical",
+      "startSeconds": 139.0,
+      "untilSeconds": 145.8,
+      "sceneIds": [
+        "guide-parts-and-glue"
+      ],
+      "text": "紙での動作は、まだ未確認です。印刷して、実物で確かめます。",
+      "spokenText": "紙での動作は、まだ未確認です。印刷して、実物で確かめます。"
+    },
+    {
+      "id": "14-save",
+      "startSeconds": 146.6,
+      "untilSeconds": 153.0,
+      "sceneIds": [
+        "save-and-resume"
+      ],
+      "text": "作品と手順の位置を保存して、続きから再開できます。",
+      "spokenText": "作品と手順の位置を保存して、続きから再開できます。"
+    },
+    {
+      "id": "15-closing",
+      "startSeconds": 153.8,
+      "untilSeconds": 160.2,
+      "sceneIds": [
+        "save-and-resume"
+      ],
+      "text": "AIが提案し、コードが確かめ、作者が選ぶ。",
+      "spokenText": "AIが提案し、コードが確かめ、作者が選ぶ。"
+    }
+  ]
+}
