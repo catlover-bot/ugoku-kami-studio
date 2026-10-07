@@ -100,9 +100,11 @@ export async function interpretation(page: Page) {
   if (await detail.count() && !(await detail.evaluate(element => (element as HTMLDetailsElement).open))) await detail.locator(':scope > summary').click();
 }
 
-export async function splitPrint(page: Page) {
-  const detail = page.locator('.split-options');
-  if (!(await detail.evaluate(element => (element as HTMLDetailsElement).open))) await detail.locator(':scope > summary').click();
+/** Goal013 uses one download action with an explicit PDF content selection. */
+export async function selectPdfMode(page: Page, mode: 'all' | 'pattern' | 'instructions') {
+  const control = page.getByLabel('PDFに含める内容', {exact: true});
+  await control.selectOption(mode);
+  await expect(control).toHaveValue(mode);
 }
 
 export async function physical(page: Page) {

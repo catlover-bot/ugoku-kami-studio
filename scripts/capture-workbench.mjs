@@ -1,0 +1,61 @@
+/** Actual local workbench capture; no product state injection or model calls.
+ * Start an AI_PROVIDER=none server first, then run from the source worktree:
+ * CAPTURE_IMAGE_FILE=/path/to/before/developer-fish.png \
+ * CAPTURE_OUTPUT_DIR=/path/to/new/capture CAPTURE_ORIGIN=http://127.0.0.1:4194 \
+ * node --import tsx scripts/capture-workbench.mjs
+ * Ordinary uploads, selection, requests, adoption, PDF and guide all use the UI.
+ */
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {readFile,writeFile,mkdir,access} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+import {pathToFileURL} from 'node:url';
+import {join} from 'node:path';
+const SOURCE=process.env.CAPTURE_SOURCE_ROOT || process.cwd();
+const OUT=process.env.CAPTURE_OUTPUT_DIR;
+const INPUT=process.env.CAPTURE_IMAGE_FILE;
+const ORIGIN=process.env.CAPTURE_ORIGIN || 'http://127.0.0.1:4194';
+assert(OUT && INPUT, 'Set CAPTURE_OUTPUT_DIR to a new directory and CAPTURE_IMAGE_FILE to the same developer PNG used for before capture.');
+assert(['127.0.0.1','localhost'].includes(new URL(ORIGIN).hostname), 'Only a loopback application is permitted.');
+const require=createRequire(join(SOURCE,'package.json'));
+const {chromium,expect}=require('@playwright/test');
+const {PDFDocument}=require('pdf-lib');
+const helpers=await import(pathToFileURL(join(SOURCE,'tests/e2e/helpers.ts')));
+const {startSample,stage,manual,precision,saveProject}=helpers;
+const sha=b=>createHash('sha256').update(b).digest('hex');
+const save=async(p,v)=>writeFile(p,JSON.stringify(v,null,2)+'\n');
+assert.equal(await access(join(OUT,'manifest.json')).then(()=>true,()=>false), false, 'Capture directory already contains a manifest; preserve previous evidence.');
+await mkdir(OUT,{recursive:true});
+const sourceSha=execFileSync('git',['rev-parse','HEAD'],{cwd:SOURCE,encoding:'utf8'}).trim();
+const sourceDirty=execFileSync('git',['status','--short'],{cwd:SOURCE,encoding:'utf8'});
+const sourceDiffSha=sha(execFileSync('git',['diff'],{cwd:SOURCE}));
+const image=await readFile(INPUT);
+const inputFile=join(OUT,'developer-fish.png');await writeFile(inputFile,image);
+const manifest={sourceSha,sourceDirty,sourceDiffSha,sourceState:sourceDirty ? 'working source; source and dist fingerprints recorded separately, not an immutable commit claim' : 'clean source; served dist fingerprints recorded separately',sourceRoot:SOURCE,origin:ORIGIN,classification:'Actual ordinary local UI; AI_PROVIDER=none. AI state fixtures explicitly mocked in browser only.',input:{path:inputFile,sha256:sha(image),provenance:'Caller-provided developer fixture; reuse the before capture PNG. Input bytes are preserved.',selection:{x:350,y:170,width:300,height:210},widthMm:160,heightMm:110,travelMm:20,maxSheets:1},viewports:[{width:1440,height:900},{width:1366,height:768},{width:390,height:844},{width:320,height:844}],flows:[],externalBlocked:[],unexpectedRuns:[],pageErrors:[],startedAt:new Date().toISOString()};
+const inventory = {};
+for (const [kind, args] of [['source',['--files','apps/web/src','apps/server/src','packages/core/src','packages/export/src']],['build',['--files','--no-ignore','apps/web/dist','dist/server']]]) {
+  const files=execFileSync('rg',args,{cwd:SOURCE,encoding:'utf8'}).trim().split('\n').filter(Boolean).sort();
+  inventory[kind]=await Promise.all(files.map(async file=>({file,sha256:sha(await readFile(join(SOURCE,file)))})));
+}
+await save(join(OUT,'source-binding.json'),{sourceSha,sourceDirty,sourceDiffSha,classification:manifest.sourceState,origin:ORIGIN,inventory});
+const browser=await chromium.launch();
+async function context(viewport){const c=await browser.newContext({viewport,deviceScaleFactor:1});await c.route('**/*',async r=>{const u=new URL(r.request().url());if(!['127.0.0.1','localhost'].includes(u.hostname)){manifest.externalBlocked.push(u.origin+u.pathname);return r.abort();}if(r.request().method()==='POST'&&/\/runs$/.test(u.pathname)){manifest.unexpectedRuns.push(u.pathname);return r.abort();}return r.continue();});return c;}
+async function snap(page,dir,name,flow){await page.evaluate(()=>{window.scrollTo(0,0);for(const e of document.querySelectorAll('*'))if(e.scrollHeight>e.clientHeight&&/(auto|scroll)/.test(getComputedStyle(e).overflowY))e.scrollTop=0;});await page.evaluate(()=>document.fonts.ready);await page.waitForTimeout(100);const metrics=await page.evaluate(()=>{const visible=e=>e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true});const rect=e=>{const b=e.getBoundingClientRect();return{x:b.x,y:b.y,width:b.width,height:b.height};};const svgRects=[...document.querySelectorAll('svg.artwork-svg')].map(s=>({box:rect(s),viewBox:s.getAttribute('viewBox'),phase:s.getAttribute('data-phase'),parts:[...s.querySelectorAll('[data-part="paper"],[data-part="original-art"]')].map(e=>({part:e.getAttribute('data-part'),...rect(e)}))}));const labels=[...document.querySelectorAll('button,textarea,input,summary')].filter(visible).map(e=>({text:e.getAttribute('aria-label')||e.textContent?.trim()||e.getAttribute('placeholder')||'',...rect(e),scrollNeededAtTop:Math.max(0,Math.ceil(e.getBoundingClientRect().bottom-innerHeight)),clippedBy:[...function*(n){for(let p=n.parentElement;p;p=p.parentElement)yield p;}(e)].filter(p=>/(auto|scroll)/.test(getComputedStyle(p).overflowY)&&p.scrollHeight>p.clientHeight).map(p=>({tag:p.tagName,className:p.className,height:p.clientHeight,scrollHeight:p.scrollHeight,scrollTop:p.scrollTop,scrollNeeded:Math.max(0,Math.ceil(e.getBoundingClientRect().bottom-p.getBoundingClientRect().bottom))}))}));const paragraphs=[...document.querySelectorAll('p,li,h1,h2,h3')].filter(visible).map(e=>e.textContent.trim()).filter(Boolean);const counts={};for(const text of paragraphs)counts[text]=(counts[text]||0)+1;const boxes=[...document.querySelectorAll('main *')].filter(e=>{if(!visible(e))return false;const s=getComputedStyle(e),b=e.getBoundingClientRect();return b.width>80&&b.height>30&&((parseFloat(s.borderTopWidth)>0&&s.borderTopStyle!=='none')||(parseFloat(s.borderLeftWidth)>0&&s.borderLeftStyle!=='none'));}).map(e=>({tag:e.tagName,className:e.className,...rect(e)}));return{viewport:{width:innerWidth,height:innerHeight},documentHeight:document.documentElement.scrollHeight,horizontalOverflow:document.documentElement.scrollWidth-innerWidth,stamp:{designId:document.querySelector('main')?.getAttribute('data-design-id'),revision:document.querySelector('main')?.getAttribute('data-design-revision'),hash:document.querySelector('main')?.getAttribute('data-design-hash')},svgRects,printRect:document.querySelector('.print-preview')?rect(document.querySelector('.print-preview')):null,printContentRect:(()=>{const img=document.querySelector('.print-preview');if(!img||!img.naturalWidth)return null;const box=rect(img),scale=Math.min(box.width/img.naturalWidth,box.height/img.naturalHeight);return{x:box.x+(box.width-img.naturalWidth*scale)/2,y:box.y+(box.height-img.naturalHeight*scale)/2,width:img.naturalWidth*scale,height:img.naturalHeight*scale};})(),controls:labels,displayedParagraphCharacters:paragraphs.join('').length,duplicateExactParagraphs:Object.entries(counts).filter(([,n])=>n>1),borderedBoxes:boxes};});await page.screenshot({path:join(dir,name+'.png'),fullPage:false});await page.screenshot({path:join(dir,name+'-full.png'),fullPage:true});await save(join(dir,name+'.json'),metrics);flow.states.push({name,metrics:name+'.json',screenshot:name+'.png',stamp:metrics.stamp});await save(join(OUT,'manifest.json'),manifest);console.log(JSON.stringify({captured:dir+'/'+name,stamp:metrics.stamp}));}
+try{
+for(const vp of manifest.viewports){for(const type of ['sample','own']){
+ const c=await context(vp),page=await c.newPage();page.on('pageerror',e=>manifest.pageErrors.push(e.message));const dir=join(OUT,`${vp.width}x${vp.height}`,type);await mkdir(dir,{recursive:true});const flow={viewport:vp,type,directory:dir,states:[]};manifest.flows.push(flow);
+ try{await page.goto(manifest.origin);await expect(page.locator('.home-library')).toBeVisible();await snap(page,dir,'01-home',flow);
+ if(type==='sample'){await startSample(page);}else{await page.getByLabel('画像を選ぶ',{exact:true}).setInputFiles(inputFile);await expect(page.locator('.artwork-svg')).toBeVisible();await page.getByRole('button',{name:'2点で囲む',exact:true}).click();const svg=page.locator('.artwork-svg');await svg.scrollIntoViewIfNeeded();
+ // Use source pixels and the rendered SVG CTM, not CSS offsets. Source dimensions are measured from the PNG below.
+ const dims=await page.evaluate(()=>{const i=document.querySelector('.artwork-svg image');return new Promise(resolve=>{const image=new Image();image.onload=()=>resolve({w:image.naturalWidth,h:image.naturalHeight});image.src=i.getAttribute('href');});});const coords=await svg.evaluate((s,dims)=>{const p=s.querySelector('[data-part="original-art"]');return[[350,170],[650,380]].map(([px,py])=>{const d=new DOMPoint(+p.getAttribute('x')+px/dims.w*+p.getAttribute('width'),+p.getAttribute('y')+py/dims.h*+p.getAttribute('height')).matrixTransform(s.getScreenCTM());return{x:d.x,y:d.y};});},dims);for(const p of coords)await page.mouse.click(p.x,p.y);await expect(page.getByRole('button',{name:'選択の編集を終える',exact:true})).toBeVisible();}
+ await snap(page,dir,'02-selection',flow);
+ if(type==='own'){await page.getByRole('button',{name:'選択の編集を終える',exact:true}).click();await precision(page);for(const [label,value] of [['作品の幅（mm）','160'],['作品の高さ（mm）','110'],['動く距離（mm）','20'],['紙の上限（枚）','1']]){const f=page.getByLabel(label,{exact:true});await f.fill(value);await f.press('Enter');}await page.locator('.numeric-details > summary').click();}
+ await stage(page,2);await page.getByRole('button',{name:'はじめ',exact:true}).click();await snap(page,dir,'03-motion-start',flow);await page.getByRole('button',{name:'おわり',exact:true}).click();await snap(page,dir,'04-motion-end',flow);await page.getByRole('button',{name:'裏のしくみ',exact:true}).click();await snap(page,dir,'05-mechanism-end',flow);await page.getByRole('button',{name:'正面',exact:true}).click();
+ await save(join(dir,'before.ugoku.json'),await saveProject(page));await manual(page);await page.getByLabel('どう動かしたいですか？',{exact:true}).fill('あと5mm動かす。絵の大きさを保って、紙は増やさない');await snap(page,dir,'06-request',flow);await page.getByRole('button',{name:'寸法から案をつくる',exact:true}).click();await expect(page.locator('.intent-panel').getByRole('button',{name:'この案にする',exact:true})).toBeVisible();await snap(page,dir,'07-manual-candidate',flow);
+ if(vp.width<=390){await page.getByRole('button',{name:'いまの作品',exact:true}).click();await snap(page,dir,'07b-current-comparison',flow);await page.getByRole('button',{name:'候補の作品',exact:true}).click();}
+ await page.locator('.intent-panel').getByRole('button',{name:'この案にする',exact:true}).click();const adopted=await saveProject(page);await save(join(dir,'adopted.ugoku.json'),adopted);assert.equal(adopted.document.input.travelMm,25);await stage(page,3);await snap(page,dir,'08-print',flow);const dl=page.waitForEvent('download');await page.getByRole('button',{name:'PDFをダウンロード',exact:true}).click();const pdfPath=join(dir,'adopted.pdf');await(await dl).saveAs(pdfPath);const pdf=await PDFDocument.load(await readFile(pdfPath));assert(pdf.getSubject().includes(adopted.document.designHash));flow.pdf={file:pdfPath,sha256:sha(await readFile(pdfPath)),title:pdf.getTitle(),subject:pdf.getSubject(),pages:pdf.getPageCount()};await page.getByRole('button',{name:'組み立てガイドを開く',exact:true}).click();await page.getByRole('button',{name:'次の工程',exact:true}).click();await expect(page.locator('.assembly-guide')).toHaveAttribute('data-design-hash',adopted.document.designHash);await snap(page,dir,'09-guide-step2',flow);flow.status='passed';
+ }catch(error){flow.status='failed';flow.error={name:error.name,message:error.message};await page.screenshot({path:join(dir,'failure.png'),fullPage:true}).catch(()=>{});console.log(JSON.stringify({failure:flow.error,dir}));throw error;}finally{await c.close();await save(join(OUT,'manifest.json'),manifest);}
+}}
+manifest.status='manual-passed';
+}catch(e){manifest.status='failed';manifest.failure=e.message;process.exitCode=1;}finally{await browser.close();manifest.finishedAt=new Date().toISOString();await save(join(OUT,'manifest.json'),manifest);}

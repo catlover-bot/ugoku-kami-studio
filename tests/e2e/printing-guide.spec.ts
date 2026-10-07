@@ -9,14 +9,11 @@ import { PDFArray, PDFDocument, PDFName, PDFRawStream, type PDFPage } from 'pdf-
 import { createDesign, getAssemblySteps, SAMPLE_INPUT, type DesignDocument } from '@ugoku/core';
 import { INSTRUCTION_PAGE_COUNT, ORIGINAL_SAMPLE_SVG } from '@ugoku/export';
 import type { Project } from '../../apps/web/src/project';
-import { manual, splitPrint, saveProject, savedProject, savedWorkspace, stage, startSample } from './helpers';
+import { manual, selectPdfMode, saveProject, savedProject, savedWorkspace, stage, startSample } from './helpers';
 
 const outputRoot = 'artifacts/goal005/printing-guide';
 const sha256 = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
-const downloads = {
-  all: 'PDFをダウンロード', pattern: '型紙だけを保存', instructions: '組み立て説明だけを保存',
-} as const;
-type Mode = keyof typeof downloads;
+type Mode = 'all' | 'pattern' | 'instructions';
 
 /** Real downloaded drawing streams, including numeric scale/position operands. */
 function drawingCommands(page: PDFPage) {
@@ -40,9 +37,9 @@ async function manifest(path: string, page: Page, document: DesignDocument, evid
   }, null, 2) + '\n');
 }
 async function downloadPdf(page: Page, mode: Mode, document: DesignDocument, path: string) {
-  if (mode !== 'all') await splitPrint(page);
+  await selectPdfMode(page, mode);
   const pending = page.waitForEvent('download');
-  await page.getByRole('button', { name: downloads[mode], exact: true }).click();
+  await page.getByRole('button', { name: 'PDFをダウンロード', exact: true }).click();
   const download = await pending;
   expect(download.suggestedFilename()).toMatch(/\.pdf$/);
   await download.saveAs(path);

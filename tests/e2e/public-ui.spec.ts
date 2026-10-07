@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { getKitSummary } from '@ugoku/core';
 import { readFile, writeFile } from 'node:fs/promises';
 import { createApp } from '../../apps/server/src/app';
 import { readConfig } from '../../apps/server/src/config';
@@ -138,6 +139,22 @@ test('saved tool-event reconstruction (not live AI): three textless responses pr
     await expect(page.locator('.ai-panel')).toContainText('希望の70mmに対し、候補は35mm');
     await expect(page.locator('main')).toHaveAttribute('data-design-hash', fixture.project.document.designHash);
     await expect(page.locator('.comparison-after figcaption')).toContainText('35mm');
+    const comparison = page.locator('.ai-panel .design-comparison');
+    await expect(comparison.locator('.comparison-distances dt')).toHaveText(['現在', '希望', '候補（代案）']);
+    await expect(comparison.locator('.comparison-distances dd')).toHaveText([`${fixture.project.document.input.travelMm}mm`, '70mm', '35mm']);
+    await expect(comparison.locator('.candidate-paper')).toContainText('絵の大きさを維持');
+    const allChecks = comparison.locator('.candidate-checks');
+    const candidateChecks = getKitSummary(run.proposal!.document).checks;
+    await expect(allChecks).not.toHaveAttribute('open', '');
+    await allChecks.locator('summary').focus(); await page.keyboard.press('Enter');
+    await expect(allChecks.locator('li')).toHaveCount(candidateChecks.length);
+    for (const check of candidateChecks) await expect(allChecks.getByText(check.message, { exact: false })).toBeVisible();
+    await allChecks.locator('summary').press('Enter');
+    await expect(allChecks).not.toHaveAttribute('open', '');
+    if (info.project.name === 'mobile') await page.setViewportSize({width: 320, height: 800});
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await accept.scrollIntoViewIfNeeded(); await expect(accept).toBeInViewport();
+    expect((await accept.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     await page.screenshot({path: info.outputPath('reconstructed-alternative-not-live.png')});
     await accept.click();
     const saved = await saveProject(page) as Project;

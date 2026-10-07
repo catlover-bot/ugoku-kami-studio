@@ -248,7 +248,8 @@ try {
   const close = guide.getByRole('button', { name: 'ガイドを閉じる', exact: true });
   await expect(guide.locator('.assembly-guide-step')).toHaveAttribute('data-step', '1');
   await capture('05-acquired-guide-step-one', [close, next], acquired);
-  await guide.getByRole('region', { name: '工程1の組み立て図', exact: true }).focus();
+  // The navigation now precedes the large diagram; tab from the last view control.
+  await guide.getByRole('group', { name: '組み立てガイドの表示', exact: true }).getByRole('button', { name: '全工程', exact: true }).focus();
   await page.keyboard.press('Tab'); await expect(next).toBeFocused();
   evidence.keyboardNext = await target(next, true);
   await page.keyboard.press('Enter');

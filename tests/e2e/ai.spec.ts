@@ -98,7 +98,7 @@ class AiFixture {
 async function open(page: Page, fixture: AiFixture) {
   await fixture.attach(page); await page.goto('/'); await startSample(page);
   await precision(page); await ai(page);
-  await expect(page.locator('.connection')).toHaveText('Gemini（設定済み）');
+  await expect(page.locator('.ai-settings h3')).toHaveText('Gemini（設定済み）');
   await expect(page.getByLabel('動く距離（mm）', {exact:true})).toHaveValue('20');
   await page.getByLabel('AIアクセスコード').fill('test-only-access'); await page.getByRole('dialog', {name: '設定', exact: true}).getByRole('button', {name: '閉じる', exact: true}).click();
   await page.getByLabel('どう動かしたいですか？').fill('動く距離を15mmにしたい');

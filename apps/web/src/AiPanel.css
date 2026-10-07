@@ -1,17 +1,24 @@
-.ai-panel .ai-introduction { font-size: 15px; color: var(--muted); margin-bottom: 10px; }
-.ai-panel .ai-availability { border-left: 3px solid var(--boundary); padding-left: 12px; margin: 14px 0; font-size: 15px; }
-.ai-request-conditions { margin-top: 18px; }
-.ai-request-conditions h3 { font-size: 15px; }
-.ai-request-conditions ul { padding-left: 21px; margin: 7px 0 0; font-size: 15px; }
-.ai-request-conditions li + li { margin-top: 3px; }
-.ai-settings { border-block: 1px solid var(--line); margin-top: 18px; }
-.ai-settings > summary { font-size: 14px; }
-.ai-settings[open] { padding-bottom: 14px; }
+.ai-panel { min-width: 0; }
+.ai-panel > .notice { margin-block: 10px; }
+.ai-panel .ai-wait { margin-block: 12px; padding: 12px 0; border-block: 1px solid var(--line); border-left: 0; background: transparent; font-size: 15px; }
+.ai-wait p { margin: 0 0 8px; }
+.ai-wait .button-row { gap: 8px; margin-top: 8px; }
+.ai-panel .proposal > h3, .intent-panel .manual-result > h3 { font-size: 16px; line-height: 1.5; margin-bottom: 8px; }
+.proposal-explanation { border-top: 1px solid var(--line); font-size: 14px; }
+.proposal-explanation > summary { min-height: 44px; padding: 10px 0; font-weight: 500; }
+.proposal-explanation p { margin: 0 0 12px; overflow-wrap: anywhere; }
+.ai-validation-issues { border-left: 3px solid var(--danger, #a52d22); padding-left: 12px; margin: 14px 0; }
+.ai-validation-issues h3 { margin: 0 0 8px; font-size: 15px; }
+.ai-validation-issues p { margin: 8px 0; font-size: 14px; overflow-wrap: anywhere; }
+.ai-settings { margin: 0; }
+.ai-settings h3 { font-size: 16px; margin-bottom: 12px; }
 .ai-settings p, .ai-settings small { font-size: 14px; }
 .ai-settings .field { display: block; margin-top: 12px; }
-.ai-settings .field input { max-width: 380px; }
-.ai-panel .ai-evidence, .ai-panel .execution-log { overflow-wrap: anywhere; }
+.ai-settings .field input { display: block; width: 100%; max-width: 380px; margin-top: 6px; }
+.ai-settings .field small { display: block; margin-top: 6px; }
+.ai-evidence, .execution-log { overflow-wrap: anywhere; font-size: 14px; }
+.ai-evidence ul, .execution-log { padding-left: 20px; }
+.ai-evidence li + li, .execution-log li + li { margin-top: 12px; }
 @media (max-width: 600px) {
-  .ai-panel .section-top { flex-wrap: wrap; gap: 6px; }
   .ai-settings .field input { max-width: none; }
 }

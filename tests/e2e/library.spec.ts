@@ -44,7 +44,7 @@ async function saved(page: Page) {
 }
 async function home(page: Page) {
   await page.getByRole('button', { name: '作品一覧', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '絵から、紙工作をつくろう。', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '作品をつくる', exact: true })).toBeVisible();
 }
 function entryById(page: Page, id: string) { return page.locator(`.library-entry[data-project-id="${id}"]`); }
 async function more(article: Locator) {
@@ -129,7 +129,7 @@ test('P4 Home keeps samples ephemeral, supports own artwork and three works, and
   const remove = page.getByRole('dialog', { name: '作品の削除', exact: true });
   await expect(remove.getByRole('heading')).toContainText('残しておく原本 の複製');
   await remove.getByRole('button', { name: 'キャンセル', exact: true }).click(); await expect(copy).toBeVisible();
-  await copy.getByRole('button', { name: '削除する', exact: true }).click(); await remove.getByRole('button', { name: '削除する', exact: true }).click();
+  await more(copy); await copy.getByRole('button', { name: '削除する', exact: true }).click(); await remove.getByRole('button', { name: '削除する', exact: true }).click();
   await expect(page.locator('.library-entry')).toHaveCount(3); await expect(original).toBeVisible();
   await screenshot(page, info, 'three-works');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);

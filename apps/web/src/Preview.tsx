@@ -4,7 +4,7 @@ import { getArtworkComposition, type DesignDocument, type Rect } from '@ugoku/co
 type View = 'front' | 'back' | 'original';
 type Point = { x: number; y: number };
 type Gesture = { start: Point; initial: Rect; corner?: string; move: boolean };
-type Props = { document: DesignDocument; imageDataUrl: string; backgroundImageDataUrl?: string; position: number; view: View; editing: boolean; selection: Rect | null; onSelection: (selection: Rect) => void; showMotion?: boolean; bounds?: Rect; zoom?: number; selectionMode?: 'drag' | 'corners'; travelPreviewMm?: number };
+type Props = { document: DesignDocument; imageDataUrl: string; backgroundImageDataUrl?: string; position: number; view: View; editing: boolean; selection: Rect | null; onSelection: (selection: Rect) => void; showMotion?: boolean; bounds?: Rect; zoom?: number; selectionMode?: 'drag' | 'corners'; travelPreviewMm?: number; pan?: Point; panMode?: boolean; onPan?: (pan: Point) => void };
 
 /** One common millimetre viewport for every design in a comparison. */
 export function getPreviewBounds(documents: DesignDocument[], view: View = 'front'): Rect {
@@ -17,10 +17,11 @@ export function getPreviewBounds(documents: DesignDocument[], view: View = 'fron
   return { x, y, width: Math.max(...extents.map(rect => rect.x + rect.width)) + 10 - x, height: Math.max(...extents.map(rect => rect.y + rect.height)) + 12 - y };
 }
 
-export default function Preview({ document, imageDataUrl, backgroundImageDataUrl, position, view, editing, selection, onSelection, showMotion = false, bounds, zoom = 1, selectionMode = 'drag', travelPreviewMm }: Props) {
+export default function Preview({ document, imageDataUrl, backgroundImageDataUrl, position, view, editing, selection, onSelection, showMotion = false, bounds, zoom = 1, selectionMode = 'drag', travelPreviewMm, pan = { x: 0, y: 0 }, panMode = false, onPan }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const gesture = useRef<Gesture | null>(null);
   const anchor = useRef<Point | null>(null);
+  const panGesture = useRef<{ x: number; y: number; initial: Point; unitX: number; unitY: number } | null>(null);
   const keyboardDraft = useRef<Rect | null>(null);
   const [draft, setDraft] = useState<Rect | null>(null);
   const [selecting, setSelecting] = useState(false);
@@ -37,9 +38,9 @@ export default function Preview({ document, imageDataUrl, backgroundImageDataUrl
   const tab = document.parts.find(part => part.role === 'pull-tab')!;
   const mirror = (rect: Rect): Rect => view === 'back' ? { ...rect, x: input.widthMm - rect.x - rect.width } : rect;
   const extent = bounds ?? getPreviewBounds([document], view);
-  const viewport = { x: extent.x + extent.width * (1 - 1 / zoom) / 2, y: extent.y + extent.height * (1 - 1 / zoom) / 2, width: extent.width / zoom, height: extent.height / zoom };
-  const cancel = () => { gesture.current = null; anchor.current = null; keyboardDraft.current = null; setDraft(null); setSelecting(false); };
-  useEffect(() => { gesture.current = null; anchor.current = null; keyboardDraft.current = null; setDraft(null); setSelecting(false); }, [editing, view, selectionMode, input.image.id, document.designId, document.designHash]);
+  const viewport = { x: extent.x + extent.width * (1 - 1 / zoom) / 2 + pan.x, y: extent.y + extent.height * (1 - 1 / zoom) / 2 + pan.y, width: extent.width / zoom, height: extent.height / zoom };
+  const cancel = () => { panGesture.current = null; gesture.current = null; anchor.current = null; keyboardDraft.current = null; setDraft(null); setSelecting(false); };
+  useEffect(() => { panGesture.current = null; gesture.current = null; anchor.current = null; keyboardDraft.current = null; setDraft(null); setSelecting(false); }, [editing, view, selectionMode, panMode, input.image.id, document.designId, document.designHash]);
   useEffect(() => {
     const svg = svgRef.current;
     if (!svg) return;
@@ -64,7 +65,17 @@ export default function Preview({ document, imageDataUrl, backgroundImageDataUrl
     }
     return rectangle(active.start, end);
   }
+  function movePan(next: Point) {
+    onPan?.({ x: Math.max(-extent.width / 2, Math.min(extent.width / 2, next.x)), y: Math.max(-extent.height / 2, Math.min(extent.height / 2, next.y)) });
+  }
   function pointerDown(event: PointerEvent<SVGSVGElement>) {
+    if (panMode && event.button === 0 && onPan) {
+      const matrix = event.currentTarget.getScreenCTM();
+      if (!matrix) return;
+      event.preventDefault(); event.currentTarget.focus(); event.currentTarget.setPointerCapture(event.pointerId);
+      panGesture.current = { x: event.clientX, y: event.clientY, initial: pan, unitX: 1 / matrix.a, unitY: 1 / matrix.d };
+      return;
+    }
     if (!editing || view !== 'front' || event.button !== 0) return;
     event.preventDefault(); event.currentTarget.focus();
     if (selectionMode === 'corners') return;
@@ -78,12 +89,22 @@ export default function Preview({ document, imageDataUrl, backgroundImageDataUrl
     setSelecting(true);
   }
   function pointerMove(event: PointerEvent<SVGSVGElement>) {
-    if (!editing || view !== 'front') return;
+    if (panGesture.current) {
+      const start = panGesture.current;
+      movePan({ x: start.initial.x - (event.clientX - start.x) * start.unitX, y: start.initial.y - (event.clientY - start.y) * start.unitY });
+      return;
+    }
+    if (panMode || !editing || view !== 'front') return;
     if (gesture.current) setDraft(gestureRect(sourcePoint(event)));
     else if (anchor.current) setDraft(rectangle(anchor.current, sourcePoint(event)));
   }
   function pointerUp(event: PointerEvent<SVGSVGElement>) {
-    if (!editing || view !== 'front') return;
+    if (panGesture.current) {
+      panGesture.current = null;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+      return;
+    }
+    if (panMode || !editing || view !== 'front') return;
     if (selectionMode === 'corners') {
       const point = sourcePoint(event);
       if (!anchor.current) { anchor.current = point; setDraft({ ...point, width: 0, height: 0 }); setSelecting(true); return; }
@@ -96,7 +117,12 @@ export default function Preview({ document, imageDataUrl, backgroundImageDataUrl
     if (next && next.width >= 10 && next.height >= 10 && JSON.stringify(next) !== JSON.stringify(selection)) onSelection(next);
   }
   function keyboard(event: KeyboardEvent<SVGSVGElement>) {
-    if (event.key === 'Escape') { event.preventDefault(); cancel(); return; }
+    if (event.nativeEvent.isComposing) return;
+    if (event.key === 'Escape') { event.preventDefault(); if (panGesture.current) movePan(panGesture.current.initial); cancel(); return; }
+    if (panMode && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+      event.preventDefault(); const amount = event.shiftKey ? 10 : 3;
+      movePan({ x: pan.x + (event.key === 'ArrowRight' ? amount : event.key === 'ArrowLeft' ? -amount : 0), y: pan.y + (event.key === 'ArrowDown' ? amount : event.key === 'ArrowUp' ? -amount : 0) }); return;
+    }
     if (!editing || !selection || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
     event.preventDefault(); const amount = event.shiftKey ? 10 : 1;
     const start = keyboardDraft.current ?? selection;
@@ -108,7 +134,7 @@ export default function Preview({ document, imageDataUrl, backgroundImageDataUrl
   const motionStart = mirror(fixedMm), motionEnd = mirror({ ...fixedMm, x: fixedMm.x + axis.x * input.travelMm, y: fixedMm.y + axis.y * input.travelMm });
   const handles: [string, number, number][] = [['nw',selectedMm.x,selectedMm.y],['ne',selectedMm.x+selectedMm.width,selectedMm.y],['sw',selectedMm.x,selectedMm.y+selectedMm.height],['se',selectedMm.x+selectedMm.width,selectedMm.y+selectedMm.height]];
   return <div className="preview-surface">
-    <svg ref={svgRef} className={`artwork-svg ${editing ? 'editing' : ''}`} viewBox={`${viewport.x} ${viewport.y} ${viewport.width} ${viewport.height}`} data-design-hash={document.designHash} data-revision={document.revision} data-phase={position} data-zoom={zoom} role="img" aria-label={view === 'original' ? '元の絵。切り抜きや白い台紙の処理をしていない原画像' : view === 'back' ? '裏側から見た仕組み。左右を反転したタブ、ガイド、抜け止めと接着位置' : editing ? '動かす領域。ドラッグまたは2点タップで選択、矢印キーで移動、Shiftと矢印で10px移動' : '正面の動きのプレビュー'} tabIndex={editing ? 0 : undefined} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={cancel} onLostPointerCapture={() => { if (gesture.current) cancel(); }} onKeyDown={keyboard} onKeyUp={finishKeyboard} onBlur={finishKeyboard}>
+    <svg ref={svgRef} className={`artwork-svg ${editing ? 'editing' : ''} ${panMode ? 'panning' : ''}`} viewBox={`${viewport.x} ${viewport.y} ${viewport.width} ${viewport.height}`} data-design-hash={document.designHash} data-revision={document.revision} data-phase={position} data-zoom={zoom} data-pan-x={pan.x} data-pan-y={pan.y} role="img" aria-label={panMode ? '拡大した表示。ドラッグまたは矢印キーで移動できます。設計寸法は変わりません' : view === 'original' ? '元の絵。切り抜きや白い台紙の処理をしていない原画像' : view === 'back' ? '裏側から見た仕組み。左右を反転したタブ、ガイド、抜け止めと接着位置' : editing ? '動かす領域。ドラッグまたは2点タップで選択、矢印キーで移動、Shiftと矢印で10px移動' : '正面の動きのプレビュー'} tabIndex={editing || panMode ? 0 : undefined} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={cancel} onLostPointerCapture={() => { if (gesture.current || panGesture.current) cancel(); }} onKeyDown={keyboard} onKeyUp={finishKeyboard} onBlur={finishKeyboard}>
       <defs>
         {/* Zero offset forces one paper+ink composite before clipping, as in the PDF Form. */}
         <filter id={`${prefix}-paper-composite`} filterUnits="userSpaceOnUse" {...placement} colorInterpolationFilters="sRGB"><feOffset dx="0" dy="0" /></filter>
@@ -116,7 +142,7 @@ export default function Preview({ document, imageDataUrl, backgroundImageDataUrl
         <pattern id={`${prefix}-hatch`} width="3" height="3" patternUnits="userSpaceOnUse"><path d="M-1 1L1-1M0 3L3 0M2 4L4 2" stroke="#292923" strokeWidth="0.4" /></pattern>
       </defs>
       {view !== 'original' && !editing && <rect data-part="T1" {...tabPose} fill="white" stroke="#292923" strokeWidth="0.45" />}
-      <rect data-part="paper" x="0" y="0" width={input.widthMm} height={input.heightMm} fill="white" stroke={view === 'original' ? 'none' : '#81796d'} strokeWidth="0.4" />
+      <rect data-part="paper" x="0" y="0" width={input.widthMm} height={input.heightMm} fill="white" stroke={view === 'original' ? 'none' : 'var(--boundary)'} strokeWidth="0.4" />
       {view !== 'back' && <image data-part="original-art" href={imageDataUrl} {...placement} />}
       {view === 'front' && !editing && <>
         {selection && !composition.background && <rect data-part="fixed-fill" {...composition.fixedMask.rect} fill={composition.fixedMask.color} />}
@@ -125,8 +151,8 @@ export default function Preview({ document, imageDataUrl, backgroundImageDataUrl
         {selection && <g data-part="M1" transform={`translate(${dx} ${dy})`}><g style={{isolation: 'isolate'}} filter={`url(#${prefix}-paper-composite)`} clipPath={`url(#${prefix}-moving)`}><rect data-part="M1-paper" {...composition.movingPaper} fill="white" /><image href={imageDataUrl} {...placement} /></g></g>}
       </>}
       {view === 'front' && editing && (selection || draft) && <g>
-        <rect data-selection="move" {...selectedMm} fill="#a547321a" stroke="#71301f" strokeWidth={2 * unit} strokeDasharray={`${5 * unit} ${3 * unit}`} />
-        {handles.map(([corner,x,y]) => <g key={corner}><rect x={x - 4*unit} y={y - 4*unit} width={8*unit} height={8*unit} fill="white" stroke="#71301f" strokeWidth={2*unit} /><rect data-corner={corner} x={x - 22*unit} y={y - 22*unit} width={44*unit} height={44*unit} fill="transparent" style={{cursor: `${corner}-resize`}} /></g>)}
+        <rect data-selection="move" {...selectedMm} fill="var(--accent-soft)" fillOpacity="0.55" stroke="var(--accent)" strokeWidth={2 * unit} strokeDasharray={`${5 * unit} ${3 * unit}`} />
+        {handles.map(([corner,x,y]) => <g key={corner}><rect x={x - 4*unit} y={y - 4*unit} width={8*unit} height={8*unit} fill="white" stroke="var(--accent)" strokeWidth={2*unit} /><rect data-corner={corner} x={x - 22*unit} y={y - 22*unit} width={44*unit} height={44*unit} fill="transparent" style={{cursor: `${corner}-resize`}} /></g>)}
       </g>}
       {view === 'back' && <>
         {document.parts.filter(part => part.layer === 'back').sort((a,b) => (a.role === 'guide' ? 1 : 0) - (b.role === 'guide' ? 1 : 0)).map(part => {
@@ -137,8 +163,8 @@ export default function Preview({ document, imageDataUrl, backgroundImageDataUrl
         {document.parts.find(part => part.role === 'base')!.glue.map((glue, index) => { const rect = mirror(glue.rect); return <g key={index}><rect {...rect} fill={`url(#${prefix}-hatch)`} stroke="#292923" strokeWidth="0.3" /><text x={rect.x + 1} y={rect.y + 3} fontSize="2.4">のり</text></g>; })}
         <rect {...mirror(slot)} fill="none" stroke="#292923" strokeWidth="0.5" strokeDasharray="1.5 1" />
       </>}
-      {showMotion && selection && !editing && view !== 'original' && <g className="motion-overlay" fill="none" stroke="#71301f" strokeWidth="0.45"><rect data-motion="start" {...motionStart} strokeDasharray="1 1.4" /><rect data-motion="end" {...motionEnd} strokeDasharray="2 1" /></g>}
+      {showMotion && selection && !editing && view !== 'original' && <g className="motion-overlay" fill="none" stroke="var(--accent)" strokeWidth="0.45"><rect data-motion="start" {...motionStart} strokeDasharray="1 1.4" /><rect data-motion="end" {...motionEnd} strokeDasharray="2 1" /></g>}
     </svg>
-    {editing && <p className="selection-status" role="status">{selecting ? selectionMode === 'corners' ? '選択中：対角の点をタップ。Escで取り消し。' : '選択中：離すと確定。Escで取り消し。' : selection ? '選択済み。枠と四隅をドラッグ、または2点で選び直せます。' : '選択なし。動かす部分を囲んでください。'}</p>}
+    {editing && <p className="selection-status" role="status">{panMode ? '表示を移動中。枠を変えるには「表示を移動」を解除します。' : selecting ? selectionMode === 'corners' ? '選択中：対角の点をタップ。Escで取り消し。' : '選択中：離すと確定。Escで取り消し。' : selection ? '選択済み。枠と四隅をドラッグ、または2点で選び直せます。' : '選択なし。動かす部分を囲んでください。'}</p>}
   </div>;
 }

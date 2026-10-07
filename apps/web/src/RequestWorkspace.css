@@ -1,76 +1,27 @@
-/* The existing paper workbench has one current task, including during review. */
-.candidate-workbench { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper); padding: 22px; }
-.comparison-workbench .candidate-state { margin: 0 0 18px; color: var(--ink); font-size: 18px; font-weight: 600; }
-.comparison-workbench .comparison-previews .artwork-svg { height: 390px; }
-.comparison-workbench .comparison-position { margin-bottom: 0; }
-.motion-settings .settings-section { padding: 16px 18px; }
-.motion-settings .settings-section h2 { font-size: 16px; margin-bottom: 10px; }
-.motion-settings .direction-grid { grid-template-columns: repeat(4,minmax(0,1fr)); gap: 4px; }
-.motion-settings .direction-grid button { min-height: 44px; padding: 8px 2px; gap: 2px; }
-.motion-settings .direction-grid span { font-size: 17px; }
-.primary-travel { margin: 0; }
-.primary-travel .range-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.primary-travel .range-label:has(.field-error) { align-items: start; }
-.primary-travel .range-label .draft-number { max-width: 85px; }
-.motion-alternatives > summary { font-size: 14px; font-weight: 400; padding-block: 9px; min-height: 44px; }
-.motion-alternatives[open] > summary { margin-bottom: 0; }
-.primary-conditions .field-note { margin-top: 4px; }
-.primary-conditions .paper-limit { margin-block: 8px 0; }
-.motion-settings .stage-action { padding: 16px 18px; }
-.motion-settings .stage-action > .text-button { margin-block: 0; }
-.motion-request { border-top: 1px solid var(--line); padding: 16px 18px; min-width: 0; }
-.motion-request .request-editor > summary { font-size: 15px; min-height: 44px; padding: 9px 0; }
-.request-label { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 5px 8px; margin-bottom: 8px; }
-.request-label label { font-size: 15px; }
-.request-label .connection { font-size: 13px; }
-.motion-request .request-editor > textarea { min-height: 92px; }
-.request-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-.request-actions > button, .request-actions > div, .request-actions > div > button { width: 100%; }
+/* One context panel; the request and its result keep their mounted state. */
+.candidate-workbench { min-width: 0; }
+.comparison-workbench .candidate-state { margin: 0 0 8px; color: var(--ink); font-size: 16px; font-weight: 600; }
+.motion-request { border-bottom: 1px solid var(--line); padding: 8px 16px 12px; min-width: 0; }
+.motion-request .request-editor > summary { display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 0; list-style: none; font-size: 15px; }
+.motion-request .request-editor > summary::after { content: '＋'; margin-left: auto; font-weight: 400; }
+.motion-request .request-editor[open] > summary::after { content: '−'; }
+.motion-request .request-editor[open] > summary { margin-bottom: 4px; }
+.request-editor > textarea { display: block; width: 100%; min-height: 70px; font-size: 15px; line-height: 1.5; }
+.request-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.request-actions > button, .request-actions > div, .request-actions > div > button { width: 100%; min-width: 0; }
+.request-actions button { padding-inline: 6px; }
+.request-method-note { margin-top: 6px; font-size: 13px; }
 .motion-request .intent-panel, .motion-request .ai-panel { padding: 0; }
 .motion-request .intent-panel:empty, .motion-request .ai-panel:empty { display: none; }
-.motion-request .manual-result, .motion-request .proposal { border: 0; padding-top: 0; margin-top: 14px; }
-.motion-request .manual-result h3, .motion-request .proposal h3 { font-size: 17px; }
-.motion-request .design-comparison .button-row { flex-direction: column; align-items: stretch; gap: 8px; margin: 14px 0; }
-.motion-request .design-comparison .primary { min-width: 0; }
-.motion-request .change-table { font-size: 14px; }
-.motion-request .change-table th, .motion-request .change-table td { padding: 9px 5px; }
-.motion-request .candidate-paper { margin: 10px 0; }
-.motion-request .field-note { font-size: 14px; }
-.motion-request .request-interpretation { padding: 12px; margin-block: 12px; }
+.motion-request .manual-result, .motion-request .proposal { border: 0; padding-top: 0; margin-top: 12px; }
+.motion-request .manual-result h3, .motion-request .proposal h3 { font-size: 16px; }
+.motion-request .request-interpretation { padding: 10px 0; margin-block: 8px; }
 .interpretation-details { border-top: 1px solid var(--line); }
 .interpretation-details > summary { font-size: 14px; }
-.project-dialog .ai-settings { margin-top: 0; border-top: 0; }
+.project-dialog .ai-settings { margin-top: 0; border-top: 0; padding-bottom: 16px; }
 .project-dialog .ai-settings h3 { margin-bottom: 12px; }
-.project-dialog .ai-settings { padding-bottom: 16px; }
-.split-options > summary { font-size: 14px; }
-.kit-download .split-downloads { margin: 0 0 12px; }
-.mobile-start { grid-template-columns: minmax(0,1fr); }
-@media (max-width: 1100px) {
-  .comparison-workbench .comparison-previews .artwork-svg { height: 310px; }
-}
 @media (max-width: 800px) {
-  .motion-request { padding: 18px; }
-  .motion-settings .direction-grid button { gap: 8px; }
-  .request-actions { display: grid; grid-template-columns: 1fr 1fr; }
-  .candidate-workbench { padding: 16px; }
-}
-@media (max-width: 560px) {
-  .comparison-workbench .comparison-previews .artwork-svg { height: 280px; }
-  .candidate-workbench { padding: 15px; }
-  .comparison-workbench .candidate-state { font-size: 16px; }
-  .request-actions { display: flex; }
-  .motion-settings .direction-grid button { flex-direction: row; gap: 3px; }
-}
-.motion-settings .numeric-details { padding-block: 0; }
-.motion-settings .numeric-details[open] { padding-bottom: 16px; }
-.motion-request .request-editor > summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 5px; list-style: none; }
-.motion-request .request-editor > summary::before { content: '＋'; font-weight: 400; }
-.motion-request .request-editor[open] > summary::before { content: '−'; }
-.motion-request .request-editor > summary .connection { margin-left: auto; font-size: 12px; font-weight: 400; }
-.motion-request .request-editor[open] > summary { margin-bottom: 12px; }
-.check-summary:empty { display: none; }
-@media (max-width: 560px) {
-  .site-header { flex-wrap: wrap; }
-  .header-actions { flex: 1; max-width: none; }
-  .brand { padding-block: 0; }
+  .candidate-workbench { padding: 0 0 12px; }
+  .motion-request { padding: 12px 16px; }
+  .request-editor > textarea { min-height: 82px; }
 }
