@@ -1,12 +1,22 @@
 # デモ構成と提出準備
 
-## Goal011の現在の提出素材と公開状態
+## Goal014：新UIの提出候補
+
+新しい提出候補は `artifacts/submission/public/goal014-final/` にまとめる。MP4は160.60秒（2分40.60秒）、1920×1080・25fps・無音。全4,015フレームのデコード、等速での全編再生（drop/corruptとも0）、全14場面と13カット前後の抽出・目視、ZIP全件の展開照合を完了した。完成版の選択は同フォルダの `README.txt`・`manifest.json` を基準にする。[提出欄と制作手順](../scripts/submission/README.md)、[Goal014の出所と区別](goals/014-current-ui-submission.md)を参照。
+
+画像はGoal013の新UI4枚を同じバイトで使用する。選択→20mmの条件設定→手動20→25mm比較→採用した第7版・25mmの印刷画面で、実AIの生成結果ではない。動画は別の新UI手動25→30mmデモ、旧UIの実Vertex録画の安全な短い抜粋、旧AI採用正本30mm・第3版を新UIで開く別セッションのPDF・ガイド・保存再開で構成する。手動支援と実AI、別作品・別版・別セッションを混同しない。
+
+紹介文2欄と構成図はreview-v2.1を引き継ぎ、旧素材・ZIP・実物確認用PDFを保全する。非公開審査手順だけにコードを含め、新UIのボタン名へ更新する。今回の素材制作でアプリ・Cloud設定・公開サービスは変更せず、新しいAI送信、YouTube投稿、Zenn最終提出も行わない。手元の記録に最終提出完了の明示はなく、外部フォームの現在状態は未確認。実物の印刷・組立・動作も未確認のまま記す。
+
+以下は各時点の素材と確認履歴であり、最新版のファイル選択には使わない。
+
+## Goal011時点の提出素材と公開状態
 
 2026年10月6日15:37 JST、監視障害による停止から同じ公開URL・同じアプリ版で復旧を確認しました。通常監視と新規ブラウザの手動編集・保存再開・同版PDF・AI認証拒否を実確認。動画・画像・紹介文・PDFのバイト列は保持し、素材README/manifestと非公開審査手順の公開状態だけを更新しました。新ZIP SHA-256は `5249f9f212ff36f253eb01026165ce4a1020893c66766a2fb090ec984797177e`。実AIの追加はなく、下記の実Vertex記録は元の試行のままです。
 
 [実際の公開URL](https://ugoku-kami-release-011-erl7e5ym5a-an.a.run.app)で、Google未ログインの新規ブラウザから手動編集・画像入力・保存/PDF、コード付き実Vertexの候補比較・採用・同版PDF/ガイド・保存再読込を確認しました。WSLプロキシは停止しています。[実結果と運用](public-operation-011.md)。AIコードを含む手順は `artifacts/submission/private/goal011/reviewer-instructions.txt` に分離しています。
 
-最新のローカル素材は `artifacts/submission/public/goal011/` です。
+Goal011当時のローカル素材は `artifacts/submission/public/goal011/` に保全しています。
 
 | 提出欄・用途 | 実ファイル |
 |---|---|

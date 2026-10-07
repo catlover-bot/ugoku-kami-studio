@@ -1,0 +1,244 @@
+{
+  "schemaVersion": 1,
+  "edition": "goal014-final",
+  "status": "local-media-reviewed-ready-for-user-submission",
+  "language": "ja",
+  "outputDirectory": "artifacts/submission/public/goal014-final/",
+  "scope": {
+    "newModelCalls": 0,
+    "newCloudChanges": 0,
+    "productChanges": 0,
+    "preserveHistoricalAssets": true,
+    "youtubePostedByThisWork": false,
+    "zennSubmittedByThisWork": false,
+    "physicalValidation": "unverified"
+  },
+  "textCounts": {
+    "problemSolution": {
+      "codePoints": 282,
+      "utf16": 282
+    },
+    "architecture": {
+      "codePoints": 328,
+      "utf16": 328
+    }
+  },
+  "images": [
+    {
+      "file": "images/01-select-your-art.png",
+      "source": "public/goal013-ui/01-select-your-art.png",
+      "copyMode": "exact-bytes",
+      "title": "動かすところを選ぶ",
+      "description": "手動操作の実画面。動かす範囲を選んだ第2版。"
+    },
+    {
+      "file": "images/02-set-the-motion.png",
+      "source": "public/goal013-ui/02-set-the-motion.png",
+      "copyMode": "exact-bytes",
+      "title": "方向と距離を決める",
+      "description": "手動操作の実画面。第6版・20mm。希望欄の初期例文は未送信。"
+    },
+    {
+      "file": "images/03-compare-manual-proposal.png",
+      "source": "public/goal013-ui/03-compare-manual-proposal.png",
+      "copyMode": "exact-bytes",
+      "title": "手動の案を見比べる",
+      "description": "寸法支援による20→25mmの未採用候補。実AIの生成結果ではない。"
+    },
+    {
+      "file": "images/04-print-the-adopted-version.png",
+      "source": "public/goal013-ui/04-print-the-adopted-version.png",
+      "copyMode": "exact-bytes",
+      "title": "採用した版を印刷へ",
+      "description": "手動候補を採用した第7版・25mm。PDF取得前の実画面。"
+    }
+  ],
+  "imageSequenceNote": "4枚は同じ作品の別状態。選択は第2版、条件調整と未採用比較の原本は第6版、採用後は第7版。動画A/Bとは別の記録。",
+  "architecture": {
+    "sourceDirectory": "public/goal011/review-v2.1/",
+    "files": [
+      "architecture.svg",
+      "architecture.png"
+    ],
+    "copyMode": "exact-bytes",
+    "note": "構成の説明図。Cloud Consoleの実画面ではない。"
+  },
+  "video": {
+    "status": "reviewed",
+    "file": "demo.mp4",
+    "durationSeconds": 160.6,
+    "chapters": [
+      {
+        "id": "opening-motion",
+        "outputStart": 0,
+        "outputEnd": 3.2,
+        "label": "新UI・手動制作の抜粋",
+        "caption": "自分の絵が、動く紙工作に。",
+        "kind": "video"
+      },
+      {
+        "id": "opening-change",
+        "outputStart": 3.2,
+        "outputEnd": 6.4,
+        "label": "新UI・手動制作の抜粋",
+        "caption": "あと5mm。絵の大きさと紙の枚数は、そのまま。",
+        "kind": "video"
+      },
+      {
+        "id": "opening-pattern",
+        "outputStart": 6.4,
+        "outputEnd": 10,
+        "label": "新UI・手動制作の抜粋",
+        "caption": "選んだ設計を、原寸型紙に。",
+        "kind": "video"
+      },
+      {
+        "id": "select-art",
+        "outputStart": 10,
+        "outputEnd": 21.8,
+        "label": "新UI・手動制作",
+        "caption": "自分の絵を読み込み、動かすところを四角で囲む。",
+        "kind": "video"
+      },
+      {
+        "id": "set-conditions",
+        "outputStart": 21.8,
+        "outputEnd": 31.64,
+        "label": "新UI・手動制作",
+        "caption": "方向と距離、絵の大きさ、使う紙を決める。",
+        "kind": "video"
+      },
+      {
+        "id": "request-and-compare",
+        "outputStart": 31.64,
+        "outputEnd": 60.52,
+        "label": "新UI・手動の寸法支援",
+        "caption": "希望を一か所に。まずは寸法から案をつくって比べる。",
+        "kind": "video"
+      },
+      {
+        "id": "author-adopts",
+        "outputStart": 60.52,
+        "outputEnd": 67.4,
+        "label": "新UI・手動の寸法支援",
+        "caption": "原本と見比べ、使う案は作者が選ぶ。",
+        "kind": "video"
+      },
+      {
+        "id": "real-ai-response",
+        "outputStart": 67.4,
+        "outputEnd": 76.32,
+        "label": "UI更新前の実行記録 · 2026.10.5",
+        "caption": "実AIにも、30mmの希望と変えない条件を伝えました。",
+        "kind": "video"
+      },
+      {
+        "id": "real-ai-comparison",
+        "outputStart": 76.32,
+        "outputEnd": 79.52,
+        "label": "UI更新前の実行記録 · 2026.10.5・一時停止",
+        "caption": "AIが提案。コードが検査。作者が選ぶ。",
+        "kind": "still"
+      },
+      {
+        "id": "real-ai-adoption",
+        "outputStart": 79.52,
+        "outputEnd": 80.72,
+        "label": "UI更新前の実行記録 · 2026.10.5",
+        "caption": "この案を採用。",
+        "kind": "video"
+      },
+      {
+        "id": "reopen-adopted",
+        "outputStart": 80.72,
+        "outputEnd": 90.08,
+        "label": "新UI・同じ採用版の操作",
+        "caption": "採用した設計を新UIで開く。",
+        "kind": "video"
+      },
+      {
+        "id": "same-version-pdf",
+        "outputStart": 90.08,
+        "outputEnd": 111.48,
+        "label": "新UI・同じ採用版の操作",
+        "caption": "PDFの内容を選び、採用した同じ版をダウンロード。",
+        "kind": "video"
+      },
+      {
+        "id": "guide-parts-and-glue",
+        "outputStart": 111.48,
+        "outputEnd": 146.16,
+        "label": "新UI・同じ採用版の操作",
+        "caption": "部品、接着する面、接着しない場所を図で確かめる。",
+        "kind": "video"
+      },
+      {
+        "id": "save-and-resume",
+        "outputStart": 146.16,
+        "outputEnd": 160.6,
+        "label": "新UI・同じ採用版の操作",
+        "caption": "作品と手順を保存して、続きから。紙での動作は実物で確認。",
+        "kind": "video"
+      }
+    ],
+    "sessions": {
+      "A": {
+        "kind": "new-ui-local-manual",
+        "beforeTravelMm": 25,
+        "candidateTravelMm": 30,
+        "usesModel": false,
+        "note": "手動の寸法支援。旧実AIの依頼や採用の再現成功とは扱わない。"
+      },
+      "historicalAi": {
+        "kind": "historical-real-vertex",
+        "date": "2026-10-05",
+        "sourceCodeSha": "6b6e98bd33f9f125e0301865da98024167ef9fab",
+        "sourceSha256": "c791f1ed4338fe952fbcb564323cf862d252494faffe309f9f6a9eabe33a170a",
+        "sourcePtsSeconds": [
+          4.88,
+          15.0
+        ],
+        "requestKind": "absolute-distance",
+        "beforeTravelMm": 25,
+        "requestedTravelMm": 30,
+        "adoptedTravelMm": 30,
+        "adoptedRevision": 3,
+        "designHash": "5b3d233852f77d3d47610aecb9fbf49a8b61c345b6faa8f0236252850b18fdd8",
+        "note": "依頼は絶対量30mm。あと5mmという相対依頼の実績へ言い換えない。開始時は入力済みで、文字入力の連続収録とは扱わない。"
+      },
+      "B": {
+        "kind": "new-ui-local-reopen-historical-adoption",
+        "travelMm": 30,
+        "revision": 3,
+        "designHash": "5b3d233852f77d3d47610aecb9fbf49a8b61c345b6faa8f0236252850b18fdd8",
+        "usesModel": false,
+        "note": "旧実AIで採用した正本を新UIへ読み込む別セッション。Aの手動候補や旧AI直後の連続映像とは区別する。"
+      }
+    },
+    "editingRules": [
+      "尺と章境界は最終EDLから確定する。",
+      "旧実AIは指定した安全区間だけを使用し、設定・認証画面を含めない。",
+      "早送り・待機省略・静止表示は実際の編集に合わせて明示する。",
+      "新しい動画に旧動画の検査結果を付け替えない。",
+      "構成図は独立素材とし、動画の長い説明には使わない。"
+    ],
+    "sha256": "592c3df09739a6e81b91d5926747b2d343bbfbf1d63e2841b0420e1eaed6e59c"
+  },
+  "submissionState": {
+    "finalSubmissionRecordFound": false,
+    "externalStateVerified": false,
+    "note": "確認したローカル資料に最終提出完了の明示記録はない。ワークスペース外の後日の操作は未確認。"
+  },
+  "submissionTextDrafts": {
+    "problemSolution": "描いた絵で紙工作を作りたい。でも、どこを切り、どのくらい動かし、裏に何を付ければよいのかが難しい。うごく紙工房は、絵の一部をまっすぐ動かす仕組みを、画面で確かめながら設計するWebアプリです。\n絵を読み込み、動かす範囲を囲み、方向と距離を決めます。言葉でAIに希望を伝え、元の作品と案を見比べることもできます。絵の大きさや紙の枚数を守り、使う案は本人が選びます。\n決めた版からA4型紙と組み立てガイドを取得。ブラウザに保存して、続きから再開できます。手動制作は無料・Googleログイン不要で、AIには審査用コードが必要です。\n実物の印刷・組立・動作は未検証です。",
+    "architecture": "ブラウザで絵・選択範囲・寸法を編集し、作品をIndexedDBに保存します。Web/APIは東京のCloud Run、AIはVertex AIのGeminiです。\nAIは希望文と設計条件から変更案を出し、共通コアが寸法・干渉・A4配置・固定条件を検査します。画像本体はモデルへ送りません。案を比較して本人が採用するまで原本を保ち、採用した同じ版からPDFと組み立てガイドを作ります。\nAIの入口は審査用コードで保護し、Cloud RunからVertex AIへの認証にはサービスアカウントを使います。非公開GCSの台帳で利用回数と費用予約を保持し、再起動後も上限を継承。別の監視Jobが費用・期限・監視障害を確認し、停止条件に達した専用サービスを止めます。"
+  },
+  "publicAppUrl": "https://ugoku-kami-release-011-erl7e5ym5a-an.a.run.app",
+  "readmeNotes": [
+    "画像4枚はGoal013の実画面を同じバイトで使用。画像の20→25mmは手動の寸法支援です。",
+    "動画Aの手動25→30mm、旧UIの実AI記録、採用正本30mm・第3版を新UIで開くBは別セッションです。",
+    "過去の実AI依頼は動く距離を30mmにする絶対量指定。新しい実AIの生成や相対指定の実績へ付け替えていません。",
+    "手動制作は無料・Googleログイン不要。AIには審査用コードが必要ですが、この一式にコードは含めません。",
+    "実物の印刷・組立・動作は未確認です。YouTube投稿とZenn最終提出は今回の制作に含めません。"
+  ]
+}
