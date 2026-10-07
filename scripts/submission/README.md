@@ -1,4 +1,35 @@
-# Zenn提出素材：Goal014の新UI版
+# Zenn提出素材：音声付きGoal015とGoal014原本
+
+**動画の新しい候補は `public/goal015-narrated/demo-narrated.mp4` です。** Goal014の映像・字幕を再圧縮せず、ローカルVOICEVOX Nemo女声1のナレーションを加えます。画像4枚・本文・構成図・PDFは引き続きGoal014一式を使い、無音の元動画とZIPを保全します。[音声と検証の記録](../../docs/goals/015-local-narration.md)を参照してください。
+
+`goal015-narrated/` には音声単体 `narration.wav`、実時刻付き `narration-timed.txt`、設定と出所の `README.txt`／`manifest.json`、`youtube-audio-credit.txt` を同梱します。**YouTube説明欄には「音声：VOICEVOX Nemo（女声1）」を追記**してください。投稿・最終提出は本人作業です。音声付きファイルの客観的な全編再生と、耳での聴感確認は分けます。助手による聴感確認は未実施です。
+
+## ローカル音声の再生成
+
+Python3標準ライブラリ、ffmpeg/ffprobe、Node24、既存Playwrightを使います。アプリサーバー、クラウド、外部音声APIには接続しません。
+
+1. [公式Nemo Engine 0.24.0](https://github.com/VOICEVOX/voicevox_nemo_engine/releases/tag/0.24.0)のLinux CPU/x64版を取得し、[配布hashと規約](../../docs/goals/015-local-narration.md#音声と利用条件)を確認して展開します。今回のローカル配置は `/home/mhirotaka/.local/opt/voicevox-nemo-engine-0.24.0/engine/`。VVPPはZIPで、Pythonで展開した場合は `run` に実行権限を設定します。
+2. そのディレクトリで `./run --host 127.0.0.1 --port 50121 --cpu_num_threads 4 --disable_mutable_api --output_log_utf8` を起動します。GPU・公開bind・voice morphingは使いません。
+3. 別シェルから以下を実行します。各出力先は未使用の新しいディレクトリを指定します。既存成果物や失敗記録を削除して再実行しません。読みのquery、元音声、正規化音声、測定値も保全します。
+
+```bash
+export NARRATION_ASSETS=/home/mhirotaka/workspace/ugoku-kami-studio/artifacts/submission
+export NARRATION_WORK="$NARRATION_ASSETS/private/goal015-narration-reproduction"
+export NARRATION_OUT="$NARRATION_ASSETS/public/goal015-narrated-reproduction"
+python3 scripts/submission/narrate.py preview --work "$NARRATION_WORK/preview"
+python3 scripts/submission/narrate.py render --speaker 10005 \
+  --source "$NARRATION_ASSETS/public/goal014-final/demo.mp4" \
+  --edl "$NARRATION_ASSETS/private/goal014-final/video/edit-decisions.json" \
+  --work "$NARRATION_WORK/render" --out "$NARRATION_OUT"
+node scripts/submission/narration-review.mjs \
+  --movie "$NARRATION_OUT/demo-narrated.mp4" \
+  --source "$NARRATION_ASSETS/public/goal014-final/demo.mp4" \
+  --manifest "$NARRATION_OUT/manifest.json" --out "$NARRATION_WORK/review"
+```
+
+完了後は自分で起動したNemo engineだけを停止します。レビュー用ブラウザとloopbackサーバーはスクリプトが終了処理します。原稿の変更は `narration-plan.json` で管理し、変えた音声・映像に対して再検証してください。`demo-narrated.mp4` と `narration.wav` の音声、話者クレジット、規約リンクは公開・配布先にも引き継ぎます。
+
+以下は保全するGoal014無音原本とその他提出物の制作手順です。
 
 **新しい提出候補は `goal014-final` です。** 動画は160.60秒（2分40.60秒）。全編再生・目視・ZIP展開照合を完了しました。使用するファイルは、ローカルの `artifacts/submission/public/goal014-final/README.txt` と `manifest.json` を基準にしてください。旧review-v2.1と以前のGoal011素材は保全し、混在させません。
 
