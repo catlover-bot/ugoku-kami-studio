@@ -14,7 +14,13 @@
 
 [Goal013](docs/goals/013-oss-inspired-product-ui.md)では、作品を大きく表示する編集バー・中央キャンバス・工程別の右操作面に整理しました。希望入力は一か所、比較には現在・希望・候補の値と共通の縮尺を使い、PDFは内容を選んで一つのボタンから取得します。表示倍率・パンは設計寸法を変えません。[OSSの参照と採用判断](docs/design/013-oss-reference.md)、[新UIの検証と再現](docs/design/013-verification.md)に実画面・出力不変性・統合と配信の確認を分けて記録しています。2026-10-07に同じ公開サービスへ反映し、追加AI送信なしで手動編集・保存再開・同版PDF・認証境界を確認しました。
 
-以下のGoal010以前の記述は、過去の限定試験時点の履歴です。運用制御はGoal011、新しい画面はGoal013を参照してください。
+## 最新の提出候補：Goal014
+
+[Goal014](docs/goals/014-current-ui-submission.md)では、新UIの画像4枚、紹介文・構成図、デモ動画を `artifacts/submission/public/goal014-final/` にまとめています。動画は2分40.60秒、全4,015フレームのデコード・等速全編再生と目視確認、ZIP展開照合まで完了しました。完成版の一覧と検査結果は同フォルダの `README.txt`・`manifest.json` を参照してください。一式ZIPの出力先は `artifacts/submission/ugoku-kami-goal014-final.zip`、コードを含む非公開の審査手順は `artifacts/submission/private/goal014-final/reviewer-instructions.txt` です。これらはローカル成果物で、GitHubには同梱しません。
+
+画像はGoal013の手動20→25mmの実画面をそのまま使用します。動画は新UIの手動25→30mm、過去の実Vertexによる絶対30mmの依頼記録、採用正本30mm・第3版を新UIで開く別セッションのPDF・ガイド・保存再開を区別します。旧review-v2.1と各原本は保全し、今回の素材制作でCloud変更・新しいAI送信・YouTube投稿・Zenn最終提出は行いません。実物の印刷・組立・動作も未確認です。[素材の選び方と再生成手順](scripts/submission/README.md)を参照してください。
+
+以下のGoal010以前の記述は、過去の限定試験時点の履歴です。運用制御はGoal011、新しい画面はGoal013、提出候補はGoal014を参照してください。
 
 [Goal 005](docs/goals/005-product-experience.md) の入力・保存・工程・組立体験を維持し、[Goal 006](docs/goals/006-request-understanding.md) では希望の読み取りと訂正を改善しました。統合の許可は [Goal 004-R](docs/goals/004-resume-and-main.md) から継続しています。確認済み変更のコミット・mainへの通常統合・push・通常CIは許可されています。実Gemini、実物、初見の人、実スマートフォン、Cloud Run公開の未確認状態は、ソフトウェア統合と分けて管理します。過去Goalのpush保留や全体blockedの記録は当時の状態であり、現在の統合を止める指示ではありません。
 
