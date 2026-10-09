@@ -26,7 +26,7 @@ export async function createApp(options: AppOptions = {}): Promise<App> {
   const app = Fastify({ logger: config.publicRelease ? false : options.logger ?? false, bodyLimit: 256 * 1024, requestTimeout: 15_000, trustProxy: false }) as unknown as App;
   const sessions = new SessionStore(config);
   const provider = options.provider ?? (config.aiEnabled ? config.provider === 'ollama' ? new OllamaProvider(config) : config.provider === 'gemini' ? new GeminiProvider(config) : config.provider === 'vertex' ? new VertexProvider(config) : undefined : undefined);
-  const ledger = config.publicRelease ? options.publicLedger ?? new PublicLedger(new GcsLedgerStore(config.publicRelease)) : undefined;
+  const ledger = config.publicRelease ? options.publicLedger ?? new PublicLedger(new GcsLedgerStore(config.publicRelease), Date.now, { requireObservation: true }) : undefined;
   const runs = new RunManager(config, provider, ledger);
   app.decorate('sessions', sessions); app.decorate('runs', runs);
   let imageActive = 0;

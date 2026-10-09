@@ -31,5 +31,8 @@ describe('release infrastructure monitoring', () => {
     await expect(metricSum(async () => ({timeSeries: [], nextPageToken: 'never-ending'}), args)).rejects.toThrow('pagination limit');
     await expect(metricSum(async () => ({timeSeries: [], executionErrors: [{code: 14}]}), args)).rejects.toThrow('Incomplete');
     await expect(metricSum(async () => ({timeSeries: [], unreachable: ['asia-northeast1']}), args)).rejects.toThrow('Incomplete');
+    await expect(metricSum(async () => ({}), args)).rejects.toThrow('Incomplete');
+    await expect(metricSum(async () => ({timeSeries: [{points: []}]}), args)).rejects.toThrow('Incomplete');
+    await expect(metricSum(async () => ({timeSeries: [{points: [{value: {int64Value: '0'}}]}]}), args)).resolves.toBe(0);
   });
 });
