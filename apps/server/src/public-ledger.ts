@@ -3,15 +3,30 @@ import { z } from 'zod';
 import type { ModelObservation } from './conversation.js';
 import { AppError } from './errors.js';
 import { assessVertexUsage } from './vertex-budget.js';
+import { MONITOR_INTERVAL_MS, MONITOR_LAG_MS } from './operations/cost-monitor.js';
 
 export const PUBLIC_LEDGER_LIMITS = Object.freeze({ modelNano: 85_000_000_000, callNano: 556_032_000, callsPerRequest: 6, requestsPerDay: 10, sendsPerDay: 30, requestsPerPeriod: 600, sendsPerPeriod: 1800, requestsPerMinute: 2, requestsPerHour: 4, preReleaseRequests: 6, preReleaseSends: 24, leaseMs: 90_000, expiresAt: '2026-12-01T14:59:00.000Z', maxBytes: 2_097_152 });
+export const PUBLIC_OBSERVATION_MAX_AGE_MS = MONITOR_INTERVAL_MS + MONITOR_LAG_MS;
 export type LedgerVersion = { generation: string; data: string };
 export interface PublicLedgerStore {
   read(): Promise<LedgerVersion>;
   compareAndSwap(generation: string, data: string): Promise<string>;
 }
+const LedgerStoreDetails = z.strictObject({
+  stage: z.enum(['configuration', 'token', 'token-http', 'token-body', 'token-validation', 'metadata-http', 'metadata-body', 'metadata-validation', 'media-http', 'media-body', 'media-validation', 'read-budget', 'write-http', 'write-body', 'write-validation']),
+  category: z.enum(['timeout', 'permission', 'http', 'transport', 'invalid', 'size', 'conflict', 'missing']),
+  httpStatus: z.number().int().min(100).max(599).optional(),
+});
+export type LedgerStoreFailureDetails = Readonly<z.infer<typeof LedgerStoreDetails>>;
 export class LedgerStoreError extends Error {
-  constructor(readonly kind: 'conflict' | 'unavailable' | 'uncertain' | 'missing') { super(`Public ledger store: ${kind}`); }
+  readonly details?: LedgerStoreFailureDetails;
+  constructor(readonly kind: 'conflict' | 'unavailable' | 'uncertain' | 'missing', details?: LedgerStoreFailureDetails) {
+    super(`Public ledger store: ${kind}`);
+    // Only these fixed labels/status can escape the storage boundary. Never
+    // attach response text, URLs, token values, or the original error/cause.
+    const parsed = LedgerStoreDetails.safeParse(details);
+    if (parsed.success) this.details = Object.freeze(parsed.data);
+  }
 }
 const Hash = z.string().regex(/^[a-f0-9]{64}$/);
 const Id = z.string().uuid();
@@ -22,7 +37,7 @@ const UsageNumbers = z.strictObject({ promptTokenCount: z.number().int().min(0).
 const Assessment = z.strictObject({ values: UsageNumbers, kind: z.enum(['usage-estimate', 'aggregate-upper-estimate', 'sent-unknown']), nano: Money, hash: Hash });
 const Call = z.strictObject({ id: Id, day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), state: z.enum(['reserved', 'possibly-sent', 'released']), attempt: Hash.optional(), sentAt: Time.optional(), http: Assessment.optional(), sdk: Assessment.optional() });
 const Entry = z.strictObject({ id: Id, request: Hash, fingerprint: Hash, binding: Hash, phase: Phase, startedAt: Time, expiresAt: Time, state: z.enum(['active', 'closed', 'expired']), calls: z.array(Call).length(6) });
-const State = z.strictObject({ format: z.literal('ugoku-public-ledger-v1'), initializedAt: Time, expiresAt: z.literal(PUBLIC_LEDGER_LIMITS.expiresAt), phase: Phase, stop: z.strictObject({ ai: z.boolean(), whole: z.boolean() }), entries: z.array(Entry).max(600), receipts: z.array(Id).max(64) });
+const State = z.strictObject({ format: z.literal('ugoku-public-ledger-v1'), initializedAt: Time, expiresAt: z.literal(PUBLIC_LEDGER_LIMITS.expiresAt), phase: Phase, stop: z.strictObject({ ai: z.boolean(), whole: z.boolean() }), observation: z.strictObject({ checkedAt: Time }).optional(), entries: z.array(Entry).max(600), receipts: z.array(Id).max(64) });
 export type PublicLedgerState = z.infer<typeof State>;
 type StoredEntry = z.infer<typeof Entry>;
 type StoredCall = z.infer<typeof Call>;
@@ -30,7 +45,13 @@ export type PublicGrant = Readonly<{ id: string; callIds: readonly string[]; exp
 export type PublicReservation = { requestId: string; fingerprint: string; bindingHash: string; phase: 'pre-release' | 'public' };
 export const publicLedgerHash = (value: string) => createHash('sha256').update(value).digest('hex');
 export const publicLedgerJstDay = (time: number) => new Date(time + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
-const unavailable = () => new AppError('ledger_unavailable', 'AIの利用状況を確認できません。作品を保ったまま手動で続けられます。', 503);
+const unavailable = (cause?: unknown) => {
+  const error = new AppError('ledger_unavailable', 'AIの利用状況を確認できません。作品を保ったまま手動で続けられます。', 503);
+  // Keep only the store's fixed diagnostic classification for the monitor.
+  // publicError never exposes cause; arbitrary transport messages are discarded.
+  if (cause instanceof LedgerStoreError) Object.defineProperty(error, 'cause', { value: cause });
+  return error;
+};
 const invalidGrant = () => new AppError('stale_public_grant', 'このAI実行の許可は終了しています。', 409);
 
 /** Deployment creates this object explicitly with GCS ifGenerationMatch=0.
@@ -42,6 +63,7 @@ function parse(data: string): PublicLedgerState {
   try {
     if (Buffer.byteLength(data) > PUBLIC_LEDGER_LIMITS.maxBytes) throw new Error();
     const state = State.parse(JSON.parse(data));
+    if (state.observation && state.observation.checkedAt < state.initializedAt) throw new Error();
     const requests = new Set<string>(), fingerprints = new Set<string>(), ids = new Set<string>(), attempts = new Set<string>();
     let active = 0;
     for (const entry of state.entries) {
@@ -82,7 +104,7 @@ export function publicLedgerSummary(state: PublicLedgerState, now = Date.now()) 
   const sent = (values: StoredCall[]) => values.filter(call => call.state === 'possibly-sent').length;
   const pending = (values: StoredCall[]) => values.filter(call => call.state === 'reserved').length;
   const committedNano = calls.map(callCost).reduce((sum, item) => sum + item.nano, 0);
-  return { phase: state.phase, stop: { ...state.stop }, expiresAt: state.expiresAt, day, requests: state.entries.length, requestsToday: state.entries.filter(entry => publicLedgerJstDay(entry.startedAt) === day).length, sends: sent(calls), sendsToday: sent(today), pendingSends: pending(calls), pendingSendsToday: pending(today), preReleaseRequests: state.entries.filter(entry => entry.phase === 'pre-release').length, preReleaseSends: sent(state.entries.filter(entry => entry.phase === 'pre-release').flatMap(entry => entry.calls)), committedNano, usageEstimateNano: total('usage'), aggregateUpperEstimateNano: total('aggregate'), sentUnknownNano: total('unknown'), reservedNano: total('reserved'), modelBudgetNano: PUBLIC_LEDGER_LIMITS.modelNano, active: state.entries.some(entry => entry.state === 'active'), hardBillingCap: false as const };
+  return { phase: state.phase, stop: { ...state.stop }, ...(state.observation ? { observation: { ...state.observation } } : {}), expiresAt: state.expiresAt, day, requests: state.entries.length, requestsToday: state.entries.filter(entry => publicLedgerJstDay(entry.startedAt) === day).length, sends: sent(calls), sendsToday: sent(today), pendingSends: pending(calls), pendingSendsToday: pending(today), preReleaseRequests: state.entries.filter(entry => entry.phase === 'pre-release').length, preReleaseSends: sent(state.entries.filter(entry => entry.phase === 'pre-release').flatMap(entry => entry.calls)), committedNano, usageEstimateNano: total('usage'), aggregateUpperEstimateNano: total('aggregate'), sentUnknownNano: total('unknown'), reservedNano: total('reserved'), modelBudgetNano: PUBLIC_LEDGER_LIMITS.modelNano, active: state.entries.some(entry => entry.state === 'active'), hardBillingCap: false as const };
 }
 
 /** A single generation-CAS object is the authority, including after restart.
@@ -91,30 +113,37 @@ export function publicLedgerSummary(state: PublicLedgerState, now = Date.now()) 
  * caller MUST check its AbortSignal and deadline again after this await. */
 export class PublicLedger {
   private grants = new WeakMap<PublicGrant, { id: string; binding: string }>();
-  constructor(private readonly store: PublicLedgerStore, private readonly now: () => number = Date.now) {}
+  constructor(private readonly store: PublicLedgerStore, private readonly now: () => number = Date.now, private readonly options: { requireObservation?: boolean } = {}) {}
   private async read() {
     try { const value = await this.store.read(); return { ...value, state: parse(value.data) }; }
-    catch { throw unavailable(); }
+    catch (error) { throw unavailable(error); }
   }
-  private async change<T>(apply: (state: PublicLedgerState, now: number) => T): Promise<T> {
+  private async change<T>(apply: (state: PublicLedgerState, now: number) => T, admission = false): Promise<T> {
     const operation = randomUUID();
     for (let attempt = 0; attempt < 4; attempt++) {
       const { generation, state } = await this.read();
-      const result = apply(state, this.now());
+      const now = this.now();
+      if (admission) this.available(state, now);
+      const result = apply(state, now);
       state.receipts.push(operation); state.receipts = state.receipts.slice(-64);
       const data = JSON.stringify(state);
       parse(data);
-      try { await this.store.compareAndSwap(generation, data); return result; }
+      let committed = state;
+      try { await this.store.compareAndSwap(generation, data); }
       catch (error) {
         if (error instanceof LedgerStoreError && error.kind === 'conflict') continue;
         // An ambiguous write is never blindly retried. A later strongly
         // consistent read must prove this exact operation was committed.
         if (error instanceof LedgerStoreError && error.kind === 'uncertain') {
           const proof = await this.read();
-          if (proof.state.receipts.includes(operation)) return result;
-        }
-        throw unavailable();
+          if (!proof.state.receipts.includes(operation)) throw unavailable(error);
+          committed = proof.state;
+        } else throw unavailable(error);
       }
+      // A slow write/proof read must not extend the persisted observation's
+      // lifetime. Refusal leaves any committed reservation conservatively held.
+      if (admission) this.available(committed, this.now());
+      return result;
     }
     throw unavailable();
   }
@@ -132,12 +161,13 @@ export class PublicLedger {
   }
   private available(state: PublicLedgerState, now: number) {
     if (now >= Date.parse(state.expiresAt) || state.stop.ai || state.stop.whole) throw new AppError('ai_disabled', 'AIの公開利用は停止しています。作品を保ったまま手動で続けられます。', 503);
+    if (this.options.requireObservation && (!state.observation || state.observation.checkedAt > now || now - state.observation.checkedAt > PUBLIC_OBSERVATION_MAX_AGE_MS)) throw unavailable();
   }
   async reserve(input: PublicReservation): Promise<PublicGrant> {
     const checked = z.strictObject({ requestId: z.string().min(1).max(200), fingerprint: Hash, bindingHash: Hash, phase: Phase }).parse(input);
     const requestHash = publicLedgerHash(checked.requestId), id = randomUUID(), callIds = Array.from({ length: 6 }, () => randomUUID());
     const grant = await this.change((state, now) => {
-      this.available(state, now); this.recoverExpired(state, now);
+      this.recoverExpired(state, now);
       if (state.phase !== checked.phase) throw new AppError('ai_disabled', 'AIの利用段階が切り替わりました。', 503);
       if (state.entries.some(entry => entry.request === requestHash || entry.fingerprint === checked.fingerprint)) throw new AppError('duplicate_request', '同じAI依頼は受け付け済みです。元の実行結果を確認してください。', 409);
       if (state.entries.some(entry => entry.state === 'active')) throw new AppError('instance_limit', '別のAI依頼を処理中です。時間をおいてお試しください。', 429);
@@ -153,14 +183,13 @@ export class PublicLedger {
       const expiresAt = now + PUBLIC_LEDGER_LIMITS.leaseMs;
       state.entries.push({ id, request: requestHash, fingerprint: checked.fingerprint, binding: checked.bindingHash, phase: checked.phase, startedAt: now, expiresAt, state: 'active', calls: callIds.map(callId => ({ id: callId, day: publicLedgerJstDay(now), state: 'reserved' })) });
       return Object.freeze({ id, callIds: Object.freeze(callIds), expiresAt: new Date(expiresAt).toISOString() });
-    });
+    }, true);
     this.grants.set(grant, { id, binding: checked.bindingHash });
     return grant;
   }
   async beforeDispatch(grant: PublicGrant, dispatch: { call: number; attemptId: string }): Promise<void> {
     const { call, attemptId } = z.strictObject({ call: z.number().int().min(1).max(6), attemptId: z.string().min(1).max(200) }).parse(dispatch);
     await this.change((state, now) => {
-      this.available(state, now);
       const entry = this.entry(state, grant), item = entry.calls[call - 1], attempt = publicLedgerHash(attemptId);
       if (entry.state !== 'active' || now >= entry.expiresAt || item.state !== 'reserved') throw invalidGrant();
       if (state.entries.some(other => other.calls.some(value => value.attempt === attempt))) throw invalidGrant();
@@ -170,7 +199,7 @@ export class PublicLedger {
       if (item.day !== today && summary.sendsToday + summary.pendingSendsToday >= 30) throw new AppError('public_usage_limit', '本日のAI呼び出し上限に達しました。', 429);
       if (summary.committedNano > PUBLIC_LEDGER_LIMITS.modelNano) throw new AppError('model_budget_limit', 'AIの費用管理上限に達したため停止しました。', 429);
       item.day = today; item.state = 'possibly-sent'; item.attempt = attempt; item.sentAt = now;
-    });
+    }, true);
   }
   async observe(grant: PublicGrant, observation: ModelObservation): Promise<void> {
     const slot = observation.call - 1;
@@ -210,6 +239,15 @@ export class PublicLedger {
     // Runtime stop writes are monotonic: an outdated monitor cannot clear an
     // operator stop. Resuming requires a separately reviewed deployment action.
     await this.change(state => { state.stop = { ai: state.stop.ai || checked.ai, whole: state.stop.whole || checked.whole }; });
+  }
+  /** Only the trusted monitor confirms a completed persistent cost observation.
+   * Never initializes a ledger, changes its start/budget, or clears a stop. */
+  async confirmObservation(checkedAt: number): Promise<void> {
+    if (!Number.isSafeInteger(checkedAt) || checkedAt < 0) throw unavailable();
+    await this.change((state, now) => {
+      if (checkedAt > now || checkedAt < state.initializedAt || (state.observation && checkedAt < state.observation.checkedAt)) throw unavailable();
+      state.observation = { checkedAt };
+    });
   }
   async setPhase(phase: 'public'): Promise<void> {
     if (phase !== 'public') throw unavailable();

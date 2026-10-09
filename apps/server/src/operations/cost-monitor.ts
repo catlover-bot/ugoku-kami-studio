@@ -49,7 +49,7 @@ export async function metricSum(get: (url: string) => Promise<unknown>, args: { 
   base.searchParams.set('interval.startTime', args.start); base.searchParams.set('interval.endTime', args.end);
   base.searchParams.set('aggregation.alignmentPeriod', '86400s'); base.searchParams.set('aggregation.perSeriesAligner', 'ALIGN_SUM');
   base.searchParams.set('aggregation.crossSeriesReducer', 'REDUCE_SUM'); base.searchParams.set('view', 'FULL'); base.searchParams.set('pageSize', '1000');
-  let total = 0;
+  let total = 0, points = 0;
   for (let page = 0; page < 10; page++) {
     const response = await get(base.href) as { timeSeries?: { points: { value: { doubleValue?: number; int64Value?: string } }[] }[]; nextPageToken?: string; executionErrors?: unknown[]; unreachable?: unknown[] };
     if (!response || typeof response !== 'object' || response.timeSeries && !Array.isArray(response.timeSeries)) throw Error('Malformed metric response');
@@ -61,9 +61,13 @@ export async function metricSum(get: (url: string) => Promise<unknown>, args: { 
       const n = point.value.doubleValue ?? Number(point.value.int64Value);
       if (!Number.isFinite(n) || n < 0) throw Error('Invalid metric observation');
       total += n;
+      points++;
       if (!Number.isFinite(total)) throw Error('Metric total overflow');
     }
-    if (!response.nextPageToken) return total;
+    if (!response.nextPageToken) {
+      if (points === 0) throw Error('Incomplete metric observation');
+      return total;
+    }
     base.searchParams.set('pageToken', response.nextPageToken);
   }
   throw Error('Metric pagination limit');

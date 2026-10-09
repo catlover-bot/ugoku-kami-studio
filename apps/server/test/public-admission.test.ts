@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDesign, SAMPLE_INPUT, type DesignDocument } from '@ugoku/core';
 import { createApp, type App } from '../src/app.js';
 import { readConfig } from '../src/config.js';
 import { initialPublicLedger, LedgerStoreError, PublicLedger, type PublicLedgerStore } from '../src/public-ledger.js';
 import { assessVertexUsage, vertexUsageDiagnostics } from '../src/vertex-budget.js';
 import type { ModelProvider, ModelCallContext } from '../src/conversation.js';
+import { GcsLedgerStore } from '../src/gcs-ledger-store.js';
 const config = () => readConfig({ AI_PROVIDER: 'vertex', AI_ACCESS_SECRET: 'public-test-code-no-cloud-'.repeat(3), VERTEX_PROJECT: 'example-project', VERTEX_LOCATION: 'global', VERTEX_MODEL: 'gemini-3.8-flash', VERTEX_MODEL_BUDGET_USD: '85', AI_PUBLIC_RELEASE: 'true', AI_LEDGER_BUCKET: 'private-ledger-test', AI_LEDGER_OBJECT: 'public-release-011/ledger.json', AI_RELEASE_PHASE: 'pre-release', AI_MAX_MODEL_CALLS: '6', AI_MAX_TOOL_CALLS: '4', AI_MAX_INPUT_BYTES: '32768', AI_MAX_OUTPUT_TOKENS: '2048', AI_TIMEOUT_MS: '90000', AI_MAX_CONCURRENT: '1', AI_RUNS_PER_MINUTE: '2', AI_MAX_RUNS_PER_HOUR: '4' });
 class Store implements PublicLedgerStore {
   data = JSON.stringify(initialPublicLedger()); generation = 1; reads = 0; writes = 0; rejectWrite = 0;
@@ -18,8 +19,8 @@ class Store implements PublicLedgerStore {
   }
 }
 const apps: App[] = [];
-afterEach(async () => { await Promise.all(apps.splice(0).map(app => app.close())); });
-async function setup(store = new Store(), document = createDesign(SAMPLE_INPUT), extra?: (context: ModelCallContext, signal: AbortSignal) => Promise<void>) {
+afterEach(async () => { await Promise.all(apps.splice(0).map(app => app.close())); vi.restoreAllMocks(); });
+async function setup(store = new Store(), document = createDesign(SAMPLE_INPUT), extra?: (context: ModelCallContext, signal: AbortSignal) => Promise<void>, productionLedger = false) {
   const ledger = new PublicLedger(store); let sends = 0, starts = 0;
   const provider: ModelProvider = { async generate(_messages, signal, context) {
     starts++; if (!context) throw Error('Missing dispatch context');
@@ -31,7 +32,7 @@ async function setup(store = new Store(), document = createDesign(SAMPLE_INPUT),
     await context.onObservation?.({ attemptId: context.attemptId, call: context.call, source: 'http-response', observedAt: new Date().toISOString(), sdkVersion: '2.27.0', model: 'gemini-3.8-flash', modelVersion: null, responseId: null, finishReason: 'STOP', aborted: signal.aborted, usageDiagnostics: vertexUsageDiagnostics(usage), modelCost: { ...assessVertexUsage(usage), reservationUsd: .556032 } });
     return { message: { role: 'assistant', text: '', calls: [{ name: 'propose_design_patch', args: { travelMm: 15 }, id: 'patch' }] }, finishReason: 'STOP', usageMetadata: usage };
   } };
-  const app = await createApp({ config: config(), provider, publicLedger: ledger }); apps.push(app);
+  const app = await createApp({ config: config(), provider, ...(productionLedger ? {} : { publicLedger: ledger }) }); apps.push(app);
   const created = (await app.inject({ method: 'POST', url: '/api/sessions', payload: { document } })).json() as { sessionId: string; token: string; document: DesignDocument };
   const url = `/api/sessions/${created.sessionId}`, headers = { authorization: `Bearer ${created.token}`, 'x-ai-access': config().accessSecret };
   const body = { requestId: 'public-request-one', prompt: '動く距離を15mmに', baseRevision: document.revision, baseHash: document.designHash };
@@ -42,6 +43,23 @@ async function finish(s: Awaited<ReturnType<typeof setup>>, id: string) {
   await run.done; return (await s.app.inject({ url: `${s.url}/runs/${id}`, headers: s.headers })).json().run;
 }
 describe('public HTTP admission to internal durable capabilities', () => {
+  it('wires the production ledger to require persisted monitoring before any model HTTP dispatch', async () => {
+    const store = new Store();
+    vi.spyOn(GcsLedgerStore.prototype, 'read').mockImplementation(() => store.read());
+    vi.spyOn(GcsLedgerStore.prototype, 'compareAndSwap').mockImplementation((generation, data) => store.compareAndSwap(generation, data));
+    const s = await setup(store, createDesign(SAMPLE_INPUT), undefined, true);
+    const original = store.data;
+    const blocked = await s.app.inject({ method: 'POST', url: `${s.url}/runs`, headers: s.headers, payload: s.body });
+    expect(blocked.statusCode).toBe(503); expect(blocked.json().error.code).toBe('ledger_unavailable');
+    expect(s.starts()).toBe(0); expect(s.sends()).toBe(0); expect(store.data).toBe(original);
+    expect((await s.app.inject({ url: '/health' })).statusCode).toBe(200);
+    expect((await s.app.inject({ method: 'PUT', url: `${s.url}/document`, headers: { authorization: s.headers.authorization }, payload: { document: s.document } })).statusCode).toBe(200);
+    await s.ledger.confirmObservation(Date.now());
+    const accepted = await s.app.inject({ method: 'POST', url: `${s.url}/runs`, headers: s.headers, payload: s.body });
+    expect(accepted.statusCode).toBe(202);
+    expect((await finish(s, accepted.json().run.id)).status).toBe('awaiting_approval');
+    expect(s.sends()).toBe(1);
+  });
   it('keeps manual routes available; bad code, client permits and oversized inputs never touch the ledger', async () => {
     const s = await setup();
     for (const headers of [{ authorization: s.headers.authorization }, { ...s.headers, 'x-ai-access': 'bad' }, { ...s.headers, 'x-ai-trial-permit': 'signed-with-reviewer-code' }]) {
