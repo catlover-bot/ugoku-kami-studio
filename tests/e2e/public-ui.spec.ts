@@ -142,7 +142,7 @@ test('saved tool-event reconstruction (not live AI): three textless responses pr
     const comparison = page.locator('.ai-panel .design-comparison');
     await expect(comparison.locator('.comparison-distances dt')).toHaveText(['現在', '希望', '候補（代案）']);
     await expect(comparison.locator('.comparison-distances dd')).toHaveText([`${fixture.project.document.input.travelMm}mm`, '70mm', '35mm']);
-    await expect(comparison.locator('.candidate-paper')).toContainText('絵の大きさを維持');
+    await expect(comparison.getByRole('list', { name: '候補の大きさと紙' })).toContainText('絵の大きさを維持');
     const allChecks = comparison.locator('.candidate-checks');
     const candidateChecks = getKitSummary(run.proposal!.document).checks;
     await expect(allChecks).not.toHaveAttribute('open', '');

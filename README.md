@@ -14,17 +14,25 @@
 
 [Goal013](docs/goals/013-oss-inspired-product-ui.md)では、作品を大きく表示する編集バー・中央キャンバス・工程別の右操作面に整理しました。希望入力は一か所、比較には現在・希望・候補の値と共通の縮尺を使い、PDFは内容を選んで一つのボタンから取得します。表示倍率・パンは設計寸法を変えません。[OSSの参照と採用判断](docs/design/013-oss-reference.md)、[新UIの検証と再現](docs/design/013-verification.md)に実画面・出力不変性・統合と配信の確認を分けて記録しています。2026-10-07に同じ公開サービスへ反映し、追加AI送信なしで手動編集・保存再開・同版PDF・認証境界を確認しました。
 
-## 最新の提出動画：Goal015の音声付き版
+## 今回の提出候補：Goal016
+
+Goal016では、作品・希望・候補・印刷の操作を整え、画像4枚と動画を**今回の公開UIで収録する一連の操作**へそろえます。過去UIの実AI場面や手動候補を、新しい実AIの成功例として混ぜません。収録・媒体検査が完了するまでは制作中として扱い、実行回数・公開SHA・採用版・PDFは完成後のmanifestに記録します。
+
+新しい一式の保存先は `artifacts/submission/public/goal016-final/`、ZIPは `artifacts/submission/ugoku-kami-goal016-final.zip`。再現手順は [Goal016制作手順](scripts/submission/goal016-README.md)です。`goal016-capture.mjs` で新収録の証拠を検査し、`goal016-video.mjs`／`goal016-review.mjs` で編集・全編確認、`goal016-narrate.py`／`goal016-narration-review.mjs` でローカル音声と客観的な音声再生確認、`goal016-package.mjs` のstage／sealで梱包します。秘密の確認は権限を持つ担当が固定した同じファイル群に対して行います。
+
+素材はGit管理外です。旧Goal014・Goal015・review系は削除せず、以下の履歴として保全します。YouTube投稿・Zenn最終提出・紙の実物動作は、この媒体生成の完了とは別です。
+
+## 保全している音声付き動画：Goal015
 
 [Goal015](docs/goals/015-local-narration.md)では、Goal014完成動画を保全したまま、ローカルのVOICEVOX Nemo女声1で15区間のナレーションを追加しました。動画は `artifacts/submission/public/goal015-narrated/demo-narrated.mp4`、音声単体・時刻付き原稿・音声クレジットも同フォルダです。映像と字幕は再圧縮せず維持し、制作コードと原稿だけを管理します。読み指定・同期・音量の客観検証と、耳での聴感確認は別で、助手の聴感確認は未実施です。[再生成とYouTube用クレジット](scripts/submission/README.md)を参照してください。アプリ・公開サービス・監視・利用制限は変更しません。
 
-## 画像・本文・原本動画：Goal014
+## 保全している画像・本文・原本動画：Goal014
 
 [Goal014](docs/goals/014-current-ui-submission.md)では、新UIの画像4枚、紹介文・構成図、デモ動画を `artifacts/submission/public/goal014-final/` にまとめています。動画は2分40.60秒、全4,015フレームのデコード・等速全編再生と目視確認、ZIP展開照合まで完了しました。完成版の一覧と検査結果は同フォルダの `README.txt`・`manifest.json` を参照してください。一式ZIPの出力先は `artifacts/submission/ugoku-kami-goal014-final.zip`、コードを含む非公開の審査手順は `artifacts/submission/private/goal014-final/reviewer-instructions.txt` です。これらはローカル成果物で、GitHubには同梱しません。
 
-画像はGoal013の手動20→25mmの実画面をそのまま使用します。動画は新UIの手動25→30mm、過去の実Vertexによる絶対30mmの依頼記録、採用正本30mm・第3版を新UIで開く別セッションのPDF・ガイド・保存再開を区別します。旧review-v2.1と各原本は保全し、今回の素材制作でCloud変更・新しいAI送信・YouTube投稿・Zenn最終提出は行いません。実物の印刷・組立・動作も未確認です。[素材の選び方と再生成手順](scripts/submission/README.md)を参照してください。
+Goal014の画像はGoal013の手動20→25mmの実画面をそのまま使用しました。同版の動画は当時の新UIでの手動25→30mm、過去の実Vertexによる絶対30mmの依頼記録、採用正本30mm・第3版を開く別セッションのPDF・ガイド・保存再開を区別しています。Goal014の制作ではCloud変更・新しいAI送信・YouTube投稿・Zenn最終提出を行っていません。実物の印刷・組立・動作も未確認です。[旧素材の再生成手順](scripts/submission/README.md)を参照してください。
 
-以下のGoal010以前の記述は、過去の限定試験時点の履歴です。運用制御はGoal011、新しい画面はGoal013、提出候補はGoal014を参照してください。
+以下のGoal010以前の記述は、過去の限定試験時点の履歴です。運用制御はGoal011、今回の改善と提出候補は上記Goal016、以前の画面改善はGoal013を参照してください。
 
 [Goal 005](docs/goals/005-product-experience.md) の入力・保存・工程・組立体験を維持し、[Goal 006](docs/goals/006-request-understanding.md) では希望の読み取りと訂正を改善しました。統合の許可は [Goal 004-R](docs/goals/004-resume-and-main.md) から継続しています。確認済み変更のコミット・mainへの通常統合・push・通常CIは許可されています。実Gemini、実物、初見の人、実スマートフォン、Cloud Run公開の未確認状態は、ソフトウェア統合と分けて管理します。過去Goalのpush保留や全体blockedの記録は当時の状態であり、現在の統合を止める指示ではありません。
 
