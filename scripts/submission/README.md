@@ -1,6 +1,15 @@
-# Zenn提出素材：音声付きGoal015とGoal014原本
+# Zenn提出素材：Goal016の本編と保全原本
 
-**動画の新しい候補は `public/goal015-narrated/demo-narrated.mp4` です。** Goal014の映像・字幕を再圧縮せず、ローカルVOICEVOX Nemo女声1のナレーションを加えます。画像4枚・本文・構成図・PDFは引き続きGoal014一式を使い、無音の元動画とZIPを保全します。[音声と検証の記録](../../docs/goals/015-local-narration.md)を参照してください。
+**投稿用の最新版は `public/goal016-submission/demo-full-narrated.mp4` です。** 163.04秒（2分43.04秒）・18場面・4,076フレームで、実AIの依頼場面は17.84秒からです。無音版・音声版の全編デコードと1倍再生（drop/corrupt 0）、独立した目視、字幕18件の時刻・本文照合を完了しました。音声版の映像packetは全件一致し、17音声区間を客観検査しました。耳での聴感確認は未実施です。[本編の制作・二段階梱包手順](full-README.md)を参照してください。素材の出所は新しい `README.txt`・`manifest.json`、秘密検査後のZIP生成・展開照合は `private/goal016-submission/package-result.json` を正本とします。
+
+実AIは既存Goal016の1依頼・1送信、20→25mm・第2版への採用記録だけを使います。別撮りは `AI_PROVIDER=none` で、同じ採用設計の印刷・ガイド・保存再開を操作します。追加AI・Cloud操作・アプリ変更は0。画像4枚、PDF、紹介文2欄、構成図、公開手順は旧`goal016-final`から同じバイトで継承します。Zenn未提出は本人確認済みで、投稿・最終提出は素材制作とは別です。
+
+出力先は `artifacts/submission/public/goal016-submission/`、ZIPは `artifacts/submission/ugoku-kami-goal016-submission.zip`。旧Goal016の36.08秒版は履歴ダイジェストとして、以下のGoal014/015原本とともに保持します。秘密を含む審査手順は `artifacts/submission/private/goal016-final/reviewer-instructions.txt` のまま公開しません。
+
+## Goal015の音声付き動画（履歴）
+
+
+**当時の動画候補は `public/goal015-narrated/demo-narrated.mp4` です。** Goal014の映像・字幕を再圧縮せず、ローカルVOICEVOX Nemo女声1のナレーションを加えます。画像4枚・本文・構成図・PDFは引き続きGoal014一式を使い、無音の元動画とZIPを保全します。[音声と検証の記録](../../docs/goals/015-local-narration.md)を参照してください。
 
 `goal015-narrated/` には音声単体 `narration.wav`、実時刻付き `narration-timed.txt`、設定と出所の `README.txt`／`manifest.json`、`youtube-audio-credit.txt` を同梱します。**YouTube説明欄には「音声：VOICEVOX Nemo（女声1）」を追記**してください。投稿・最終提出は本人作業です。音声付きファイルの客観的な全編再生と、耳での聴感確認は分けます。助手による聴感確認は未実施です。
 
@@ -31,7 +40,7 @@ node scripts/submission/narration-review.mjs \
 
 以下は保全するGoal014無音原本とその他提出物の制作手順です。
 
-**新しい提出候補は `goal014-final` です。** 動画は160.60秒（2分40.60秒）。全編再生・目視・ZIP展開照合を完了しました。使用するファイルは、ローカルの `artifacts/submission/public/goal014-final/README.txt` と `manifest.json` を基準にしてください。旧review-v2.1と以前のGoal011素材は保全し、混在させません。
+**Goal014当時の提出候補は `goal014-final` です。** 動画は160.60秒（2分40.60秒）。全編再生・目視・ZIP展開照合を完了しました。使用するファイルは、ローカルの `artifacts/submission/public/goal014-final/README.txt` と `manifest.json` を基準にしてください。旧review-v2.1と以前のGoal011素材は保全し、混在させません。
 
 紹介文・画像順・動画章のコピーは [`final-copy.json`](final-copy.json)、出所と版の区別は [Goal014記録](../../docs/goals/014-current-ui-submission.md)にまとめます。画像・MP4・PDF・本文・構成図・ZIPはGit管理外で、GitHubには同梱しません。秘密・生ログ・artifacts全体をGitへ追加しません。
 
@@ -59,7 +68,7 @@ node scripts/submission/narration-review.mjs \
 
 | 用途 | `artifacts/submission/` からの相対パス |
 |---|---|
-| 最新の公開素材 | `public/goal014-final/` |
+| 当時の公開素材 | `public/goal014-final/` |
 | 一式ZIP | `ugoku-kami-goal014-final.zip` |
 | 非公開の審査手順 | `private/goal014-final/reviewer-instructions.txt`（0600、公開一式へ含めない） |
 | 新収録・時刻補正・編集・レビュー・保全証拠 | `private/goal014-final/` |

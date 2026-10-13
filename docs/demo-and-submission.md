@@ -1,12 +1,34 @@
 # デモ構成と提出準備
 
-## Goal015：ナレーション付き動画
+## 最新版：Goal016の2分43.04秒本編
 
-動画の新しい候補は `artifacts/submission/public/goal015-narrated/demo-narrated.mp4`。Goal014の無音原本を保全し、同じ160.6秒の映像・字幕へローカルVOICEVOX Nemo女声1の音声を追加した。画像・本文・構成図・PDFは以下のGoal014一式を維持する。同フォルダに音声単体、時刻付き原稿、設定・利用条件、YouTube説明欄用クレジットを置く。[Goal015の記録](goals/015-local-narration.md)、[再生成手順](../scripts/submission/README.md)を参照。耳での聴感確認は未実施とし、客観的な再生・同期・読み指定・音量検査とは区別する。YouTube投稿・Zenn最終提出は本人が行う。
+投稿用の動画は `artifacts/submission/public/goal016-submission/demo-full-narrated.mp4`。163.04秒（2分43.04秒）、1920×1080・25fps・4,076フレーム、18場面で、実AIの依頼場面は17.84秒から始まる。無音版と音声版の全編デコード・1倍再生が成功し、drop/corruptはともに0。独立した目視確認と字幕18件の時刻・本文照合も完了した。音声版の全4,076映像packetは無音版と一致し、17音声区間の客観検査を通過した。耳での聴感確認は未実施。
 
-## Goal014：新UIの提出候補
+同フォルダの `README.txt`・`manifest.json` が素材の一覧と出所、`private/goal016-submission/package-result.json` が秘密検査後のZIP生成・展開照合の正本となる。動画の検査完了とZIPの封印結果は分けて記録する。[本編制作・梱包の再現手順](../scripts/submission/full-README.md)を参照。
 
-新しい提出候補は `artifacts/submission/public/goal014-final/` にまとめる。MP4は160.60秒（2分40.60秒）、1920×1080・25fps・無音。全4,015フレームのデコード、等速での全編再生（drop/corruptとも0）、全14場面と13カット前後の抽出・目視、ZIP全件の展開照合を完了した。完成版の選択は同フォルダの `README.txt`・`manifest.json` を基準にする。[提出欄と制作手順](../scripts/submission/README.md)、[Goal014の出所と区別](goals/014-current-ui-submission.md)を参照。
+| 用途 | `artifacts/submission/` からの相対パス |
+|---|---|
+| YouTubeへ投稿する本編 | `public/goal016-submission/demo-full-narrated.mp4` |
+| 無音の同一映像・字幕 | `public/goal016-submission/demo-full.mp4`・`captions.srt` |
+| 画像4枚・同版PDF・説明文・構成図 | `public/goal016-submission/`（旧`goal016-final`と同じバイト） |
+| 16ファイルの一式ZIP | `ugoku-kami-goal016-submission.zip` |
+| 音声の時刻付き原稿・YouTube用クレジット | `public/goal016-submission/narration-timed.txt`・`youtube-audio-credit.txt` |
+| 非公開の審査手順 | `private/goal016-final/reviewer-instructions.txt`（既存原本を維持、公開ZIP対象外） |
+
+実AI部分はGoal016の既存1依頼・モデル1送信、20→25mmの案を第2版へ採用した実録だけを使う。その後は同じ採用正本を開く別のローカル手動セッションで、印刷・ガイド・保存再開を見せる。ローカル収録は `AI_PROVIDER=none` で、実AI応答を作り直したり合成したりしない。映像と明示した静止画・別セッションの区別をEDLへ残す。追加AI送信・Cloud操作・アプリ変更は0。
+
+旧Goal016の36.08秒動画は履歴ダイジェスト、旧Goal014/015は以前の提出候補として保全する。新本編は新しい完成ファイルに対して検査し、旧動画のレビュー成功を付け替えない。Zenn未提出は本人確認済み。YouTube投稿と最終提出は未実施で、紙の印刷・組立・実物動作と助手による耳での聴感確認も未確認のまま区別する。
+
+以下は各時点の記録であり、現在の投稿ファイルは上記の本編を使う。
+
+
+## Goal015：ナレーション付き動画（履歴）
+
+当時の動画候補は `artifacts/submission/public/goal015-narrated/demo-narrated.mp4`。Goal014の無音原本を保全し、同じ160.6秒の映像・字幕へローカルVOICEVOX Nemo女声1の音声を追加した。画像・本文・構成図・PDFは以下のGoal014一式を維持する。同フォルダに音声単体、時刻付き原稿、設定・利用条件、YouTube説明欄用クレジットを置く。[Goal015の記録](goals/015-local-narration.md)、[再生成手順](../scripts/submission/README.md)を参照。耳での聴感確認は未実施とし、客観的な再生・同期・読み指定・音量検査とは区別する。YouTube投稿・Zenn最終提出は本人が行う。
+
+## Goal014：新UIの提出候補（履歴）
+
+当時の提出候補は `artifacts/submission/public/goal014-final/` にまとめる。MP4は160.60秒（2分40.60秒）、1920×1080・25fps・無音。全4,015フレームのデコード、等速での全編再生（drop/corruptとも0）、全14場面と13カット前後の抽出・目視、ZIP全件の展開照合を完了した。完成版の選択は同フォルダの `README.txt`・`manifest.json` を基準にする。[提出欄と制作手順](../scripts/submission/README.md)、[Goal014の出所と区別](goals/014-current-ui-submission.md)を参照。
 
 画像はGoal013の新UI4枚を同じバイトで使用する。選択→20mmの条件設定→手動20→25mm比較→採用した第7版・25mmの印刷画面で、実AIの生成結果ではない。動画は別の新UI手動25→30mmデモ、旧UIの実Vertex録画の安全な短い抜粋、旧AI採用正本30mm・第3版を新UIで開く別セッションのPDF・ガイド・保存再開で構成する。手動支援と実AI、別作品・別版・別セッションを混同しない。
 

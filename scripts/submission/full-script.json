@@ -1,0 +1,213 @@
+{
+  "format": "ugoku-goal016-full-editorial-script-v1",
+  "edition": "goal016-submission",
+  "status": "chapter-text-frozen-measured-local-pts",
+  "targetDurationSeconds": [
+    160,
+    170
+  ],
+  "allowedDurationSeconds": [
+    150,
+    180
+  ],
+  "proposedDurationSeconds": 163.04,
+  "voice": {
+    "engine": "VOICEVOX Nemo",
+    "voice": "女声1",
+    "speaker": 10005,
+    "speedScale": 1,
+    "pitchScale": 0,
+    "intonationScale": 1
+  },
+  "fixedFacts": {
+    "requestText": "右へ25mm動かしたい。絵の大きさと紙の枚数は変えない",
+    "requests": 1,
+    "modelSends": 1,
+    "baseTravelMm": 20,
+    "adoptedTravelMm": 25,
+    "adoptedRevision": 2,
+    "adoptedDesignHash": "ed80b7cb9983144f2a6f7d3160d14b8aba6f97433fcc447dc6ef5c3c405c3298",
+    "newModelCallsForContinuation": 0,
+    "physicalValidation": "unverified"
+  },
+  "editorialRules": [
+    "No old UI. Public real-AI safe footage used once at playbackRate1, only request to adoption.",
+    "No slowdown or repeated moving interval. Necessary stills/crops carry explicit 静止 or 拡大 labels.",
+    "Local continuation is the exact adopted document in a different local session, not a further AI request.",
+    "Local moving scenes use the measured PTS boundaries without slowdown, looping, or padding.",
+    "PDF source is the same adopted-r2 exact artifact; all five pages and one purposeful calibration crop are permitted."
+  ],
+  "chapters": [
+    {
+      "id": "opening",
+      "preferredSeconds": 11.84,
+      "caption": "自分の絵を、切って動かせる紙工作に。",
+      "text": "うごく紙工房。描いた絵を動く紙工作にしたい人へ、仕組みの設計から、原寸の型紙と組み立てガイドまでを届けます。",
+      "spokenText": "うごく紙工房。描いた絵を動くかみこうさくにしたい人へ、仕組みの設計から、原寸の型紙と組み立てガイドまでを届けます。",
+      "sceneIds": [
+        "home-intro",
+        "intro-artwork-still"
+      ]
+    },
+    {
+      "id": "request-explained",
+      "preferredSeconds": 6,
+      "caption": "右へ25mm。絵の大きさと紙の枚数は、そのまま。",
+      "text": "ここでは、右へ二十五ミリ。絵の大きさと紙の枚数は変えません。",
+      "spokenText": "ここでは、右へ二十五ミリ。絵の大きさと紙の枚数は変えません。",
+      "sceneIds": [
+        "request-still"
+      ]
+    },
+    {
+      "id": "real-request",
+      "preferredSeconds": 6.44,
+      "caption": "今回の公開版で、実AIへ1依頼。",
+      "text": "公開版のAIへ送信。今回の実行は、一依頼、一送信です。",
+      "spokenText": "公開版のAIへ送信。今回の実行は、一依頼、一送信です。",
+      "sceneIds": [
+        "real-request-send"
+      ]
+    },
+    {
+      "id": "real-comparison",
+      "preferredSeconds": 7.64,
+      "caption": "AIが提案。コードが検査。作者が選ぶ。",
+      "text": "二十ミリから、二十五ミリへ。大きさと紙の枚数を保つ案を、比べて採用します。",
+      "spokenText": "二十ミリから、二十五ミリへ。大きさと紙の枚数を保つ案を、比べて採用します。",
+      "sceneIds": [
+        "real-comparison-adopt"
+      ]
+    },
+    {
+      "id": "resume-adopted",
+      "preferredSeconds": 7.2,
+      "caption": "同じ第2版を、別のローカルセッションで再開。",
+      "text": "ここからは、同じ第二版を開いたローカル画面です。追加のAIは使いません。",
+      "spokenText": "ここからは、同じ第二版を開いたローカル画面です。追加のAIは使いません。",
+      "sceneIds": [
+        "import-adopted-r2"
+      ]
+    },
+    {
+      "id": "print-choices",
+      "preferredSeconds": 25.2,
+      "caption": "型紙1枚と、説明4ページ。必要な内容を選ぶ。",
+      "text": "取得するのは、型紙一枚と説明四ページ。全部入り、型紙だけ、説明だけを選べます。どれも、採用した同じ設計版から作ります。",
+      "spokenText": "取得するのは、型紙一枚と説明四ページ。全部入り、型紙だけ、説明だけを選べます。どれも、採用した同じ設計版から作ります。",
+      "sceneIds": [
+        "pdf-three-contents"
+      ]
+    },
+    {
+      "id": "pdf-pattern",
+      "preferredSeconds": 7,
+      "caption": "原寸の型紙から、8つの部品を切り出す。",
+      "text": "台紙、動く絵、引き手、ガイド。型紙には、八つの部品を配置しています。",
+      "spokenText": "台紙、動く絵、引き手、ガイド。型紙には、八つの部品を配置しています。",
+      "sceneIds": [
+        "pdf-pattern"
+      ]
+    },
+    {
+      "id": "pdf-instructions-one",
+      "preferredSeconds": 7,
+      "caption": "切る線と折る線を区別する。",
+      "text": "実線は切る線、破線は折る線。手順と図で、次に扱う部品を確かめます。",
+      "spokenText": "実線は切る線、破線は折る線。手順と図で、次に扱う部品を確かめます。",
+      "sceneIds": [
+        "pdf-instructions-one"
+      ]
+    },
+    {
+      "id": "pdf-instructions-two",
+      "preferredSeconds": 7,
+      "caption": "裏側と、接着する面を確認する。",
+      "text": "裏側の向きと、接着する面を図で確認します。糊を付けない場所も、明示しています。",
+      "spokenText": "裏側の向きと、接着する面を図で確認します。糊を付けない場所も、明示しています。",
+      "sceneIds": [
+        "pdf-instructions-two"
+      ]
+    },
+    {
+      "id": "pdf-instructions-three",
+      "preferredSeconds": 7,
+      "caption": "抜け止めと、動かす範囲を確認する。",
+      "text": "抜け止めの位置と、始点から終点までの確認方法を、設計版と一緒に残します。",
+      "spokenText": "抜け止めの位置と、始点から終点までの確認方法を、設計版と一緒に残します。",
+      "sceneIds": [
+        "pdf-instructions-three"
+      ]
+    },
+    {
+      "id": "pdf-instructions-four",
+      "preferredSeconds": 7,
+      "caption": "裏側の接着位置は、実寸の数字で。",
+      "text": "台紙の裏に写す位置は、ミリ単位の数値で示します。図の見た目だけで位置を決めません。",
+      "spokenText": "台紙の裏に写す位置は、ミリ単位の数値で示します。図の見た目だけで位置を決めません。",
+      "sceneIds": [
+        "pdf-instructions-four"
+      ]
+    },
+    {
+      "id": "guide-parts",
+      "preferredSeconds": 9.8,
+      "caption": "今回使う部品を、一工程ずつ。",
+      "text": "ガイドも、PDFと同じ版。使う部品と作業する面を、一工程ずつ確認します。閲覧と実物の記録は区別します。",
+      "spokenText": "ガイドも、PDFと同じ版。使う部品と作業する面を、一工程ずつ確認します。閲覧と実物の記録は区別します。",
+      "sceneIds": [
+        "guide-parts"
+      ]
+    },
+    {
+      "id": "guide-fold",
+      "preferredSeconds": 11.2,
+      "caption": "折る前と、折った後を見比べる。",
+      "text": "ガイドは、引き手が通るトンネルに。接続片は、ゼット形に折ります。折る前と折った後の図を比べ、動く部分のすき間を残します。",
+      "spokenText": "ガイドは、引き手が通るトンネルに。接続片は、ゼット形に折ります。折る前と折った後の図を比べ、動く部分のすき間を残します。",
+      "sceneIds": [
+        "guide-fold"
+      ]
+    },
+    {
+      "id": "guide-glue",
+      "preferredSeconds": 9.2,
+      "caption": "糊は、指定した足と面だけに。",
+      "text": "ガイドの足の裏を、台紙の裏へ接着。引き手は、接続片や抜け止めを付ける前に通します。",
+      "spokenText": "ガイドの足の裏を、台紙の裏へ接着。引き手は、接続片や抜け止めを付ける前に通します。",
+      "sceneIds": [
+        "guide-glue"
+      ]
+    },
+    {
+      "id": "guide-no-glue",
+      "preferredSeconds": 9.8,
+      "caption": "通り道と、動く部分を接着しない。",
+      "text": "台紙、切り込み、接続片の中央には糊を付けません。絵と引き手をつなぐ足は、上下で接着面が逆です。",
+      "spokenText": "台紙、切り込み、接続片の中央には糊を付けません。絵と引き手をつなぐ足は、上下で接着面が逆です。",
+      "sceneIds": [
+        "guide-no-glue"
+      ]
+    },
+    {
+      "id": "save-resume",
+      "preferredSeconds": 16.72,
+      "caption": "作品も、ガイドの続きを開く位置も保存。",
+      "text": "作品とガイドの位置を、このブラウザに保存。再読み込みしても、同じ第二版、同じ工程から再開できます。AIが提案し、コードが検査し、作者が採用します。",
+      "spokenText": "作品とガイドの位置を、このブラウザに保存。再読み込みしても、同じ第二版、同じ工程から再開できます。AIが提案し、コードが検査し、作者が採用します。",
+      "sceneIds": [
+        "save-reload-resume"
+      ]
+    },
+    {
+      "id": "ending-calibration",
+      "preferredSeconds": 7,
+      "caption": "100%で印刷し、50mmを実測。実物の動作は未確認。",
+      "text": "百パーセントで印刷して、五十ミリを実測。実物の動作は未確認です。",
+      "spokenText": "百パーセントで印刷して、五十ミリを実測。実物の動作は未確認です。",
+      "sceneIds": [
+        "pdf-calibration"
+      ]
+    }
+  ]
+}
