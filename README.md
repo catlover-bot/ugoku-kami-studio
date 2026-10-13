@@ -14,9 +14,16 @@
 
 [Goal013](docs/goals/013-oss-inspired-product-ui.md)では、作品を大きく表示する編集バー・中央キャンバス・工程別の右操作面に整理しました。希望入力は一か所、比較には現在・希望・候補の値と共通の縮尺を使い、PDFは内容を選んで一つのボタンから取得します。表示倍率・パンは設計寸法を変えません。[OSSの参照と採用判断](docs/design/013-oss-reference.md)、[新UIの検証と再現](docs/design/013-verification.md)に実画面・出力不変性・統合と配信の確認を分けて記録しています。2026-10-07に同じ公開サービスへ反映し、追加AI送信なしで手動編集・保存再開・同版PDF・認証境界を確認しました。
 
-## 今回の提出候補：Goal016の本編動画
+## 最新の紹介動画：操作から、型紙とガイドへ
 
-YouTubeへ投稿する最新版は `artifacts/submission/public/goal016-submission/demo-full-narrated.mp4` です。**2分43.04秒（163.04秒）、18場面、全4,076フレームの本編が完成しました。** 実AIの依頼場面は開始17.84秒からです。無音版・音声版とも全編デコードと1倍再生が成功し、drop/corruptは0。独立した目視確認と字幕18件の時刻・本文照合を完了しました。音声版は全映像packetが無音版と一致し、17区間の音声を客観検査しました。耳での聴感確認は未実施です。
+提出用の最新版は `artifacts/submission/public/goal016-value-first/demo-full-narrated.mp4` です。絵を選ぶ、希望を伝える、案を比べて選ぶ、型紙と組立ガイドを受け取る、保存して続きから再開する――操作と得られるものを順番に紹介します。タイトルと概要欄は同フォルダの `youtube-description.txt`、掲載ファイルは短い `README.txt` を参照してください。
+
+新版は2分43.04秒（163.04秒）です。新しい完成ファイルの全編デコード・等速再生、字幕と映像の照合、独立した目視を確認しました。検査記録は `artifacts/submission/private/goal016-value-first/` に分け、公開素材へ制作注記を混ぜません。秘密検査後のZIP生成・展開照合は同ディレクトリの `package-result.json` を正本とします。[掲載ファイルと再生成手順](scripts/submission/value-README.md)を参照してください。旧36.08秒版と2分43.04秒版は以下の履歴として保全します。
+
+## 保全している2分43.04秒本編：Goal016
+
+
+前版は `artifacts/submission/public/goal016-submission/demo-full-narrated.mp4` に保全しています。**2分43.04秒（163.04秒）、18場面、全4,076フレームの本編が完成しました。** 実AIの依頼場面は開始17.84秒からです。無音版・音声版とも全編デコードと1倍再生が成功し、drop/corruptは0。独立した目視確認と字幕18件の時刻・本文照合を完了しました。音声版は全映像packetが無音版と一致し、17区間の音声を客観検査しました。耳での聴感確認は未実施です。
 
 ファイル一覧は同フォルダの `README.txt`・`manifest.json`、再現手順は [本編の制作・梱包](scripts/submission/full-README.md)を参照してください。一式ZIPの出力先は `artifacts/submission/ugoku-kami-goal016-submission.zip`、秘密検査後の梱包・展開照合結果は `artifacts/submission/private/goal016-submission/package-result.json` を正本とします。
 

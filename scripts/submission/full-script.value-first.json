@@ -1,0 +1,217 @@
+{
+  "format": "ugoku-goal016-full-editorial-script-v1",
+  "edition": "goal016-value-first",
+  "status": "speech-measurement-candidate-v2",
+  "targetDurationSeconds": [
+    160,
+    170
+  ],
+  "allowedDurationSeconds": [
+    150,
+    180
+  ],
+  "proposedDurationSeconds": 163.04,
+  "voice": {
+    "engine": "VOICEVOX Nemo",
+    "voice": "女声1",
+    "speaker": 10005,
+    "speedScale": 1,
+    "pitchScale": 0,
+    "intonationScale": 1
+  },
+  "fixedFacts": {
+    "requestText": "右へ25mm動かしたい。絵の大きさと紙の枚数は変えない",
+    "requests": 1,
+    "modelSends": 1,
+    "baseTravelMm": 20,
+    "adoptedTravelMm": 25,
+    "adoptedRevision": 2,
+    "adoptedDesignHash": "ed80b7cb9983144f2a6f7d3160d14b8aba6f97433fcc447dc6ef5c3c405c3298",
+    "newModelCallsForContinuation": 0,
+    "physicalValidation": "unverified"
+  },
+  "editorialRules": [
+    "Use current-UI Goal016 source recordings and the exact adopted design only. No old UI and no new model calls.",
+    "Viewer-facing text explains actions, visible outcomes and user benefits, not development or audit status.",
+    "Keep execution environment, session provenance, validation status, hashes and call counts in production records; do not falsify or delete them.",
+    "Same-design cuts are allowed without naming the execution environment. Do not claim an uncut session, instantaneous inference or a physical build success.",
+    "Preserve the real AI request/result/adoption footage. Retain truthful local indications for slowed, accelerated or explanatory still sequences when needed.",
+    "Change editorial overlays only, never erase product safety messages or alter actual UI values and validation results.",
+    "Rebuild burned-in captions from clean approved source footage. Do not paint over the app or use generated replacement screens.",
+    "preferredSeconds are inherited timing guides. Measure new speech; shorten words or adjust permitted scene holds to fit. No truncated speech.",
+    "Move calibration close-up to the PDF explanation if possible; use the already captured adopted artwork or full kit for the closing. Update EDL and provenance when moving footage."
+  ],
+  "chapters": [
+    {
+      "id": "opening",
+      "preferredSeconds": 11.84,
+      "caption": "自分の絵から、原寸の型紙と組立ガイドへ。",
+      "text": "描いた絵に、動く仕組みを。うごく紙工房は、自分の絵と希望する動きから、紙工作の型紙と組立ガイドを作るアプリです。",
+      "spokenText": "描いた絵に、動く仕組みを。うごくカミコウボウは、自分の絵と希望する動きから、かみこうさくの型紙とくみたてガイドを作るアプリです。",
+      "sceneIds": [
+        "home-intro",
+        "intro-artwork-still"
+      ]
+    },
+    {
+      "id": "request-explained",
+      "preferredSeconds": 6,
+      "caption": "絵の大きさと紙枚数を保って、右へ25mm。",
+      "text": "希望は、右へ二十五ミリ。絵の大きさと紙の枚数は、そのままです。",
+      "spokenText": "希望は、右へ二十五ミリ。絵の大きさと紙の枚数は、そのままです。",
+      "sceneIds": [
+        "request-still"
+      ]
+    },
+    {
+      "id": "real-request",
+      "preferredSeconds": 6.44,
+      "caption": "希望を伝えて、AIに案をつくってもらう。",
+      "text": "AIで案をつくるを押します。案を作り、寸法と配置を確かめます。",
+      "spokenText": "エーアイで案をつくるを押します。案を作り、寸法と配置を確かめます。",
+      "sceneIds": [
+        "real-request-send"
+      ]
+    },
+    {
+      "id": "real-comparison",
+      "preferredSeconds": 7.64,
+      "caption": "20mmと25mmを見比べて、使う案を選ぶ。",
+      "text": "動く距離は、二十ミリから二十五ミリへ。変更前後を見比べて、使う案を選びます。",
+      "spokenText": "動く距離は、二十ミリから二十五ミリへ。変更前後を見比べて、使う案を選びます。",
+      "sceneIds": [
+        "real-comparison-adopt"
+      ]
+    },
+    {
+      "id": "resume-adopted",
+      "preferredSeconds": 7.2,
+      "caption": "採用した作品を開き、印刷の準備へ。",
+      "text": "採用した作品を開き、印刷の準備へ。選んだ動きが、型紙とガイドに反映されます。",
+      "spokenText": "採用した作品を開き、印刷の準備へ。選んだ動きが、型紙とガイドに反映されます。",
+      "sceneIds": [
+        "import-adopted-r2"
+      ]
+    },
+    {
+      "id": "print-choices",
+      "preferredSeconds": 25.2,
+      "caption": "型紙も説明書も、必要なものを選んで取得。",
+      "text": "印刷して作るを開き、PDFに含める内容を選びます。初めて作るときは、型紙と説明がそろった全部入り。型紙だけを印刷し直すときは、型紙のみを選べます。この作品では、型紙一枚と説明四ページを受け取れます。",
+      "spokenText": "印刷して作るを開き、ピーディーエフに含める内容を選びます。初めて作るときは、型紙と説明がそろった全部入り。型紙だけを印刷し直すときは、型紙のみを選べます。この作品では、型紙一枚と説明四ページを受け取れます。",
+      "sceneIds": [
+        "pdf-three-contents"
+      ]
+    },
+    {
+      "id": "pdf-pattern",
+      "preferredSeconds": 7,
+      "caption": "台紙・動く絵・引き手を、一枚の型紙に。",
+      "text": "ダウンロードした型紙には、台紙、動く絵、引き手、ガイドが一枚にまとまっています。",
+      "spokenText": "ダウンロードした型紙には、台紙、動く絵、引き手、ガイドが一枚にまとまっています。",
+      "sceneIds": [
+        "pdf-pattern"
+      ]
+    },
+    {
+      "id": "pdf-instructions-one",
+      "preferredSeconds": 7,
+      "caption": "切る線と折る線が、見て分かる。",
+      "text": "切る線と折る線を描き分け、部品には番号を付けています。図と照らし合わせて作業できます。",
+      "spokenText": "切る線と折る線を描き分け、部品には番号を付けています。図と照らし合わせて作業できます。",
+      "sceneIds": [
+        "pdf-instructions-one"
+      ]
+    },
+    {
+      "id": "pdf-instructions-two",
+      "preferredSeconds": 7,
+      "caption": "部品の向きと、貼る場所を図で案内。",
+      "text": "部品を向ける方向と、貼り合わせる面を図で案内します。どこを合わせるかが分かります。",
+      "spokenText": "部品を向ける方向と、貼り合わせる面を図で案内します。どこを合わせるかが分かります。",
+      "sceneIds": [
+        "pdf-instructions-two"
+      ]
+    },
+    {
+      "id": "pdf-instructions-three",
+      "preferredSeconds": 7,
+      "caption": "引き手と抜け止めの位置も、手順で確認。",
+      "text": "引き手や抜け止めの付け方も、順番に確認できます。動きを確かめる位置も示しています。",
+      "spokenText": "引き手や抜け止めの付け方も、順番に確認できます。動きを確かめる位置も示しています。",
+      "sceneIds": [
+        "pdf-instructions-three"
+      ]
+    },
+    {
+      "id": "pdf-instructions-four",
+      "preferredSeconds": 7,
+      "caption": "取り付け位置は、ミリ単位で分かる。",
+      "text": "部品の取り付け位置は、ミリ単位の数値でも表示。台紙へ位置を写すときに使えます。",
+      "spokenText": "部品の取り付け位置は、ミリ単位の数値でも表示。台紙へ位置を写すときに使えます。",
+      "sceneIds": [
+        "pdf-instructions-four"
+      ]
+    },
+    {
+      "id": "guide-parts",
+      "preferredSeconds": 9.8,
+      "caption": "その工程で使う部品を、ひと目で。",
+      "text": "画面の組立ガイドでは、その工程で使う部品と作業を一つずつ表示します。型紙の番号と見比べながら進められます。",
+      "spokenText": "画面のくみたてガイドでは、その工程で使う部品と作業を一つずつ表示します。型紙の番号と見比べながら進められます。",
+      "sceneIds": [
+        "guide-parts"
+      ]
+    },
+    {
+      "id": "guide-fold",
+      "preferredSeconds": 11.2,
+      "caption": "折る前と折った後を、見比べながら。",
+      "text": "折り方は、作業の前後を並べた図で確認できます。引き手を通すガイドや、絵につなぐ接続片の形を見ながら準備します。",
+      "spokenText": "折り方は、作業の前後を並べた図で確認できます。引き手を通すガイドや、絵につなぐ接続片の形を見ながら準備します。",
+      "sceneIds": [
+        "guide-fold"
+      ]
+    },
+    {
+      "id": "guide-glue",
+      "preferredSeconds": 9.2,
+      "caption": "貼る面と組み付ける順番を、図でたどる。",
+      "text": "ガイドを取り付ける面と、引き手を通す順番を図でたどれます。部品の位置を確かめながら、次の工程へ進みます。",
+      "spokenText": "ガイドを取り付ける面と、引き手を通す順番を図でたどれます。部品の位置を確かめながら、次の工程へ進みます。",
+      "sceneIds": [
+        "guide-glue"
+      ]
+    },
+    {
+      "id": "guide-no-glue",
+      "preferredSeconds": 9.8,
+      "caption": "動く部分の通り道も、図で分かる。",
+      "text": "貼り合わせる面と、動く部分の通り道を分けて表示します。絵と引き手をどうつなぐかも、図を見ながら確認できます。",
+      "spokenText": "貼り合わせる面と、動く部分の通り道を分けて表示します。絵と引き手をどうつなぐかも、図を見ながら確認できます。",
+      "sceneIds": [
+        "guide-no-glue"
+      ]
+    },
+    {
+      "id": "save-resume",
+      "preferredSeconds": 16.72,
+      "caption": "作品も手順も保存して、続きから。",
+      "text": "作品は、同じブラウザで保存して再開できます。動きの設定だけでなく、開いていたガイドの続きから戻れます。自分のペースで、制作を進められます。",
+      "spokenText": "作品は、同じブラウザで保存して再開できます。動きの設定だけでなく、開いていたガイドの続きから戻れます。自分のペースで、制作を進められます。",
+      "sceneIds": [
+        "save-reload-resume"
+      ]
+    },
+    {
+      "id": "ending-calibration",
+      "preferredSeconds": 7,
+      "caption": "描いた絵に、動く仕組みを。",
+      "text": "描いた絵に、動く仕組みを。うごく紙工房です。",
+      "spokenText": "描いた絵に、動く仕組みを。うごくカミコウボウです。",
+      "sceneIds": [
+        "pdf-calibration"
+      ]
+    }
+  ]
+}

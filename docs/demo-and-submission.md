@@ -1,8 +1,17 @@
 # デモ構成と提出準備
 
-## 最新版：Goal016の2分43.04秒本編
+## 最新版：操作と得られるものを伝える紹介
 
-投稿用の動画は `artifacts/submission/public/goal016-submission/demo-full-narrated.mp4`。163.04秒（2分43.04秒）、1920×1080・25fps・4,076フレーム、18場面で、実AIの依頼場面は17.84秒から始まる。無音版と音声版の全編デコード・1倍再生が成功し、drop/corruptはともに0。独立した目視確認と字幕18件の時刻・本文照合も完了した。音声版の全4,076映像packetは無音版と一致し、17音声区間の客観検査を通過した。耳での聴感確認は未実施。
+投稿用の最新版は `artifacts/submission/public/goal016-value-first/demo-full-narrated.mp4`。自分の絵と希望する動きから、案の比較・採用、原寸型紙・組立ガイド、保存再開へ進む体験を紹介する。掲載案内は同フォルダの `README.txt`、タイトルと概要欄は添付原稿を使った `youtube-description.txt`、画像説明は `image-descriptions.txt` を使う。
+
+新版は163.04秒・18場面・17音声区間。無音版・音声版とも全4,076フレームのデコードと1倍再生が成功し、drop/corruptは0。字幕18件の本文・時刻、音声版の全映像packet一致、独立した目視も確認した。耳での聴感確認は未実施。これらの記録は `artifacts/submission/private/goal016-value-first/` に保存し、秘密検査後のZIP生成・展開照合は `package-result.json` を正本とする。公開一式は17ファイルで、詳細manifestや出所・検査記録は含めない。[再生成と梱包](../scripts/submission/value-README.md)を参照。
+
+4画像は加工を加えない同じ実画面、PDFは同じ採用設計の原本を保つ。構成図は内容と配置を維持し、自前の下端制作注記だけを元SVGから除いて再出力する。アプリやPDF自身の注意・数値・検査結果を削除しない。下記は旧版の記録であり、新版の検査成功へ付け替えない。
+
+
+## 保全している前版：Goal016の2分43.04秒本編
+
+当時の投稿用動画は `artifacts/submission/public/goal016-submission/demo-full-narrated.mp4`。163.04秒（2分43.04秒）、1920×1080・25fps・4,076フレーム、18場面で、実AIの依頼場面は17.84秒から始まる。無音版と音声版の全編デコード・1倍再生が成功し、drop/corruptはともに0。独立した目視確認と字幕18件の時刻・本文照合も完了した。音声版の全4,076映像packetは無音版と一致し、17音声区間の客観検査を通過した。耳での聴感確認は未実施。
 
 同フォルダの `README.txt`・`manifest.json` が素材の一覧と出所、`private/goal016-submission/package-result.json` が秘密検査後のZIP生成・展開照合の正本となる。動画の検査完了とZIPの封印結果は分けて記録する。[本編制作・梱包の再現手順](../scripts/submission/full-README.md)を参照。
 
