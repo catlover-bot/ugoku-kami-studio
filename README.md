@@ -14,13 +14,21 @@
 
 [Goal013](docs/goals/013-oss-inspired-product-ui.md)では、作品を大きく表示する編集バー・中央キャンバス・工程別の右操作面に整理しました。希望入力は一か所、比較には現在・希望・候補の値と共通の縮尺を使い、PDFは内容を選んで一つのボタンから取得します。表示倍率・パンは設計寸法を変えません。[OSSの参照と採用判断](docs/design/013-oss-reference.md)、[新UIの検証と再現](docs/design/013-verification.md)に実画面・出力不変性・統合と配信の確認を分けて記録しています。2026-10-07に同じ公開サービスへ反映し、追加AI送信なしで手動編集・保存再開・同版PDF・認証境界を確認しました。
 
-## 今回の提出候補：Goal016
+## 今回の提出候補：Goal016の本編動画
+
+YouTubeへ投稿する最新版は `artifacts/submission/public/goal016-submission/demo-full-narrated.mp4` です。**2分43.04秒（163.04秒）、18場面、全4,076フレームの本編が完成しました。** 実AIの依頼場面は開始17.84秒からです。無音版・音声版とも全編デコードと1倍再生が成功し、drop/corruptは0。独立した目視確認と字幕18件の時刻・本文照合を完了しました。音声版は全映像packetが無音版と一致し、17区間の音声を客観検査しました。耳での聴感確認は未実施です。
+
+ファイル一覧は同フォルダの `README.txt`・`manifest.json`、再現手順は [本編の制作・梱包](scripts/submission/full-README.md)を参照してください。一式ZIPの出力先は `artifacts/submission/ugoku-kami-goal016-submission.zip`、秘密検査後の梱包・展開照合結果は `artifacts/submission/private/goal016-submission/package-result.json` を正本とします。
+
+本編は、下記Goal016の**実AI 1依頼・1送信による20→25mm・第2版への採用**と、同じ採用設計を別のローカルセッションで開く印刷・ガイド・保存再開を組み合わせます。追加収録は `AI_PROVIDER=none`。本編制作の追加AI送信・Cloud操作・アプリ変更は0です。画像4枚・同版PDF・構成図・説明文は `goal016-final` の同じバイトを継承し、36.08秒の元動画と旧Goal014/015は履歴として保持します。Zenn未提出は本人確認済みです。動画完成はYouTube投稿・最終提出・実物の動作確認を意味しません。
+
+## 保全している実AI収録と36.08秒ダイジェスト：Goal016
 
 Goal016では、作品・希望・候補・印刷の操作を整え、**現在の公開UIで、実AIの希望入力から採用・同版PDF・保存再開まで**を収録しました。2026-10-14 JSTの確認は追加1依頼・モデル送信1回。20→25mmの候補を、絵の大きさと型紙1枚の条件を保って第2版へ採用しました。UI待機は3.667秒、サーバーの処理は2.615秒で、この1件の実測です。開始前から起動済みの状態であり、初回起動時間ではありません。台帳は従来の履歴を保持した5依頼・9送信になりました。
 
-新しい一式の保存先は `artifacts/submission/public/goal016-final/`、ZIPは `artifacts/submission/ugoku-kami-goal016-final.zip`。再現手順は [Goal016制作手順](scripts/submission/goal016-README.md)です。`goal016-capture.mjs` で新収録の証拠を検査し、`goal016-video.mjs`／`goal016-review.mjs` で編集・全編確認、`goal016-narrate.py`／`goal016-narration-review.mjs` でローカル音声と客観的な音声再生確認、`goal016-package.mjs` のstage／sealで梱包します。秘密の確認は権限を持つ担当が固定した同じファイル群に対して行います。
+このダイジェスト一式の保存先は `artifacts/submission/public/goal016-final/`、ZIPは `artifacts/submission/ugoku-kami-goal016-final.zip`。再現手順は [Goal016制作手順](scripts/submission/goal016-README.md)です。`goal016-capture.mjs` で新収録の証拠を検査し、`goal016-video.mjs`／`goal016-review.mjs` で編集・全編確認、`goal016-narrate.py`／`goal016-narration-review.mjs` でローカル音声と客観的な音声再生確認、`goal016-package.mjs` のstage／sealで梱包します。秘密の確認は権限を持つ担当が固定した同じファイル群に対して行います。
 
-配信・収録したアプリは `6c1b858bbe73542d179334b84ef4aefe57de65aa`、revision `ugoku-kami-release-011-00002-tg9` です。画像4枚、動画、説明文・審査手順の対応は新しいmanifestへまとめ、旧動画を実AI部分に流用しません。[UIの改善](docs/design/016-product-finish.md)と[公開確認・回帰・費用の記録](docs/design/016-verification.md)を参照してください。以後の制作・記録だけのmainコミットは、配信したアプリのSHAと区別します。
+配信・収録したアプリは `6c1b858bbe73542d179334b84ef4aefe57de65aa`、revision `ugoku-kami-release-011-00002-tg9` です。画像4枚、動画、説明文・審査手順の対応は当該manifestへまとめました。この収録では過去Goalの旧動画を実AI部分に流用していません。[UIの改善](docs/design/016-product-finish.md)と[公開確認・回帰・費用の記録](docs/design/016-verification.md)を参照してください。以後の制作・記録だけのmainコミットは、配信したアプリのSHAと区別します。
 
 素材はGit管理外です。旧Goal014・Goal015・review系は削除せず、以下の履歴として保全します。YouTube投稿・Zenn最終提出・紙の実物動作は、この媒体生成の完了とは別です。
 
