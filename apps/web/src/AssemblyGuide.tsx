@@ -38,9 +38,18 @@ export default function AssemblyGuide({ project, currentDocument, initialStep = 
     onStepChange?.(number);
   }
 
+  function continueStep(number: number) {
+    selectStep(number);
+    requestAnimationFrame(() => {
+      const heading = window.document.getElementById(`${headingId}-step-${number}`);
+      heading?.focus({ preventScroll: true });
+      heading?.scrollIntoView({ block: 'start' });
+    });
+  }
+
   function renderStep(step: AssemblyStep) {
     return <article className="assembly-guide-step" key={step.number} data-step={step.number} aria-labelledby={`${headingId}-step-${step.number}`}>
-      <h3 id={`${headingId}-step-${step.number}`}>{step.number}. {step.title}</h3>
+      <h3 id={`${headingId}-step-${step.number}`} tabIndex={-1}>{step.number}. {step.title}</h3>
       <p className="assembly-guide-face">見る面：{faceNames[step.view]}</p>
       <figure className="assembly-guide-figure">
         <div className="assembly-guide-diagram" role="region" tabIndex={0} aria-label={`工程${step.number}の組み立て図`} aria-describedby={`${headingId}-diagram-help-${step.number}`}>
@@ -73,6 +82,10 @@ export default function AssemblyGuide({ project, currentDocument, initialStep = 
     </div>
     <p className="assembly-guide-reading" aria-live="polite">{allSteps ? `全${steps.length}工程を表示しています。` : `閲覧中の工程 ${stepNumber} / ${steps.length}`}</p>
     <div className={allSteps ? 'assembly-guide-content all-steps' : 'assembly-guide-content'}>{allSteps ? steps.map(renderStep) : renderStep(steps[stepNumber - 1]!)}</div>
+    {!allSteps && <nav className="assembly-guide-next" aria-label="読んだ工程の次へ">
+      <button className="text-button" disabled={stepNumber === 1} onClick={() => continueStep(stepNumber - 1)}>前の工程へ戻る</button>
+      {stepNumber < steps.length ? <button className="secondary" onClick={() => continueStep(stepNumber + 1)}>次の工程へ進む <span aria-hidden="true">→</span></button> : onClose && <button className="secondary" onClick={onClose}>型紙の画面へ戻る</button>}
+    </nav>}
     <p className="field-note">ここに残るのは手順の閲覧位置です。印刷・組み立て・動作確認の結果は、実際に試してから「実物でためした記録」に残してください。</p>
     <details className="assembly-guide-identity"><summary>型紙の版を照合する</summary><p>{document.designId} · 第{document.revision}版</p><code className="design-hash">{document.designHash}</code></details>
   </section>;

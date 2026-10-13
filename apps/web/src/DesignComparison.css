@@ -21,7 +21,11 @@
 .comparison-distances dd small { margin-left: 3px; font-size: 14px; font-weight: 400; }
 .comparison-distances .comparison-candidate-distance { border-color: var(--accent); }
 .candidate-alternative { margin: 10px 0; font-size: 14px; }
-.candidate-paper { margin: 10px 0; font-size: 14px; line-height: 1.65; }
+.candidate-change-summary { margin: 10px 0; font-size: 14px; }
+.candidate-change-summary strong { font-size: 16px; }
+.candidate-preserved-summary { list-style: none; margin: 10px 0; padding: 0; font-size: 14px; }
+.candidate-preserved-summary li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 4px; padding-block: 4px; }
+.candidate-preserved-summary li > span { margin-left: auto; color: var(--muted); font-size: 13px; }
 .candidate-other-changes { margin: 8px 0; padding-left: 18px; font-size: 14px; overflow-wrap: anywhere; }
 .design-comparison > .button-row { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 8px; }
 .design-comparison > .button-row > button { min-width: 0; min-height: 44px; width: 100%; }

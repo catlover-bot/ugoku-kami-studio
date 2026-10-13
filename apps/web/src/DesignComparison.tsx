@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { displayDimension, getKitSummary, type DesignDocument } from '@ugoku/core';
 import Preview, { getPreviewBounds } from './Preview';
@@ -22,17 +22,18 @@ type Props = {before: DesignDocument; after: DesignDocument; imageDataUrl: strin
 export default function DesignComparison({ before, after, imageDataUrl, backgroundImageDataUrl, beforeBackgroundImageDataUrl = backgroundImageDataUrl, afterBackgroundImageDataUrl = backgroundImageDataUrl, preserved = [], remaining = [], children, previewTarget, requestedTravelMm }: Props) {
   const [position, setPosition] = useState(1);
   const [side, setSide] = useState<'before' | 'after'>('after');
-  const bounds = getPreviewBounds([before, after]);
-  const changes = designChanges(before, after);
-  const summary = getKitSummary(after);
+  const bounds = useMemo(() => getPreviewBounds([before, after]), [before, after]);
+  const changes = useMemo(() => designChanges(before, after), [before, after]);
+  const summary = useMemo(() => getKitSummary(after), [after]);
   const failures = summary.checks.filter(check => check.status === 'fail');
   const protectedConditions = [...new Set([...preserved, ...after.input.locks.map(key => `${fieldNames[key] ?? key}を固定`)])];
   const newlyLocked = after.input.locks.filter(key => !before.input.locks.includes(key));
   const requested = requestedTravelMm !== undefined && Number.isFinite(requestedTravelMm) ? requestedTravelMm : undefined;
   const alternative = requested !== undefined && requested !== after.input.travelMm;
   const sizePreserved = before.input.widthMm === after.input.widthMm && before.input.heightMm === after.input.heightMm;
+  const travelChange = after.input.travelMm - before.input.travelMm;
   const previews = <>
-    <p className="candidate-state">同じ縮尺で比べる <span>候補はまだ採用していません</span></p>
+    <p className="candidate-state">同じ縮尺で比べる <span>採用するまで、いまの作品は変わりません</span></p>
     <div className="comparison-switch segmented" role="group" aria-label="比べる作品">
       <button type="button" aria-pressed={side === 'before'} onClick={() => setSide('before')}>いまの作品</button>
       <button type="button" aria-pressed={side === 'after'} onClick={() => setSide('after')}>候補の作品</button>
@@ -56,7 +57,11 @@ export default function DesignComparison({ before, after, imageDataUrl, backgrou
       <div className="comparison-candidate-distance"><dt>{alternative ? '候補（代案）' : '候補'}</dt><dd>{displayDimension(after.input.travelMm)}<small>mm</small></dd></div>
     </dl>
     {alternative && <p className="candidate-alternative">希望の{displayDimension(requested)}mmに対し、候補は{displayDimension(after.input.travelMm)}mmです。希望と異なる距離です。</p>}
-    <p className="candidate-paper">厚紙 {before.layout.sheets}枚 → <strong>{after.layout.sheets}枚</strong>（上限 {after.input.maxSheets}枚）<br />{sizePreserved ? '絵の大きさを維持' : `絵の大きさ：${displayDimension(after.input.widthMm)} × ${displayDimension(after.input.heightMm)}mm`}</p>
+    {travelChange !== 0 && <p className="candidate-change-summary">動く距離を <strong>{travelChange > 0 ? '+' : '−'}{displayDimension(Math.abs(travelChange))}mm</strong></p>}
+    <ul className="candidate-preserved-summary" aria-label="候補の大きさと紙">
+      <li>{sizePreserved ? '絵の大きさを維持' : `絵の大きさ ${displayDimension(after.input.widthMm)} × ${displayDimension(after.input.heightMm)}mm`}</li>
+      <li>厚紙 {before.layout.sheets === after.layout.sheets ? <><strong>{after.layout.sheets}枚</strong>のまま</> : <>{before.layout.sheets}枚 → <strong>{after.layout.sheets}枚</strong></>}<span>上限 {after.input.maxSheets}枚</span></li>
+    </ul>
     {changes.filter(change => change.key !== 'travelMm').length > 0 && <ul className="candidate-other-changes">{changes.filter(change => change.key !== 'travelMm').slice(0,2).map(change => <li key={change.key}>{change.label}：{change.before} → {change.after}</li>)}</ul>}
     {children}
     <p className={`candidate-verification ${failures.length ? 'field-error' : 'field-note'}`}>{failures.length ? '条件違反があるため、この案は選べません。' : '寸法・配置を検査済み。紙での動作は実物未確認です。'}</p>
