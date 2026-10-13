@@ -9,7 +9,7 @@
 収録先は `artifacts/submission/private/goal016-final/capture/<timestamp>/`。正本 `capture.json` は `goal016-media.mjs` の `validateCaptureShape()` / `loadCapture()` に従う。
 
 - `format: ugoku-goal016-capture-v1`、実公開source SHA・revision・digest・originを記録する。
-- 実Vertex1依頼、1〜6モデル送信。承認後の `run-final.json` と採用プロジェクトをhashで照合する。模擬応答・手動支援・未採用を成功に置き換えない。
+- 実Vertex1依頼、1〜6モデル送信。提案時の `run-proposed.json`、承認応答 `approval-response.json`、承認後の `run-final.json`、採用プロジェクトを別々の正本としてhashで照合する。`evidence` のキーはそれぞれ `runProposed/approval/runFinal/adoptedProject`。承認後にAPIが消すproposalをrun-finalへ合成しない。模擬応答・手動支援・未採用を成功に置き換えない。
 - 4画像は `selection/request/comparison/print`。requestとcomparisonは原本の版、printとPDFは採用版。selectionは同じ作品の途中版でもよい。
 - 原録画に私用設定区間が含まれる場合、公開可の `usableStartSeconds` / `usableEndSeconds` だけをclipsに登録する。`credentialFree` はこの区間の意味で、原録画全体の宣言ではない。安全マーカーを使い、実PTSを確認する。
 - 動画・画像・PDF・run・設計・eventsのfileはcapture.jsonと同じディレクトリ以下の相対パス。symlinkや外部pathは受け付けない。

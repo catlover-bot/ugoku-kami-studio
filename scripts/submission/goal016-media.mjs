@@ -53,18 +53,32 @@ export function validateCaptureShape(capture){
  assert.deepEqual(stamp(capture.pdf?.stamp),adopted);assert.equal(capture.pdf.A4,true);assert(Number.isInteger(capture.pdf.pages)&&capture.pdf.pages>0);
  return capture;
 }
+/** Approval deliberately clears run.proposal. Keep the three real responses separate. */
+export function validateRunEvidence(capture,proposed,run,approval,project){
+ const ai=capture.liveAi;
+ assert.equal(proposed.status,'awaiting_approval');assert.equal(run.status,'succeeded');
+ for(const response of [proposed,run]){
+  assert.equal(response.id,ai.runId);assert.equal(response.requestId,ai.requestId);
+  assert.equal(response.provider,'vertex');assert.equal(response.mode,'vertex');
+  assert.equal(response.baseHash,ai.before.designHash);assert.equal(response.baseRevision,ai.before.revision);
+  assert.equal(response.modelCalls,ai.modelCalls);
+ }
+ assert(run.modelUsage?.some(call=>call.received===true),'Actual model response evidence required');
+ const proposal=proposed.proposal;assert(proposal);assert.equal(proposal.requestId,ai.requestId);
+ assert.equal(proposal.baseHash,ai.before.designHash);assert.equal(proposal.baseRevision,ai.before.revision);
+ assert.equal(proposal.fulfillsRequested,ai.proposalKind==='exact');
+ for(const document of [proposal.document,approval?.document,project?.document])assert.deepEqual(stamp(document),stamp(ai.adopted));
+ assert.deepEqual(approval.document,proposal.document,'Approval must return the proposed design');
+ assert.deepEqual(project.document,approval.document,'The exported project must be the actually approved document');
+}
 export async function loadCapture(assets,manifest){
  const root=resolve(assets,'private',EDITION,'capture');const path=await safeFile(root,relative(root,resolve(manifest))),directory=resolve(path,'..');
  const capture=validateCaptureShape(await read(path));
  const files=[...capture.clips,...capture.images,capture.pdf,...Object.values(capture.evidence??{})];
  for(const item of files){assert(item&&/^[a-f0-9]{64}$/.test(item.sha256));const file=await safeFile(directory,item.file);assert.equal(await hash(file),item.sha256,`Capture file changed: ${item.file}`);}
- for(const key of ['runFinal','adoptedProject','events'])assert(capture.evidence?.[key]);
- const run=await read(within(directory,capture.evidence.runFinal.file)),project=await read(within(directory,capture.evidence.adoptedProject.file));
- assert.equal(run.id,capture.liveAi.runId);assert.equal(run.requestId,capture.liveAi.requestId);assert.equal(run.provider,'vertex');assert.equal(run.mode,'vertex');assert.equal(run.status,'succeeded');assert.equal(run.modelCalls,capture.liveAi.modelCalls);
- assert(run.modelUsage?.some(call=>call.received===true),'Actual model response evidence required');
- assert.deepEqual(stamp(project.document),stamp(capture.liveAi.adopted));
- assert.deepEqual(stamp(run.proposal?.document),stamp(capture.liveAi.adopted));
- assert.equal(run.proposal.fulfillsRequested,capture.liveAi.proposalKind==='exact');
+ for(const key of ['runProposed','runFinal','approval','adoptedProject','events'])assert(capture.evidence?.[key]);
+ const [proposed,run,approval,project]=await Promise.all(['runProposed','runFinal','approval','adoptedProject'].map(key=>read(within(directory,capture.evidence[key].file))));
+ validateRunEvidence(capture,proposed,run,approval,project);
  const pdf=await PDFDocument.load(await readFile(within(directory,capture.pdf.file)),{updateMetadata:false});
  assert.equal(pdf.getTitle(),`${capture.liveAi.adopted.designId} revision ${capture.liveAi.adopted.revision}`);assert(pdf.getSubject()?.includes(capture.liveAi.adopted.designHash));assert(pdf.getSubject()?.includes('physically unverified'));assert.equal(pdf.getPageCount(),capture.pdf.pages);
  for(const p of pdf.getPages()){const s=p.getSize();assert(Math.abs(s.width*25.4/72-210)<1e-5&&Math.abs(s.height*25.4/72-297)<1e-5);}
