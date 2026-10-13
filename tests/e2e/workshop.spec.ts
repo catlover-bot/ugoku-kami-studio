@@ -27,7 +27,9 @@ test('サンプルの編集・正面/裏側・原寸PDFとSVG', async ({ page },
   const file = await result.path();
   const pdf = await PDFDocument.load(await readFile(file!));
   expect(pdf.getPageCount()).toBe(5);
-  await expect(page.getByText('普通紙 4ページ（別）', { exact: true })).toBeVisible();
+  const contents = page.getByLabel('取得するPDFの内容', { exact: true });
+  await expect(contents.locator('dl > div').filter({ has: page.locator('dt', { hasText: '組み立て説明' }) }).locator('dd')).toContainText('普通紙 4ページ');
+  await expect(contents).toContainText('PDF 5ページ');
   const first = pdf.getPages()[0]!;
   expect(first.getWidth()).toBeCloseTo(210 * 72 / 25.4, 4);
   expect(first.getHeight()).toBeCloseTo(297 * 72 / 25.4, 4);

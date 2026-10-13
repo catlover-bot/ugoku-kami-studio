@@ -1,0 +1,75 @@
+import { expect, test } from '@playwright/test';
+import { PDFDocument } from 'pdf-lib';
+import { readFile } from 'node:fs/promises';
+import { manual, saveProject, selectPdfMode, stage, startSample } from './helpers';
+
+test('the two home starts lead to a review that preserves input and returns keyboard focus', async ({ page }, info) => {
+  let inference = 0;
+  await page.route('**/api/sessions**', route => { inference++; return route.abort(); });
+  await page.goto('/');
+  await expect(page.locator('.library-start-actions button')).toHaveCount(2);
+  await expect(page.locator('.library-start')).toContainText('型紙');
+  await startSample(page); await manual(page);
+  const base = await saveProject(page);
+  const request = page.getByLabel('どう動かしたいですか？', { exact: true });
+  await request.fill('あと5mm動かしたい。絵の大きさと紙の枚数は変えない');
+  const create = page.getByRole('button', { name: '寸法から案をつくる', exact: true });
+  await create.focus(); await create.press('Enter');
+  await expect(page.locator('#proposal-workbench')).toBeFocused();
+  await expect(page.locator('main')).toHaveAttribute('data-design-hash', base.document.designHash);
+  await expect(page.locator('.candidate-change-summary')).toHaveText('動く距離を +5mm');
+  await expect(page.locator('.candidate-preserved-summary')).toContainText('絵の大きさを維持');
+  await expect(page.locator('.comparison-distances')).toContainText('現在20mm希望25mm候補25mm');
+  await page.screenshot({ path: info.outputPath('comparison.png'), fullPage: true });
+  await page.getByRole('button', { name: 'この案を使わない', exact: true }).click();
+  await expect(page.locator('#workbench')).toBeFocused();
+  await expect(request).toHaveValue('あと5mm動かしたい。絵の大きさと紙の枚数は変えない');
+  await expect(page.locator('main')).toHaveAttribute('data-design-hash', base.document.designHash);
+  await create.click();
+  await page.getByRole('button', { name: 'この案にする', exact: true }).click();
+  await expect(page.locator('#workbench')).toBeFocused();
+  const adopted = await saveProject(page);
+  expect(adopted.document.input.travelMm).toBe(25);
+  expect(adopted.document.input.widthMm).toBe(base.document.input.widthMm);
+  expect(adopted.document.layout.sheets).toBe(base.document.layout.sheets);
+  await page.reload(); await expect(request).toHaveValue('あと5mm動かしたい。絵の大きさと紙の枚数は変えない');
+  await expect(page.locator('main')).toHaveAttribute('data-design-hash', adopted.document.designHash);
+  expect(inference).toBe(0);
+});
+
+test('PDF contents agree with downloaded pages and the pinned guide stays explicit after editing', async ({ page }, info) => {
+  await page.goto('/'); await startSample(page); await stage(page, 3);
+  const before = await saveProject(page);
+  const contents = page.getByLabel('取得するPDFの内容', { exact: true });
+  for (const [mode, pages] of [['all', 5], ['pattern', 1], ['instructions', 4]] as const) {
+    await selectPdfMode(page, mode);
+    await expect(contents).toContainText(`PDF ${pages}ページ`);
+    await expect(contents.locator('dt')).toHaveCount(mode === 'all' ? 2 : 1);
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'PDFをダウンロード', exact: true }).click();
+    const file = await download, path = info.outputPath(`${mode}.pdf`);
+    await file.saveAs(path);
+    const pdf = await PDFDocument.load(await readFile(path));
+    expect(pdf.getPageCount()).toBe(pages);
+    expect(pdf.getSubject()).toContain(before.document.designHash);
+    expect(pdf.getTitle()).toContain(`revision ${before.document.revision}`);
+  }
+  await page.getByRole('button', { name: '組み立てガイドを開く', exact: true }).click();
+  await page.getByRole('button', { name: '次の工程へ進む', exact: true }).click();
+  await expect(page.locator('.assembly-guide-step h3')).toBeFocused();
+  await expect(page.locator('.assembly-guide-step')).toHaveAttribute('data-step', '2');
+  await page.getByRole('button', { name: 'ガイドを閉じる', exact: true }).click();
+  await stage(page, 2);
+  const distance = page.getByLabel('動く距離（mm）', { exact: true });
+  await distance.fill('18'); await distance.press('Enter'); await stage(page, 3);
+  await expect(page.locator('.guide-version-note')).toContainText('編集中の第2版とは異なります');
+  await page.screenshot({ path: info.outputPath('different-guide-version.png'), fullPage: true });
+  await page.getByRole('button', { name: '組み立てガイドを開く', exact: true }).click();
+  await expect(page.locator('.assembly-guide')).toHaveAttribute('data-design-hash', before.document.designHash);
+  await expect(page.locator('.assembly-guide-step')).toHaveAttribute('data-step', '2');
+  await page.getByRole('button', { name: 'ガイドを閉じる', exact: true }).click();
+  const saved = await saveProject(page);
+  expect(saved.records).toHaveLength(0);
+  await page.reload();
+  await expect(page.locator('.guide-version-note')).toBeVisible();
+});

@@ -16,6 +16,7 @@ export type HomeLibraryProps = {
   entries: readonly HomeLibraryEntry[];
   activeId?: string;
   activeStatus?: string;
+  activeName?: string;
   continueId?: string;
   loading?: boolean;
   error?: string;
@@ -41,7 +42,7 @@ function actionError(error: unknown) {
   return error instanceof Error && error.message ? error.message : '操作を完了できませんでした。作品を残したまま、もう一度試せます。';
 }
 
-export default function HomeLibrary({ entries, activeId, activeStatus, continueId, loading = false, error, onCreateOwn, onTrySample, onContinue, onOpen, onRename, onDuplicate, onDelete, onImport, onExport, onRecover, onRetry }: HomeLibraryProps) {
+export default function HomeLibrary({ entries, activeId, activeStatus, activeName, continueId, loading = false, error, onCreateOwn, onTrySample, onContinue, onOpen, onRename, onDuplicate, onDelete, onImport, onExport, onRecover, onRetry }: HomeLibraryProps) {
   const headingId = useId(), listId = useId(), renameId = useId(), renameErrorId = useId();
   const [dialog, setDialog] = useState<LibraryDialog | null>(null);
   const [name, setName] = useState('');
@@ -102,20 +103,19 @@ export default function HomeLibrary({ entries, activeId, activeStatus, continueI
 
   return <section className="home-library" aria-labelledby={headingId}>
     <div className="library-start">
-      <div><h1 id={headingId}>作品をつくる</h1><p>絵を選び、動かすところを囲むことから。</p></div>
+      <div><h1 id={headingId}>作品をつくる</h1><p>絵の一部を動かす紙工作を、型紙に。</p><p className="library-start-guide">絵を選ぶ → 動きをつける → 印刷して組み立てる</p></div>
       <div className="library-start-actions">
         <button className="primary" disabled={disabled} onClick={() => void perform('画像を選びます…', onCreateOwn)}>自分の絵ではじめる</button>
         <button className="secondary" disabled={disabled} onClick={() => void perform('サンプルを開いています…', onTrySample)}>サンプルで試す</button>
-        {(onContinue || recent) && <button className="secondary" disabled={disabled} onClick={() => { if (onContinue || recent) void perform('前の作品を開いています…', onContinue ?? (() => onOpen(recent!.id))); }}>前の作品を続ける</button>}
       </div>
-      {recent && !onContinue && <p className="library-recent">続きから：{displayName(recent)}</p>}
     </div>
 
-    <div className="library-list-heading"><div><h2 id={listId} ref={listHeading} tabIndex={-1}>このブラウザの作品 <span>{entries.length}件</span></h2><p>このブラウザ・このサイトへの保存です。別の端末とは同期しません。</p></div><button className="secondary" disabled={disabled} onClick={() => void perform('プロジェクトファイルを選びます…', onImport)}>ファイルを読み込む</button></div>
+    <div className="library-list-heading"><div><h2 id={listId} ref={listHeading} tabIndex={-1}>このブラウザの作品 <span>{entries.length}件</span></h2><p>ここから続きを開けます。別の端末とは同期しません。</p></div><button className="text-button" disabled={disabled} onClick={() => void perform('プロジェクトファイルを選びます…', onImport)}>ファイルを読み込む</button></div>
+    {(onContinue || recent) && <div className="library-resume"><div><span>前の作品</span><strong>{onContinue ? activeName || '編集中の作品' : recent ? displayName(recent) : '前の作品'}</strong></div><button className="secondary" disabled={disabled} onClick={() => void perform('前の作品を開いています…', onContinue ?? (() => onOpen(recent!.id)))}>前の作品を続ける</button></div>}
     <p className="library-live" role="status" aria-live="polite">{busy || (loading ? '保存した作品を確認しています…' : notice)}</p>
     {!dialog && (localError || error) && <div className="notice warning library-error" role="alert"><p>{localError || error}</p>{onRetry && <button className="secondary" disabled={disabled} onClick={() => void perform('作品一覧を読み直しています…', onRetry)}>一覧を読み直す</button>}</div>}
 
-    {!entries.length && !loading && <div className="library-empty"><p>{error ? '作品一覧を表示できませんでした。保存した作品は削除していません。' : '保存した作品はまだありません。'}</p></div>}
+    {!entries.length && !loading && <div className="library-empty"><p>{error ? '作品一覧を表示できませんでした。保存した作品は削除していません。' : '保存した作品はまだありません。'}</p>{!error && <p>画像がなくても、サンプルから試せます。編集した作品はここに残ります。</p>}</div>}
     {!!entries.length && <ul className="library-list" aria-labelledby={listId} aria-busy={loading}>{entries.map((entry, index) => {
       const titleId = `${listId}-${index}`, label = displayName(entry), date = updatedLabel(entry.updatedAt);
       const corrupt = entry.status === 'corrupt';

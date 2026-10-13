@@ -2,15 +2,16 @@
 .candidate-workbench { min-width: 0; }
 .comparison-workbench .candidate-state { margin: 0 0 8px; color: var(--ink); font-size: 16px; font-weight: 600; }
 .motion-request { border-bottom: 1px solid var(--line); padding: 8px 16px 12px; min-width: 0; }
-.motion-request .request-editor > summary { display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 0; list-style: none; font-size: 15px; }
+.motion-request .request-editor > summary { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 6px 0; list-style: none; font-size: 15px; }
 .motion-request .request-editor > summary::after { content: '＋'; margin-left: auto; font-weight: 400; }
 .motion-request .request-editor[open] > summary::after { content: '−'; }
 .motion-request .request-editor[open] > summary { margin-bottom: 4px; }
-.request-editor > textarea { display: block; width: 100%; min-height: 70px; font-size: 15px; line-height: 1.5; }
+.request-editor > textarea { display: block; width: 100%; min-height: 78px; font-size: 16px; line-height: 1.5; scroll-margin-block: 80px; }
 .request-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
 .request-actions > button, .request-actions > div, .request-actions > div > button { width: 100%; min-width: 0; }
 .request-actions button { padding-inline: 6px; }
 .request-method-note { margin-top: 6px; font-size: 13px; }
+.result-feedback { font-size: 14px; margin-block: 12px; }
 .motion-request .intent-panel, .motion-request .ai-panel { padding: 0; }
 .motion-request .intent-panel:empty, .motion-request .ai-panel:empty { display: none; }
 .motion-request .manual-result, .motion-request .proposal { border: 0; padding-top: 0; margin-top: 12px; }

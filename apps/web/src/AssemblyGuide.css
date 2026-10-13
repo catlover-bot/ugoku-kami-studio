@@ -41,6 +41,8 @@
 .assembly-guide-glue li + li, .assembly-guide-no-glue li + li { margin-top: 6px; }
 .assembly-guide-navigation { display: flex; gap: 8px; }
 .assembly-guide-navigation button { font-size: 14px; }
+.assembly-guide-next { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; border-top: 1px solid var(--line); padding-block: 16px; }
+.assembly-guide-step h3 { scroll-margin-top: 20px; }
 .assembly-guide-identity { margin-top: 16px; border-top: 1px solid var(--line); }
 .assembly-guide-identity code { display: block; margin-top: 8px; overflow-wrap: anywhere; }
 .assembly-guide-content.all-steps .assembly-guide-step + .assembly-guide-step { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--boundary); }
