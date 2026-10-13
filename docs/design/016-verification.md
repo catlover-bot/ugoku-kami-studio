@@ -22,7 +22,7 @@ Cloud変更は既存バケットのビルド用source更新、Cloud Build 1回�
 | Chromiumの制作フロー | 配信SHAのCIで194件成功 |
 | 保存 | IndexedDB、旧形式、容量超過、2タブ競合を含む29件成功 |
 | 実200%拡大 | Chromium `tabs.setZoom/getZoom` による7工程。操作・フォーカス・PDF版一致を確認 |
-| 狭幅・前後比較 | 1600/1366/390/320px、サンプルと自画像の8フロー、72状態を比較。横方向のdocument overflowなし |
+| 狭幅・前後比較 | 1440/1366/390/320px、サンプルと自画像の8フロー、72状態を比較。横方向のdocument overflowなし |
 | WebKit | 同SHAのGitHub runnerで成功。WSLは必要OSライブラリがなく起動前に終了したため、WSL成功とは扱わない |
 | コンテナ | 同SHA CIで実コンテナの操作・PDF確認成功 |
 
