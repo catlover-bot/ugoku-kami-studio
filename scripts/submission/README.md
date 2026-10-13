@@ -1,6 +1,13 @@
-# Zenn提出素材：Goal016の本編と保全原本
+# Zenn提出素材：操作と得られるものを伝える紹介
 
-**投稿用の最新版は `public/goal016-submission/demo-full-narrated.mp4` です。** 163.04秒（2分43.04秒）・18場面・4,076フレームで、実AIの依頼場面は17.84秒からです。無音版・音声版の全編デコードと1倍再生（drop/corrupt 0）、独立した目視、字幕18件の時刻・本文照合を完了しました。音声版の映像packetは全件一致し、17音声区間を客観検査しました。耳での聴感確認は未実施です。[本編の制作・二段階梱包手順](full-README.md)を参照してください。素材の出所は新しい `README.txt`・`manifest.json`、秘密検査後のZIP生成・展開照合は `private/goal016-submission/package-result.json` を正本とします。
+**投稿用の最新版は `public/goal016-value-first/demo-full-narrated.mp4` です。** 掲載ファイルは同フォルダの短い `README.txt`、タイトル・概要欄は `youtube-description.txt`、画像の見出しは `image-descriptions.txt` を使います。[新版の制作・梱包手順](value-README.md)に実CLIと保存先をまとめています。
+
+新版は163.04秒・18場面・17音声区間です。無音版・音声版の全編デコードと等速再生（4,076フレーム、drop/corrupt 0）、字幕18件の本文・時刻、映像packet一致と独立した目視を確認しました。耳での聴感確認は未実施です。記録は `private/goal016-value-first/` に分け、秘密検査後のZIP生成・展開照合は `package-result.json` を正本とします。新しい公開一式は17ファイルで、詳細manifest・出所記録・私的手順を含めません。旧動画と原稿は以下の履歴として保全します。
+
+## 2分43.04秒本編（履歴）
+
+
+**前版は `public/goal016-submission/demo-full-narrated.mp4` に保全しています。** 163.04秒（2分43.04秒）・18場面・4,076フレームで、実AIの依頼場面は17.84秒からです。無音版・音声版の全編デコードと1倍再生（drop/corrupt 0）、独立した目視、字幕18件の時刻・本文照合を完了しました。音声版の映像packetは全件一致し、17音声区間を客観検査しました。耳での聴感確認は未実施です。[本編の制作・二段階梱包手順](full-README.md)を参照してください。素材の出所は新しい `README.txt`・`manifest.json`、秘密検査後のZIP生成・展開照合は `private/goal016-submission/package-result.json` を正本とします。
 
 実AIは既存Goal016の1依頼・1送信、20→25mm・第2版への採用記録だけを使います。別撮りは `AI_PROVIDER=none` で、同じ採用設計の印刷・ガイド・保存再開を操作します。追加AI・Cloud操作・アプリ変更は0。画像4枚、PDF、紹介文2欄、構成図、公開手順は旧`goal016-final`から同じバイトで継承します。Zenn未提出は本人確認済みで、投稿・最終提出は素材制作とは別です。
 
