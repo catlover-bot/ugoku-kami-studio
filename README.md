@@ -16,9 +16,11 @@
 
 ## 今回の提出候補：Goal016
 
-Goal016では、作品・希望・候補・印刷の操作を整え、画像4枚と動画を**今回の公開UIで収録する一連の操作**へそろえます。過去UIの実AI場面や手動候補を、新しい実AIの成功例として混ぜません。収録・媒体検査が完了するまでは制作中として扱い、実行回数・公開SHA・採用版・PDFは完成後のmanifestに記録します。
+Goal016では、作品・希望・候補・印刷の操作を整え、**現在の公開UIで、実AIの希望入力から採用・同版PDF・保存再開まで**を収録しました。2026-10-14 JSTの確認は追加1依頼・モデル送信1回。20→25mmの候補を、絵の大きさと型紙1枚の条件を保って第2版へ採用しました。UI待機は3.667秒、サーバーの処理は2.615秒で、この1件の実測です。開始前から起動済みの状態であり、初回起動時間ではありません。台帳は従来の履歴を保持した5依頼・9送信になりました。
 
 新しい一式の保存先は `artifacts/submission/public/goal016-final/`、ZIPは `artifacts/submission/ugoku-kami-goal016-final.zip`。再現手順は [Goal016制作手順](scripts/submission/goal016-README.md)です。`goal016-capture.mjs` で新収録の証拠を検査し、`goal016-video.mjs`／`goal016-review.mjs` で編集・全編確認、`goal016-narrate.py`／`goal016-narration-review.mjs` でローカル音声と客観的な音声再生確認、`goal016-package.mjs` のstage／sealで梱包します。秘密の確認は権限を持つ担当が固定した同じファイル群に対して行います。
+
+配信・収録したアプリは `6c1b858bbe73542d179334b84ef4aefe57de65aa`、revision `ugoku-kami-release-011-00002-tg9` です。画像4枚、動画、説明文・審査手順の対応は新しいmanifestへまとめ、旧動画を実AI部分に流用しません。[UIの改善](docs/design/016-product-finish.md)と[公開確認・回帰・費用の記録](docs/design/016-verification.md)を参照してください。以後の制作・記録だけのmainコミットは、配信したアプリのSHAと区別します。
 
 素材はGit管理外です。旧Goal014・Goal015・review系は削除せず、以下の履歴として保全します。YouTube投稿・Zenn最終提出・紙の実物動作は、この媒体生成の完了とは別です。
 

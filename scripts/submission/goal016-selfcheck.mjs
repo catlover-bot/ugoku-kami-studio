@@ -1,6 +1,6 @@
 /** Pure synthetic boundary checks. This does not create model evidence or media. */
 import assert from 'node:assert/strict';
-import {validateCaptureShape,validateScenes,within} from './goal016-media.mjs';
+import {validateCaptureShape,validateScenes,validateRunEvidence,within} from './goal016-media.mjs';
 const before={designId:'offline-fixture',revision:1,designHash:'a'.repeat(64)},adopted={...before,revision:2,designHash:'b'.repeat(64)};
 const fixture={format:'ugoku-goal016-capture-v1',status:'passed',sourceSha:'c'.repeat(40),imageDigest:'sha256:'+'d'.repeat(64),revision:'offline-fixture-revision',capturedAt:'2026-10-14T00:00:00.000Z',publicOrigin:'https://fixture.invalid',newModelRequests:1,liveAi:{provider:'vertex',status:'adopted',requestId:'fixture-request',runId:'fixture-run',modelCalls:2,proposalKind:'exact',requestedMm:25,adoptedMm:25,before,adopted},checks:Object.fromEntries(['realProvider','approval','sameVersionPdf','guide','savedReload','publicIntervalsExcludeSettings'].map(k=>[k,true])),physicalValidation:'unverified',frontendAssets:[{file:'index.js',sha256:'e'.repeat(64)}],clips:[{id:'workflow',role:'live-workflow',sourceSha:'c'.repeat(40),credentialFree:true,usableStartSeconds:10,usableEndSeconds:100}],images:['selection','request','comparison','print'].map(role=>({role,stamp:role==='print'?adopted:before})),pdf:{stamp:adopted,A4:true,pages:5}};
 assert.equal(validateCaptureShape(fixture),fixture);
@@ -10,4 +10,11 @@ const scenes=[0,1,2].map(i=>({id:'scene-'+i,kind:'video',clipId:'workflow',sourc
 validateScenes(scenes,fixture);
 for(const mutate of [s=>{s[0].sourceStart=9.96;},s=>{s[0].clipId='historical';},s=>{s[0].playbackRate=2;},s=>{s[2].sourceStart=95;},s=>{s[0].label='UI更新前の実行記録';}]){const s=structuredClone(scenes);mutate(s);assert.throws(()=>validateScenes(s,fixture));rejected++;}
 assert.throws(()=>within('/tmp/goal016','../goal014/raw.webm'));rejected++;
-console.log(JSON.stringify({result:'passed',kind:'synthetic-offline-boundary-checks',validCases:2,rejectedCases:rejected,cloudCalls:0,modelCalls:0,mediaGenerated:0}));
+const runBase={id:fixture.liveAi.runId,requestId:fixture.liveAi.requestId,provider:'vertex',mode:'vertex',baseHash:before.designHash,baseRevision:before.revision,modelCalls:2};
+const proposed={...runBase,status:'awaiting_approval',proposal:{requestId:runBase.requestId,baseHash:before.designHash,baseRevision:before.revision,fulfillsRequested:true,document:adopted}};
+const finished={...runBase,status:'succeeded',modelUsage:[{received:true}]}; // No proposal after actual approval.
+validateRunEvidence(fixture,proposed,finished,{document:adopted},{document:adopted});
+assert.throws(()=>validateRunEvidence(fixture,{...proposed,id:'other-run'},finished,{document:adopted},{document:adopted}));rejected++;
+assert.throws(()=>validateRunEvidence(fixture,proposed,finished,{document:before},{document:adopted}));rejected++;
+assert.throws(()=>validateRunEvidence(fixture,proposed,{...finished,mode:'injected-test'},{document:adopted},{document:adopted}));rejected++;
+console.log(JSON.stringify({result:'passed',kind:'synthetic-offline-boundary-checks',validCases:3,rejectedCases:rejected,cloudCalls:0,modelCalls:0,mediaGenerated:0}));
